@@ -284,6 +284,9 @@ export class Game {
     this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
     this.oneUpT = Math.max(0, this.oneUpT - dt);
 
+    this.input.poll();   // gamepad
+    // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
+    if (this.input.consumeStart() && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
     if (this.input.pressed('pause')) this.onAction();
     if (this.input.pressed('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
 
@@ -833,7 +836,8 @@ export class Game {
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
-    this._text('Swim: Arrows / WASD / drag   ·   Fire: Space / F / tap   ·   Pause: P   ·   Mute: M', cx, 456, 13, '#9fc6e0', 'center', 'middle');
+    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap / A   ·   Pause: P / Start', cx, 452, 13, '#9fc6e0', 'center', 'middle');
+    this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
   }
 
