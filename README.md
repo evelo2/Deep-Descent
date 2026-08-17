@@ -2,7 +2,7 @@
 
 **A modern, browser-based homage to Durell Software's *Scuba Dive* (1983).**
 
-### ▶ [Play it in your browser](https://evelo2.github.io/Deep-Descent/) — no install
+### ▶ <a href="https://evelo2.github.io/Deep-Descent/" target="_blank" rel="noopener noreferrer">Play it in your browser</a> — no install
 
 ![Deep Descent title screen](docs/screenshots/title.jpg)
 
