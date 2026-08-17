@@ -224,10 +224,11 @@ credit here, please open an issue — I'd be glad to get it right.*
 
 ## License
 
-This is a fan-made, **non-commercial tribute**, not affiliated with or endorsed
-by Durell Software. All original code and art in this repository are the
-author's own. *Scuba Dive* and any related marks belong to their respective
-owners. The included `.z80` snapshot is provided as a historical reference only.
+The original code and artwork in this repository are released under the
+**[MIT License](LICENSE)** — free to use, modify and share.
 
-_(No `LICENSE` file is included yet — if you'd like to formally open-source your
-own code here, MIT is a common, permissive choice.)_
+This is a fan-made, **non-commercial tribute**, not affiliated with or endorsed
+by Durell Software. *Scuba Dive* and any related marks belong to their
+respective owners, and the included `Scuba_Dive_1983_Durell_Software.z80`
+snapshot is provided as a historical reference only — it is **not** covered by
+the MIT license above.
