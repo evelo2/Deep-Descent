@@ -224,6 +224,84 @@ export function drawThroat(ctx, t, r = 44) {
   ctx.restore();
 }
 
+// Stone gateway to the sunken temple — two pillars around a glowing portal.
+export function drawTempleGate(ctx, t, r = 46) {
+  ctx.save();
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, r * 1.5);
+  glow.addColorStop(0, PAL.gateGlow); glow.addColorStop(0.5, 'rgba(90,160,200,0.4)'); glow.addColorStop(1, 'rgba(60,120,160,0)');
+  ctx.globalAlpha = 0.55 + Math.sin(t * 2.5) * 0.15;
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // portal
+  ctx.fillStyle = 'rgba(20,50,70,0.8)'; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.7, r, 0, 0, TAU); ctx.fill();
+  // pillars + lintel
+  ctx.fillStyle = PAL.templeRock;
+  ctx.fillRect(-r - 16, -r - 10, 16, r * 2 + 20);
+  ctx.fillRect(r, -r - 10, 16, r * 2 + 20);
+  ctx.fillRect(-r - 16, -r - 22, r * 2 + 32, 14);
+  ctx.strokeStyle = PAL.templeDark; ctx.lineWidth = 2;
+  ctx.strokeRect(-r - 16, -r - 10, 16, r * 2 + 20);
+  ctx.strokeRect(r, -r - 10, 16, r * 2 + 20);
+  // glyphs
+  ctx.fillStyle = PAL.gateGlow;
+  for (let i = -1; i <= 1; i++) { ctx.globalAlpha = 0.6; ctx.fillRect(i * 12 - 2, -r - 19, 4, 8); }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// A golden key.
+export function drawKey(ctx, t) {
+  ctx.save();
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
+  g.addColorStop(0, PAL.key); g.addColorStop(1, 'rgba(255,210,90,0)');
+  ctx.globalAlpha = 0.6 + Math.sin(t * 3) * 0.2; ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = PAL.key; ctx.fillStyle = PAL.key; ctx.lineWidth = 4;
+  // bow (ring)
+  ctx.beginPath(); ctx.arc(-8, 0, 7, 0, TAU); ctx.stroke();
+  // shaft
+  ctx.beginPath(); ctx.moveTo(-1, 0); ctx.lineTo(16, 0); ctx.stroke();
+  // teeth
+  ctx.fillRect(11, 0, 3, 6); ctx.fillRect(15, 0, 3, 8);
+  ctx.restore();
+}
+
+// The temple door — a stone slab that lifts as `open` 0..1, with a keyhole.
+export function drawDoor(ctx, open, w, h) {
+  ctx.save();
+  // jambs
+  ctx.fillStyle = PAL.templeDark;
+  ctx.fillRect(-w / 2 - 6, -h / 2 - 6, 6, h + 12);
+  ctx.fillRect(w / 2, -h / 2 - 6, 6, h + 12);
+  // sliding slab
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-w / 2 - 8, -h / 2 - 6, w + 16, h + 12); ctx.clip();
+  ctx.translate(0, -open * (h + 12));
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  g.addColorStop(0, PAL.doorDark); g.addColorStop(0.5, PAL.door); g.addColorStop(1, PAL.doorDark);
+  ctx.fillStyle = g; ctx.fillRect(-w / 2, -h / 2, w, h);
+  // block courses
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 2;
+  for (let y = -h / 2 + 20; y < h / 2; y += 24) { ctx.beginPath(); ctx.moveTo(-w / 2, y); ctx.lineTo(w / 2, y); ctx.stroke(); }
+  // keyhole
+  ctx.fillStyle = PAL.keyDark;
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+  ctx.fillRect(-3, 0, 6, 16);
+  ctx.restore();
+  ctx.restore();
+}
+
+// A fluted stone column for temple decoration.
+export function drawColumn(ctx, t, h = 180) {
+  ctx.save();
+  ctx.fillStyle = PAL.templeRock;
+  ctx.fillRect(-14, -h, 28, h);
+  ctx.fillStyle = PAL.templeRim; ctx.fillRect(-20, -h - 10, 40, 12); ctx.fillRect(-20, -2, 40, 12);   // capital + base
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2;
+  for (const fx of [-8, 0, 8]) { ctx.beginPath(); ctx.moveTo(fx, -h + 4); ctx.lineTo(fx, -4); ctx.stroke(); }
+  ctx.restore();
+}
+
 // A faceted gemstone — the richest cave/wreck loot.
 export function drawGem(ctx, t) {
   ctx.save();

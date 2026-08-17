@@ -58,6 +58,15 @@ richest trove in the game. Grab it and find the glowing throat to escape.
 
 ![Inside the whale's belly — ribs, chests and gems in a red fleshy cavern](docs/screenshots/the-belly.jpg)
 
+**The kraken** — a boss guarding a gem hoard in the deep. Dodge its tentacles
+and harpoon it down.
+
+![The kraken boss with a health bar, tentacles reaching for the diver](docs/screenshots/kraken.jpg)
+
+**The sunken temple** — find the key to open the door and plunder the vault.
+
+![The sunken temple — stone cavern with a glowing golden key and a column](docs/screenshots/temple.jpg)
+
 ---
 
 ## About the original
@@ -156,6 +165,17 @@ to **bank** them into your score — before your **air** runs out.
    in there and your air keeps draining, so grab fast and swim to the **glowing
    throat** to escape back to the reef with your haul.
 
+### Hazards & secrets
+
+- **🌊 Currents.** Flowing water zones sweep you along — ride them through a
+  tunnel, or fight across if you must. Watch the drifting chevrons for direction.
+- **🦑 The kraken.** A boss lurks in the deepest chamber, guarding a gem hoard.
+  Its tentacles reach for you (contact costs a life) — **harpoon it down** (watch
+  the boss health bar) for a big bonus and a burst of treasure.
+- **🏛 The sunken temple.** An ancient **stone gate** rests on a mid-deep ledge.
+  Swim in to enter the temple, **find the key** to open the locked **door**, and
+  plunder the **vault** behind it — then reach the exit gate to return.
+
 ### Tips
 
 - The deeper you go, the **richer the loot** — and the **darker and more
@@ -182,6 +202,9 @@ to **bank** them into your score — before your **air** runs out.
 - ⛵ **Endless reefs** — sail the boat to a new cave whenever you like.
 - 🐋 **Enter the whale** — a secret bonus zone inside a living whale, packed with
   the richest trove in the game.
+- 🌊 **Currents** that sweep you through tunnels.
+- 🦑 **Kraken boss** guarding a hoard in the deep — harpoon it down.
+- 🏛 **Sunken temple** with a key-and-door puzzle and a treasure vault.
 - 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
   parallax particulate, screen shake and a darkening, vignetting deep.
 - 🔊 **Procedural Web Audio** — ambient bed and SFX, no audio files, mute toggle.
