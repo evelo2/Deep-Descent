@@ -48,6 +48,16 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
+## v8 — occasional specials + power-ups
+
+- **One occasional special per reef** (`game._generateWorld`): ~70% chance of a
+  single special (whale / kraken / temple), else a plain reef — so dives vary.
+- **Power-ups** (`entities/powerup.js`): floating pickups — `tank` permanently
+  raises `this.airMax` for the run (air logic now uses `airMax`, not the constant);
+  `multifire` sets a timed `multiFireT` during which `fire()` emits a 3-way spread.
+  HUD shows boosted air (`n/max`) and the multifire countdown. Part of the zone
+  snapshot.
+
 ## v7 expansion — currents, kraken boss, sunken temple (phased)
 
 - **Currents** (`entities/current.js`): rectangular flow zones that add force to

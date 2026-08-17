@@ -15,7 +15,8 @@ import { Wreck } from './entities/wreck.js';
 import { Whale } from './entities/whale.js';
 import { Kraken } from './entities/kraken.js';
 import { Current } from './entities/current.js';
-import { KRAKEN } from './config.js';
+import { PowerUp } from './entities/powerup.js';
+import { KRAKEN, POWERUP } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -36,6 +37,7 @@ export class Game {
     this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
+    this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.diver.reset();
   }
@@ -44,7 +46,8 @@ export class Game {
   start() {
     this.state = 'playing';
     this.score = 0; this.carried = 0; this.lives = GAME.startLives;
-    this.air = AIR.max; this.depthReached = 0; this.fireCd = 0;
+    this.airMax = AIR.max; this.air = this.airMax; this.multiFireT = 0;
+    this.depthReached = 0; this.fireCd = 0;
     this.won = false; this.newHi = false;
     this.zone = 'reef'; this.savedReef = null;
     this.diver.reset();
@@ -58,7 +61,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
-    this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false;
+    this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -109,32 +112,54 @@ export class Game {
       this.creatures.push(cr);
     }
 
-    // A living whale drifts in one of the larger chambers — swim into its mouth
-    // to enter the belly bonus zone.
-    const roomy = C.chambers(OPEN_BAND + 500);
-    if (roomy.length) {
-      const spot = roomy[(Math.random() * roomy.length) | 0];
-      this.whales.push(new Whale(spot.x, spot.y - 10));
-    }
-
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
     this._makeCurrents(5);
 
-    // A kraken lurks in the deepest big chamber, guarding a rich hoard.
-    const deepChambers = C.chambers(WH * 0.55);
-    if (deepChambers.length) {
-      const den = deepChambers[(Math.random() * deepChambers.length) | 0];
-      this.krakens.push(new Kraken(den.x, den.y));
-      for (let k = 0; k < 6; k++) {
-        const gx = den.x + (Math.random() - 0.5) * 260, gy = den.y + (Math.random() - 0.5) * 200;
-        if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, Math.random() < 0.6 ? 'gem' : 'coin'));
+    // At most one special encounter per reef, and only sometimes — so each dive
+    // feels different: a whale, a kraken, a temple gate, or just a plain reef.
+    this.templeGate = null;
+    if (Math.random() < 0.7) {
+      const pickOne = (arr) => arr[(Math.random() * arr.length) | 0];
+      const roomy = C.chambers(OPEN_BAND + 500);
+      const deep = C.chambers(WH * 0.5);
+      const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
+      const options = [];
+      if (roomy.length) options.push('whale');
+      if (deep.length) options.push('kraken');
+      if (gateFloors.length) options.push('temple');
+      const pick = options.length ? pickOne(options) : null;
+      if (pick === 'whale') {
+        const s = pickOne(roomy); this.whales.push(new Whale(s.x, s.y - 10));
+      } else if (pick === 'kraken') {
+        const den = pickOne(deep); this.krakens.push(new Kraken(den.x, den.y));
+        for (let k = 0; k < 6; k++) {
+          const gx = den.x + (Math.random() - 0.5) * 260, gy = den.y + (Math.random() - 0.5) * 200;
+          if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, Math.random() < 0.6 ? 'gem' : 'coin'));
+        }
+      } else if (pick === 'temple') {
+        const gf = pickOne(gateFloors); this.templeGate = { x: gf.x, y: gf.y - 50, r: 46 };
       }
     }
 
-    // A stone gate to the sunken temple, seated on a mid-deep ledge.
-    this.templeGate = null;
-    const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
-    if (gateFloors.length) { const gf = gateFloors[(Math.random() * gateFloors.length) | 0]; this.templeGate = { x: gf.x, y: gf.y - 50, r: 46 }; }
+    // A power-up or two floating in the reef.
+    this._makePowerups(1 + (Math.random() < 0.5 ? 1 : 0));
+  }
+
+  _makePowerups(count) {
+    for (let i = 0; i < count; i++) {
+      const c = this.cave.randomOpen(OPEN_BAND + 300); if (!c) continue;
+      this.powerups.push(new PowerUp(c.x, c.y, Math.random() < 0.5 ? 'tank' : 'multifire'));
+    }
+  }
+
+  _applyPowerUp(type) {
+    if (type === 'tank') {
+      this.airMax += POWERUP.tankBonus; this.air = this.airMax;
+      this.particles.sparkle(this.diver.x, this.diver.y, PAL.air, 24); this.audio.bank();
+    } else {
+      this.multiFireT += POWERUP.multifireDuration;
+      this.particles.sparkle(this.diver.x, this.diver.y, PAL.harpoonTip, 24); this.audio.pickup();
+    }
   }
 
   // The sunken temple — a stone biome with a key-and-door puzzle guarding a
@@ -144,7 +169,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null;
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = [];
     const value = (y) => 400 + Math.round((y / WH) * 500);
 
     // Scattered loot + a couple of air vents + light hazards.
@@ -168,6 +193,7 @@ export class Game {
     }
     this.flora = new Flora([]);
     this._makeCurrents(2);
+    this._makePowerups(1);
     this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
   }
 
@@ -192,7 +218,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.templeGate = null; this.columns = [];
+    this.templeGate = null; this.columns = []; this.powerups = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
@@ -205,6 +231,7 @@ export class Game {
     for (let i = 0; i < 8; i++) { const c = C.randomOpen(OPEN_BAND + 200); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Jelly(c.x, c.y)); }
     this.flora = new Flora([]);
     this._makeCurrents(3);   // churning guts
+    this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
     this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
   }
@@ -219,7 +246,14 @@ export class Game {
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
     const d = this.diver;
-    this.harpoons.push(new Harpoon(d.x, d.y, d.aimX, d.aimY));
+    if (this.multiFireT > 0) {
+      for (const a of [-POWERUP.spread, 0, POWERUP.spread]) {
+        const ca = Math.cos(a), sa = Math.sin(a);
+        this.harpoons.push(new Harpoon(d.x, d.y, d.aimX * ca - d.aimY * sa, d.aimX * sa + d.aimY * ca));
+      }
+    } else {
+      this.harpoons.push(new Harpoon(d.x, d.y, d.aimX, d.aimY));
+    }
     this.fireCd = HARPOON.cooldown;
     this.audio.fire();
   }
@@ -244,6 +278,7 @@ export class Game {
     if (this.state !== 'playing') { this.input.endFrame(); return; }
     if (this.input.consumeTapFire()) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
+    this.multiFireT = Math.max(0, this.multiFireT - dt);
 
     const intent = this.input.vector();
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y));
@@ -264,7 +299,7 @@ export class Game {
     for (const v of this.vents) { v.update(dt, this.t, (x, y, r) => this.particles.bubble(x, y, { r })); if (!inVent && v.collects(this.diver, this.t)) inVent = true; }
 
     if (docked) {
-      if (this.air < AIR.max) { this.air = Math.min(AIR.max, this.air + AIR.refillPerSec * dt); if (Math.random() < 0.3) this.audio.refill(); }
+      if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + AIR.refillPerSec * dt); if (Math.random() < 0.3) this.audio.refill(); }
       if (this.carried > 0) { this.score += this.carried; this.carried = 0; this.bankPulse = 1; this.audio.bank(); }
       // Hold ↑ into the boat (once banked) to board and sail to a new reef.
       if (this.carried === 0 && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
@@ -272,7 +307,7 @@ export class Game {
     } else {
       this.dockHold = 0;
       this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * dt;
-      if (inVent) { this.air = Math.min(AIR.max, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
+      if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
     }
@@ -288,6 +323,7 @@ export class Game {
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
+    for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
 
     // Zone transitions & puzzles.
     const d = this.diver;
@@ -319,6 +355,7 @@ export class Game {
     this.harpoons = this.harpoons.filter((h) => !h.dead);
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
     this.krakens = this.krakens.filter((k) => !k.dead);
+    this.powerups = this.powerups.filter((p) => !p.taken);
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
@@ -349,7 +386,7 @@ export class Game {
     for (const b of this.bigBubbles) {
       if (!b.dead && b.collected(d)) {
         b.dead = true;
-        this.air = Math.min(AIR.max, this.air + BUBBLE.air);
+        this.air = Math.min(this.airMax, this.air + BUBBLE.air);
         this.particles.sparkle(b.x, b.y, PAL.air, 12);
         this.audio.refill();
       }
@@ -421,7 +458,7 @@ export class Game {
     this._generateWorld();
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
-    this.air = AIR.max;
+    this.air = this.airMax;
     this.state = 'playing';
     this.audio.bank();
   }
@@ -429,14 +466,14 @@ export class Game {
   // ---- special zones (whale belly, temple) ---------------------------
   // Snapshot the whole reef and where to drop the diver when they come back.
   _snapshotReef(returnX, returnY) {
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups'];
     const snap = { returnX, returnY };
     for (const k of keys) snap[k] = this[k];
     this.savedReef = snap;
   }
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
     this.whaleExit = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
@@ -510,6 +547,7 @@ export class Game {
       for (const s of this.skeletons) { ctx.save(); ctx.translate(s.x - cx, s.y - cy); drawWhaleSkeleton(ctx, this.t); ctx.restore(); }
       for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
       for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
+      for (const pu of this.powerups) pu.draw(ctx, cx, cy, this.t);
       for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
@@ -591,12 +629,13 @@ export class Game {
     const bx = 20, by = 20, bw = 240, bh = 18;
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 9); ctx.fill();
-    const frac = this.air / AIR.max;
+    const frac = this.air / this.airMax;
     const low = frac < 0.25;
     ctx.fillStyle = low && Math.floor(this.t * 6) % 2 === 0 ? PAL.airLow : (low ? '#ff9a6b' : PAL.air);
     ctx.beginPath(); ctx.roundRect(bx, by, Math.max(6, bw * frac), bh, 9); ctx.fill();
     this._text('AIR', bx, by - 6, 12, PAL.hudText, 'left', 'bottom');
-    this._text(`${Math.round(this.air)}`, bx + bw + 8, by + bh / 2, 13, PAL.hudText, 'left', 'middle');
+    const airLabel = this.airMax > AIR.max ? `${Math.round(this.air)}/${this.airMax}` : `${Math.round(this.air)}`;
+    this._text(airLabel, bx + bw + 8, by + bh / 2, 13, this.airMax > AIR.max ? PAL.air : PAL.hudText, 'left', 'middle');
 
     for (let i = 0; i < this.lives; i++) {
       ctx.save(); ctx.translate(bx + 8 + i * 22, by + bh + 22); ctx.scale(0.7, 0.7);
@@ -612,6 +651,7 @@ export class Game {
     ctx.fillStyle = PAL.harpoonTip;
     ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4); ctx.closePath(); ctx.fill();
     ctx.restore();
+    if (this.multiFireT > 0) this._text(`✸×3  ${Math.ceil(this.multiFireT)}s`, bx + 8 + this.lives * 22 + 34, by + bh + 22, 12, PAL.harpoonTip, 'left', 'middle', true);
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
