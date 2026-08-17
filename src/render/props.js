@@ -302,6 +302,59 @@ export function drawColumn(ctx, t, h = 180) {
   ctx.restore();
 }
 
+// The reef's relic objective — anchor / statue / map / idol. Glowing, ~40px.
+export function drawRelic(ctx, type, t) {
+  ctx.save();
+  const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 34);
+  g.addColorStop(0, PAL.key); g.addColorStop(0.5, 'rgba(255,210,90,0.4)'); g.addColorStop(1, 'rgba(255,210,90,0)');
+  ctx.globalAlpha = 0.55 + Math.sin(t * 2.5) * 0.18; ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ({ anchor, statue, map: scroll, idol })[type](ctx);
+  ctx.restore();
+}
+
+function anchor(ctx) {
+  ctx.strokeStyle = PAL.key; ctx.fillStyle = PAL.key; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, -16, 5, 0, TAU); ctx.stroke();          // ring
+  ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(0, 14); ctx.stroke(); // shank
+  ctx.beginPath(); ctx.moveTo(-9, -4); ctx.lineTo(9, -4); ctx.stroke(); // stock
+  ctx.beginPath();                                                      // flukes
+  ctx.moveTo(0, 14); ctx.quadraticCurveTo(-16, 10, -13, -2);
+  ctx.moveTo(0, 14); ctx.quadraticCurveTo(16, 10, 13, -2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-13, -2); ctx.lineTo(-18, -6); ctx.moveTo(13, -2); ctx.lineTo(18, -6); ctx.stroke();
+}
+function statue(ctx) {
+  // moai-like idol head on a plinth
+  ctx.fillStyle = '#9a8f7a';
+  ctx.beginPath(); ctx.moveTo(-10, -18); ctx.quadraticCurveTo(-12, 6, -8, 10); ctx.lineTo(8, 10);
+  ctx.quadraticCurveTo(12, 6, 10, -18); ctx.quadraticCurveTo(0, -24, -10, -18); ctx.fill();
+  ctx.fillStyle = '#6f6656'; ctx.fillRect(-13, 10, 26, 8);            // plinth
+  ctx.fillStyle = '#3a352c';
+  ctx.beginPath(); ctx.ellipse(-4, -6, 2.5, 3, 0, 0, TAU); ctx.fill(); // eyes
+  ctx.beginPath(); ctx.ellipse(4, -6, 2.5, 3, 0, 0, TAU); ctx.fill();
+  ctx.fillRect(-6, 2, 12, 2);                                          // mouth
+}
+function scroll(ctx) {
+  ctx.fillStyle = '#e8dcae';
+  ctx.beginPath(); ctx.roundRect(-16, -12, 32, 24, 3); ctx.fill();
+  ctx.fillStyle = '#c9b984'; ctx.fillRect(-18, -13, 5, 26); ctx.fillRect(13, -13, 5, 26); // rolls
+  ctx.strokeStyle = '#a8925a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-10, -5); ctx.quadraticCurveTo(0, 0, 8, -3); ctx.stroke();  // route
+  ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(4, 2); ctx.lineTo(11, 8); ctx.moveTo(11, 2); ctx.lineTo(4, 8); ctx.stroke(); // X
+}
+function idol(ctx) {
+  ctx.fillStyle = PAL.key;
+  ctx.beginPath(); ctx.moveTo(-11, -14); ctx.lineTo(11, -14); ctx.lineTo(9, 14); ctx.lineTo(-9, 14); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = PAL.keyDark;
+  ctx.beginPath(); ctx.moveTo(-9, -8); ctx.lineTo(9, -8); ctx.lineTo(7, 2); ctx.lineTo(-7, 2); ctx.closePath(); ctx.fill(); // face plate
+  ctx.fillStyle = '#3a2a0c';
+  ctx.beginPath(); ctx.arc(-4, -3, 2, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(4, -3, 2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-4, 5); ctx.lineTo(4, 5); ctx.lineTo(0, 9); ctx.closePath(); ctx.fill(); // mouth
+  ctx.fillStyle = PAL.gem; ctx.beginPath(); ctx.arc(0, -11, 2.5, 0, TAU); ctx.fill(); // gem on brow
+}
+
 // A faceted gemstone — the richest cave/wreck loot.
 export function drawGem(ctx, t) {
   ctx.save();

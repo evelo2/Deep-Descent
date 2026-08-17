@@ -16,7 +16,8 @@ import { Whale } from './entities/whale.js';
 import { Kraken } from './entities/kraken.js';
 import { Current } from './entities/current.js';
 import { PowerUp } from './entities/powerup.js';
-import { KRAKEN, POWERUP } from './config.js';
+import { Relic } from './entities/relic.js';
+import { KRAKEN, POWERUP, RELIC } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -38,6 +39,7 @@ export class Game {
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0;
+    this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.diver.reset();
   }
@@ -51,7 +53,7 @@ export class Game {
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
     this.won = false; this.newHi = false;
-    this.zone = 'reef'; this.savedReef = null;
+    this.zone = 'reef'; this.savedReef = null; this.reef = 1;
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
@@ -148,6 +150,12 @@ export class Game {
 
     // A power-up or two floating in the reef.
     this._makePowerups(1 + (Math.random() < 0.5 ? 1 : 0));
+
+    // The reef's relic objective + this reef's high points fallback.
+    this.reefBanked = 0; this.relicBanked = false; this.carryingRelic = false;
+    this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
+    const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
+    this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
   }
 
   _makePowerups(count) {
@@ -178,7 +186,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = [];
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null;
     const value = (y) => 400 + Math.round((y / WH) * 500);
 
     // Scattered loot + a couple of air vents + light hazards.
@@ -227,7 +235,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.templeGate = null; this.columns = []; this.powerups = [];
+    this.templeGate = null; this.columns = []; this.powerups = []; this.relic = null;
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
@@ -314,9 +322,12 @@ export class Game {
 
     if (docked) {
       if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + AIR.refillPerSec * dt); if (Math.random() < 0.3) this.audio.refill(); }
-      if (this.carried > 0) { this.score += this.carried; this.carried = 0; this.bankPulse = 1; this.audio.bank(); }
-      // Hold ↑ into the boat (once banked) to board and sail to a new reef.
-      if (this.carried === 0 && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
+      if (this.carried > 0) {
+        this.reefBanked += this.carried; this.score += this.carried; this.carried = 0; this.bankPulse = 1; this.audio.bank();
+        if (this.carryingRelic) { this.relicBanked = true; this.carryingRelic = false; }
+      }
+      // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
+      if (this.carried === 0 && this.canSail && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
       else this.dockHold = 0;
     } else {
       this.dockHold = 0;
@@ -338,6 +349,14 @@ export class Game {
     for (const h of this.harpoons) h.update(dt, this.cave);
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
+    // Relic objective — pick it up, carry it back to the boat to bank it.
+    if (this.relic && !this.relic.taken) {
+      this.relic.update(dt, this.t);
+      if (this.zone === 'reef' && this.relic.reached(this.diver)) {
+        this.relic.taken = true; this.carryingRelic = true; this.carried += RELIC.value;
+        this.particles.sparkle(this.relic.x, this.relic.y, PAL.key, 30); this.audio.gem();
+      }
+    }
     // Treasure magnet: pull nearby loot toward the diver.
     if (this.magnetT > 0) {
       const dv = this.diver, R = POWERUP.magnetRadius;
@@ -495,15 +514,17 @@ export class Game {
 
   // ---- special zones (whale belly, temple) ---------------------------
   // Snapshot the whole reef and where to drop the diver when they come back.
+  get canSail() { return this.relicBanked || this.reefBanked >= this.reefGoal; }
+
   _snapshotReef(returnX, returnY) {
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic'];
     const snap = { returnX, returnY };
     for (const k of keys) snap[k] = this[k];
     this.savedReef = snap;
   }
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
     this.whaleExit = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
@@ -590,6 +611,7 @@ export class Game {
       if (this.door) { ctx.save(); ctx.translate(this.door.x + this.door.w / 2 - cx, this.door.y + this.door.h / 2 - cy); drawDoor(ctx, this.door.open, this.door.w, this.door.h); ctx.restore(); }
       if (this.key && !this.key.taken) { ctx.save(); ctx.translate(this.key.x - cx, this.key.y - cy); drawKey(ctx, this.t); ctx.restore(); }
       if (this.templeExit) { ctx.save(); ctx.translate(this.templeExit.x - cx, this.templeExit.y - cy); drawTempleGate(ctx, this.t, this.templeExit.r); ctx.restore(); }
+      if (this.relic && !this.relic.taken) this.relic.draw(ctx, cx, cy, this.t);
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
       // Depth darkening — the deep swallows the light (drawn under the diver).
@@ -710,6 +732,10 @@ export class Game {
     const zoneCol = this.zone === 'belly' ? PAL.membrane : this.zone === 'temple' ? PAL.templeRim : '#8fbfda';
     this._text(zoneTag, W - 20, 84, 12, zoneCol, 'right', 'top');
     if (this.zone === 'temple' && this.hasKey) this._text('🔑 KEY', W - 20, 102, 12, PAL.key, 'right', 'top');
+    if (this.zone === 'reef') {
+      const rel = this.relicBanked ? '⚓ RELIC ✓' : this.carryingRelic ? '⚓ RELIC — bank it!' : `⚓ ${this.reefBanked}/${this.reefGoal}`;
+      this._text(this.canSail ? '⚓ SAIL READY' : rel, W - 20, 102, 12, this.canSail ? PAL.air : PAL.key, 'right', 'top');
+    }
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
 
@@ -721,14 +747,16 @@ export class Game {
         : '🏛 Find the KEY to unlock the door and its vault';
       this._text(msg, W / 2, H - 30, 15, this.hasKey ? PAL.key : PAL.gateGlow, 'center', 'middle');
     } else if (this.boat.contains(this.diver)) {
-      if (this.carried === 0) {
-        this._text('◆ DOCKED — banked. Hold ↑ to set sail to a new reef', W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
+      if (this.carried > 0) {
+        this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
+      } else if (this.canSail) {
+        this._text('◆ DOCKED — objective met. Hold ↑ to set sail to a new reef', W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
         if (this.dockHold > 0) {
           ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160, 6, 3); ctx.fill();
           ctx.fillStyle = PAL.gold; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160 * Math.min(1, this.dockHold / 1.0), 6, 3); ctx.fill();
         }
       } else {
-        this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
+        this._text(`◆ DOCKED — find the ⚓ relic (or bank ${this.reefGoal - this.reefBanked} more pts) to sail on`, W / 2, H - 30, 14, PAL.key, 'center', 'middle');
       }
     } else {
       // Near an open whale mouth or the temple gate?
