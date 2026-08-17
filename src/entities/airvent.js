@@ -35,11 +35,10 @@ export class AirVent {
     return inX && inY;
   }
 
-  draw(ctx, camY, t) {
-    const sy = this.y - camY;
+  draw(ctx, camX, camY, t) {
     const f = this.flow(t);
     ctx.save();
-    ctx.translate(this.x, sy);
+    ctx.translate(this.x - camX, this.y - camY);
     ctx.scale(this.side, 1);
     // stream glow while flowing
     if (f > 0.15) {

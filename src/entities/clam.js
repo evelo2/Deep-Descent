@@ -36,9 +36,9 @@ export class Clam {
 
   get gone() { return !this.hasPearl && this.emptyT > 2.5; }
 
-  draw(ctx, camY, t) {
+  draw(ctx, camX, camY, t) {
     ctx.save();
-    ctx.translate(this.x, this.y - camY);
+    ctx.translate(this.x - camX, this.y - camY);
     drawClam(ctx, this.open, this.hasPearl, t);
     ctx.restore();
   }

@@ -36,9 +36,9 @@ export class Harpoon {
     return Math.hypot(t.x - c.x, t.y - c.y) < c.radius + this.radius;
   }
 
-  draw(ctx, camY) {
+  draw(ctx, camX, camY) {
     ctx.save();
-    ctx.translate(this.x, this.y - camY);
+    ctx.translate(this.x - camX, this.y - camY);
     ctx.rotate(this.angle);
     const h = HARPOON.length / 2;
     // shaft

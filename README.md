@@ -3,11 +3,13 @@
 A modern browser homage to **Durell Software's _Scuba Dive_ (1983)**, rebuilt
 from the original ZX Spectrum `.z80` snapshot in this repo.
 
-Dive from your boat through winding **caves**, prise pearls from giant clams,
-plunder **sunken shipwrecks** for gems and treasure, and **harpoon** the deep's
-hunters — all while your air runs down. Refill at **bubble vents** on the cave
-walls, and surface to bank your haul. Faithful 1983 gameplay, re-imagined with
-modern vector graphics, particle effects, procedural audio, and touch controls.
+Dive from your boat into a **2D scrolling cave world** — tunnels, vertical
+drop-offs and chambers — prise pearls from giant clams, plunder **sunken
+shipwrecks** for gems and treasure, and **harpoon** the deep's hunters (sharks
+come in all sizes). Refill at **bubble vents** on the cave walls, surface at the
+boat to bank your haul, and watch your air. Faithful 1983 gameplay, re-imagined
+with modern vector graphics, kelp/coral/anemone flora, particle effects,
+procedural audio, and keyboard + touch controls.
 
 ## Play
 
@@ -37,12 +39,13 @@ python3 -m http.server 8777
   treasure into score), or swim into the rising stream of a **bubble vent** on a
   cave wall (partial top-up — your lifeline for deep dives). Run out and you lose
   a life.
-- **Caves:** below the open surface water, rock walls form a winding corridor of
-  wide chambers and narrow passages. Bumping a wall is harmless; rock pillars
-  block you (and your harpoon).
-- **Harpoon:** fire along your swim direction to spear hunters for points —
-  shark 300, octopus 200, pufferfish 150, jellyfish 100. Short cooldown; the
-  HUD shows when it's ready.
+- **Caves:** below the open surface water lies a **2D cave network** — horizontal
+  tunnels, vertical drop-offs and open chambers, scrolling in both axes. A shaft
+  drops straight down from under the boat; explore sideways for the rest. Bumping
+  a wall is harmless (you slide along it); rock blocks your harpoon.
+- **Harpoon:** fire along your swim direction to spear hunters for points.
+  **Sharks come in sizes** (small darters → big hunters); bigger sharks are worth
+  more. Short cooldown; the HUD shows when it's ready.
 - **Giant clams** hold pearls (400). Grab the pearl while the shell is **open**;
   linger inside when it snaps **shut** and it bites you.
 - **Shipwrecks** rest in the deep chambers, ringed with the richest loot.
@@ -72,9 +75,9 @@ src/
                       harpoon, airvent, wreck
   systems/
     particles.js      bubbles + sparkles
-    terrain.js        cave corridor + rock walls/pillars + collision
-  render/             background (ocean/god-rays/seabed), sprites,
-                      props (shipwreck + gem)
+    cave.js           2D cave gen (miners) + distance-field collision + render
+  render/             background (ocean/god-rays), sprites,
+                      props (shipwreck + gem), flora (kelp/coral/anemone)
 docs/DESIGN.md        design + platform decision
 Scuba_Dive_1983_Durell_Software.z80   original snapshot (source of truth)
 ```

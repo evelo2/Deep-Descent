@@ -5,10 +5,9 @@ import { drawWreck } from '../render/props.js';
 
 export class Wreck {
   constructor(x, y) { this.x = x; this.y = y; }
-  draw(ctx, camY, t) {
-    const sy = this.y - camY;
+  draw(ctx, camX, camY, t) {
     ctx.save();
-    ctx.translate(this.x, sy);
+    ctx.translate(this.x - camX, this.y - camY);
     drawWreck(ctx, t);
     ctx.restore();
   }

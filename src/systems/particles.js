@@ -48,28 +48,28 @@ export class Particles {
     this.items = keep;
   }
 
-  // Particles hold world coordinates; camY converts to screen space.
-  draw(ctx, camY = 0) {
+  // Particles hold world coordinates; the camera converts to screen space.
+  draw(ctx, camX = 0, camY = 0) {
     for (const p of this.items) {
       const k = 1 - p.age / p.life;
-      const sy = p.y - camY;
+      const sx = p.x - camX, sy = p.y - camY;
       if (p.kind === 'bubble') {
         ctx.beginPath();
-        ctx.arc(p.x, sy, p.r, 0, Math.PI * 2);
+        ctx.arc(sx, sy, p.r, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(190,235,255,${0.5 * k})`;
         ctx.lineWidth = 1;
         ctx.fillStyle = `rgba(160,220,255,${0.12 * k})`;
         ctx.fill(); ctx.stroke();
         // highlight
         ctx.beginPath();
-        ctx.arc(p.x - p.r * 0.3, sy - p.r * 0.3, p.r * 0.28, 0, Math.PI * 2);
+        ctx.arc(sx - p.r * 0.3, sy - p.r * 0.3, p.r * 0.28, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(255,255,255,${0.6 * k})`;
         ctx.fill();
       } else {
         ctx.globalAlpha = k;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, sy, p.r, 0, Math.PI * 2);
+        ctx.arc(sx, sy, p.r, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
