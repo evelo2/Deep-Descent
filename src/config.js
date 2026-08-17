@@ -49,7 +49,6 @@ export const CAVE = {
   miners: 5,        // parallel miners carving from the surface
   minerSteps: 190,  // steps each miner walks
   branchChance: 0.14,
-  wallDamp: 0.2,    // fraction of into-wall velocity retained on a bump
 };
 
 // Sharks come in sizes — small darters to big hunters.

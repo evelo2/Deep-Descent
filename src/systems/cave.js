@@ -114,23 +114,45 @@ export class Cave {
 
   isSolid(x, y) { return this.pxDist(x, y) >= this.CARVE; }
 
-  // Push an entity (with .x,.y,.radius and optional .vx,.vy) out of rock, sliding
-  // along the wall. Returns true on contact.
+  // Push an entity (.x,.y,.radius and optional .vx,.vy) out of rock. Uses bounded
+  // gradient-descent on the distance field — small capped steps so a deeply
+  // embedded entity slides out smoothly instead of teleporting across the map,
+  // and the into-wall velocity is fully removed so it stops/slides without
+  // juddering (e.g. when buoyancy presses it up into a ceiling).
   collide(e) {
     const allow = this.CARVE - e.radius;
-    const d = this.pxDist(e.x, e.y);
+    let d = this.pxDist(e.x, e.y);
     if (d <= allow) return false;
-    const eps = 6;
-    const gx = this.pxDist(e.x + eps, e.y) - this.pxDist(e.x - eps, e.y);
-    const gy = this.pxDist(e.x, e.y + eps) - this.pxDist(e.x, e.y - eps);
-    const gl = Math.hypot(gx, gy) || 1;
-    const nx = gx / gl, ny = gy / gl;         // points into rock
-    const push = d - allow;
-    e.x -= nx * push; e.y -= ny * push;
-    e._nx = nx; e._ny = ny;                    // surface normal, for callers
-    if (e.vx !== undefined) {
+    const eps = 6, MAX_STEP = 14;
+    let nx = 0, ny = 0;
+    for (let iter = 0; iter < 16 && d > allow; iter++) {
+      const gx = this.pxDist(e.x + eps, e.y) - this.pxDist(e.x - eps, e.y);
+      const gy = this.pxDist(e.x, e.y + eps) - this.pxDist(e.x, e.y - eps);
+      const gl = Math.hypot(gx, gy);
+      if (gl > 0.5) {
+        nx = gx / gl; ny = gy / gl;            // normal points into rock
+      } else {
+        // Flat / ridge in the fine field — follow the coarse cell grid, whose
+        // chamfer distance always descends toward an open cell.
+        const cgx = Math.floor(e.x / CELL), cgy = Math.floor(e.y / CELL);
+        let bi = 0, bj = -1, bestCell = Infinity;
+        for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+          if (!i && !j) continue;
+          const gx2 = cgx + i, gy2 = cgy + j;
+          const dc = (gx2 < 0 || gy2 < 0 || gx2 >= this.GW || gy2 >= this.GH) ? BIG : this.dist[gy2 * this.GW + gx2];
+          if (dc < bestCell) { bestCell = dc; bi = i; bj = j; }
+        }
+        const l = Math.hypot(bi, bj) || 1;
+        nx = -bi / l; ny = -bj / l;            // push toward the lower (nearer-open) cell
+      }
+      const step = Math.min(d - allow, MAX_STEP);
+      e.x -= nx * step; e.y -= ny * step;
+      d = this.pxDist(e.x, e.y);
+    }
+    e._nx = nx; e._ny = ny;                     // final surface normal, for callers
+    if (e.vx !== undefined) {                   // remove the into-wall velocity → slide, don't bounce
       const vn = e.vx * nx + e.vy * ny;
-      if (vn > 0) { e.vx -= vn * nx * (1 - CAVE.wallDamp); e.vy -= vn * ny * (1 - CAVE.wallDamp); }
+      if (vn > 0) { e.vx -= vn * nx; e.vy -= vn * ny; }
     }
     return true;
   }
