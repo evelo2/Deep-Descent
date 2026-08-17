@@ -261,20 +261,27 @@ index.html                     entry page (canvas + module bootstrap)
 src/
   main.js                      canvas/DPI setup + requestAnimationFrame loop
   config.js                    tuning constants, palette, shared curves
-  input.js                     keyboard + touch → intent vector, tap-to-fire
+  input.js                     keyboard + touch + gamepad → intent vector
   audio.js                     procedural Web Audio ambient + SFX
-  game.js                      state machine, world gen, collisions, HUD, camera
-  entities/                    diver, boat, shells (clam/chest), bigbubble,
-                               treasure, creatures, harpoon, airvent, wreck
+  game.js                      state machine, world/zone gen, collisions, HUD,
+                               camera, objectives, power-ups, minimap
+  entities/                    diver, boat, shell (clam/chest), bigbubble,
+                               treasure, creatures, harpoon, airvent, wreck,
+                               whale, kraken, current, powerup, relic
   systems/
-    cave.js                    2D cave generation + distance-field collision/render
+    cave.js                    2D cave gen + distance-field collision/render +
+                               fog-of-war minimap buffer
     particles.js               bubbles + sparkles
   render/
     background.js              ocean, god-rays, caustics, parallax
     sprites.js                 diver, clam & creature vector art
-    props.js                   shipwreck, chest, gem, whale skeleton
+    props.js                   wreck, chest, gem, whale skeleton, ribs, throat,
+                               temple gate/door/key/column, relic icons
     flora.js                   kelp, coral, anemones, polyps
-docs/DESIGN.md                 design notes + the platform decision
+docs/
+  DESIGN.md                    design notes, platform decision, version log
+  ROADMAP.md                   future feature ideas
+  screenshots/                 README images
 Scuba_Dive_1983_Durell_Software.z80   the original snapshot (historical source)
 ```
 
