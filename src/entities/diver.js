@@ -20,18 +20,19 @@ export class Diver {
   get radius() { return DIVER.radius; }
   get atSurface() { return this.y <= WORLD.SURFACE + 60; }
 
-  update(dt, intent, emitBubble) {
-    // Thrust from intent.
-    this.vx += intent.x * DIVER.accel * dt;
-    this.vy += intent.y * DIVER.accel * dt;
+  update(dt, intent, emitBubble, speedMul = 1) {
+    // Thrust from intent (boosted by speed fins).
+    this.vx += intent.x * DIVER.accel * speedMul * dt;
+    this.vy += intent.y * DIVER.accel * speedMul * dt;
     // Buoyancy — gentle lift, stronger the more you rise near surface.
     this.vy -= DIVER.buoyancy * dt;
     // Drag.
     const d = Math.max(0, 1 - DIVER.drag * dt);
     this.vx *= d; this.vy *= d;
     // Clamp speed.
+    const maxSp = DIVER.maxSpeed * speedMul;
     const sp = Math.hypot(this.vx, this.vy);
-    if (sp > DIVER.maxSpeed) { this.vx *= DIVER.maxSpeed / sp; this.vy *= DIVER.maxSpeed / sp; }
+    if (sp > maxSp) { this.vx *= maxSp / sp; this.vy *= maxSp / sp; }
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;

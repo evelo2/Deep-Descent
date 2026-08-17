@@ -82,9 +82,17 @@ export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 
 // Power-ups.
 export const POWERUP = {
-  tankBonus: 30,        // extra max air per tank (persists for the run)
+  tankBonus: 30,         // extra max air per tank (persists for the run)
   multifireDuration: 30, // seconds of 3-way harpoon spread per pickup
-  spread: 0.28,         // radians between spread shots
+  spread: 0.28,          // radians between spread shots
+  shieldDuration: 8,     // seconds of invulnerability
+  speedDuration: 20,     // seconds of faster swimming
+  speedMult: 1.6,        // swim accel/max-speed multiplier while boosted
+  magnetDuration: 18,    // seconds of treasure magnet
+  magnetRadius: 210,     // pull range
+  magnetPull: 560,       // pull acceleration toward the diver (px/s^2)
+  // Spawn weights by type.
+  weights: { tank: 3, multifire: 3, shield: 2, speed: 2, magnet: 2, life: 1 },
 };
 
 // Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
