@@ -60,7 +60,7 @@ export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 // bite — costing a life — if they close on the diver.
 export const SHELL = {
   clamRadius: 40, clamCycle: 3.6,   // seconds per open/close cycle
-  chestRadius: 36, chestCycle: 4.4,
+  chestRadius: 36, chestCycle: 6.5, // rattle → slow open → ~2s hold → snap shut
   openGrab: 0.55,    // openness above which loot can be grabbed
   biteShut: 0.30,    // openness below which a closing shell bites
 };
