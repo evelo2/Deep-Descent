@@ -75,6 +75,9 @@ export const SHELL = {
 // Big collectible air bubbles released when a shell opens.
 export const BUBBLE = { air: 22, rise: 44, r: 18, life: 7 };
 
+// Water currents that sweep the diver along.
+export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
+
 // Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
 // phase p∈[0,1) to { open, shake }: closed with a building rattle (a bubble
 // forming) → slow eased open → hold open → fast snap shut.

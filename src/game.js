@@ -13,6 +13,7 @@ import { Harpoon } from './entities/harpoon.js';
 import { AirVent } from './entities/airvent.js';
 import { Wreck } from './entities/wreck.js';
 import { Whale } from './entities/whale.js';
+import { Current } from './entities/current.js';
 import { drawWhaleSkeleton, drawRib, drawThroat } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -30,7 +31,7 @@ export class Game {
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
     this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
-    this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = [];
+    this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.diver.reset();
@@ -53,7 +54,7 @@ export class Game {
     const C = this.cave = new Cave('reef');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
-    this.whales = []; this.ribs = []; this.whaleExit = null;
+    this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -111,6 +112,23 @@ export class Game {
       const spot = roomy[(Math.random() * roomy.length) | 0];
       this.whales.push(new Whale(spot.x, spot.y - 10));
     }
+
+    // Water currents sweep through a few spots — mostly sideways, one downdraft.
+    this._makeCurrents(5);
+  }
+
+  // Scatter current zones on open cells, flowing along the cave.
+  _makeCurrents(count) {
+    const C = this.cave;
+    for (let i = 0; i < count; i++) {
+      const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
+      const horizontal = Math.random() < 0.7;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const w = horizontal ? 360 + Math.random() * 240 : 200 + Math.random() * 120;
+      const h = horizontal ? 170 + Math.random() * 90 : 300 + Math.random() * 200;
+      const fx = horizontal ? dir : 0, fy = horizontal ? 0 : 1;   // vertical currents pull down
+      this.currents.push(new Current(c.x - w / 2, c.y - h / 2, w, h, fx, fy));
+    }
   }
 
   // The whale's belly — a fleshy themed cave packed with a rich trove, a few
@@ -119,7 +137,7 @@ export class Game {
     const C = this.cave = new Cave('belly');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
-    this.skeletons = []; this.whales = []; this.ribs = [];
+    this.skeletons = []; this.whales = []; this.ribs = []; this.currents = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
@@ -131,6 +149,7 @@ export class Game {
     for (const w of spread(C.walls(), 6, 400)) this.vents.push(new AirVent(w.x, w.y, w.side));
     for (let i = 0; i < 8; i++) { const c = C.randomOpen(OPEN_BAND + 200); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Jelly(c.x, c.y)); }
     this.flora = new Flora([]);
+    this._makeCurrents(3);   // churning guts
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
     this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
   }
@@ -173,6 +192,7 @@ export class Game {
 
     const intent = this.input.vector();
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y));
+    for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
 
     // 2D camera follows the diver, clamped to the world.
@@ -325,7 +345,7 @@ export class Game {
     this.savedReef = {
       cave: this.cave, shells: this.shells, treasures: this.treasures, creatures: this.creatures,
       vents: this.vents, wrecks: this.wrecks, flora: this.flora, skeletons: this.skeletons,
-      bigBubbles: this.bigBubbles, whales: this.whales, ribs: this.ribs, whale,
+      bigBubbles: this.bigBubbles, whales: this.whales, ribs: this.ribs, currents: this.currents, whale,
     };
     this.zone = 'belly';
     this._generateBelly();
@@ -341,7 +361,7 @@ export class Game {
     Object.assign(this, {
       cave: s.cave, shells: s.shells, treasures: s.treasures, creatures: s.creatures,
       vents: s.vents, wrecks: s.wrecks, flora: s.flora, skeletons: s.skeletons,
-      bigBubbles: s.bigBubbles, whales: s.whales, ribs: s.ribs,
+      bigBubbles: s.bigBubbles, whales: s.whales, ribs: s.ribs, currents: s.currents,
     });
     this.whaleExit = null; this.zone = 'reef';
     const m = s.whale.mouthZone();
@@ -370,6 +390,7 @@ export class Game {
     this.boat.draw(ctx, cx, cy, this.t);
 
     if (this.state !== 'menu') {
+      for (const cur of this.currents) cur.draw(ctx, cx, cy, this.t);
       if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
       for (const r of this.ribs) { ctx.save(); ctx.translate(r.x - cx, r.y - cy); drawRib(ctx, this.t, r.dir); ctx.restore(); }
       for (const s of this.skeletons) { ctx.save(); ctx.translate(s.x - cx, s.y - cy); drawWhaleSkeleton(ctx, this.t); ctx.restore(); }
