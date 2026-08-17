@@ -8,7 +8,8 @@ const { WW, WH, CELL, OPEN_BAND } = WORLD;
 const BIG = 9999;
 
 export class Cave {
-  constructor() {
+  constructor(biome = 'reef') {
+    this.biome = biome;   // 'reef' (rock) | 'belly' (fleshy)
     this.GW = Math.ceil(WW / CELL);
     this.GH = Math.ceil(WH / CELL);
     this.CARVE = CAVE.carve;
@@ -201,11 +202,15 @@ export class Cave {
     const { W, H } = WORLD, octx = this.octx, CARVE = this.CARVE, RIM = 5;
     octx.clearRect(0, 0, W, H);
     const depthT = Math.min(1, camY / WH);
+    const belly = this.biome === 'belly';
+    const C1 = belly ? PAL.fleshRock : PAL.rock;
+    const C2 = belly ? PAL.fleshDark : PAL.rockDark;
+    const RIMC = belly ? PAL.membrane : PAL.rockLight;
 
-    // Dark rock body, darker with depth.
+    // Body, darker with depth.
     const g = octx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, mix(PAL.rock, PAL.rockDark, depthT * 0.55));
-    g.addColorStop(1, PAL.rockDark);
+    g.addColorStop(0, mix(C1, C2, depthT * 0.55));
+    g.addColorStop(1, C2);
     octx.fillStyle = g; octx.fillRect(0, 0, W, H);
 
     const gx0 = Math.max(0, (camX / CELL | 0) - 1), gx1 = Math.min(this.GW - 1, ((camX + W) / CELL | 0) + 1);
@@ -229,7 +234,7 @@ export class Cave {
     octx.globalCompositeOperation = 'source-over';
 
     // Lit rim discs (become a bright band once the caves are carved).
-    octx.fillStyle = PAL.rockLight;
+    octx.fillStyle = RIMC;
     each((sx, sy) => { octx.beginPath(); octx.arc(sx, sy, CARVE + RIM, 0, Math.PI * 2); octx.fill(); });
 
     // HARD carve — crisp cave with only a ~1px anti-alias edge.

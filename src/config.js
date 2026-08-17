@@ -55,6 +55,13 @@ export const CAVE = {
 // Sharks come in sizes — small darters to big hunters.
 export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 
+// The living whale — a benign giant you can swim into to enter its belly.
+export const WHALE = {
+  scale: 1.0,        // overall size multiplier (whale is authored ~360px long)
+  mouthCycle: 5.5,   // seconds per open/close of the mouth
+  drift: 14,         // gentle horizontal drift speed
+};
+
 // Ledge-mounted open/close containers (clams & chests). They pulse open and
 // shut, release a big air bubble on opening, hold loot (grab while open), and
 // bite — costing a life — if they close on the diver.
@@ -132,6 +139,14 @@ export const PAL = {
   gemCore:     '#eafcff',
   ventClam:    '#7fd9c4',
   ventClamDk:  '#3f9a86',
+  whale:       '#4a6d86',
+  whaleDark:   '#2f4a5e',
+  whaleBelly:  '#9fb8c8',
+  fleshRock:   '#7a3944',
+  fleshDark:   '#3f1c25',
+  membrane:    '#c76b74',
+  rib:         '#e9e2cf',
+  throat:      '#ffd27a',
   kelp:        '#2fae7d',
   kelpDark:    '#1c7d5b',
   coral:       '#ff8f6b',

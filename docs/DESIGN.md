@@ -48,6 +48,22 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
+## v6 expansion — the whale bonus zone
+
+- **Living whale** (`entities/whale.js`): a big benign whale drifts in one reef
+  chamber, its mouth opening and closing. `swallowReady()` fires when the diver
+  enters the open mouth.
+- **Belly zone** (`game._generateBelly`): reuses the cave with a `'belly'` biome
+  (fleshy red palette + membrane rim in `cave.draw`), lined with rib bones
+  (`props.drawRib`), packed with a richer trove, a couple of blowhole vents and
+  swallowed hazards, plus a glowing throat exit (`props.drawThroat`). A warm
+  pulsing "heartbeat" overlay replaces the depth veil while inside.
+- **Zone stack** (`game._enterWhale`/`_exitWhale`): entering snapshots the whole
+  reef (cave, entity arrays, camera, diver), swaps in the belly, and drops the
+  diver deep inside; reaching the throat restores the snapshot and places the
+  diver by the whale's mouth. Carried loot, air, score and lives persist.
+  Docking, banking and the win check are gated to the reef zone.
+
 ## v5 expansion — unified shell animation, deep zones, whale bones, new reefs
 
 - **Shared shell envelope** (`config.shellShape`): all shells (pearl clams, vent

@@ -12,7 +12,8 @@ import { Flora } from './render/flora.js';
 import { Harpoon } from './entities/harpoon.js';
 import { AirVent } from './entities/airvent.js';
 import { Wreck } from './entities/wreck.js';
-import { drawWhaleSkeleton } from './render/props.js';
+import { Whale } from './entities/whale.js';
+import { drawWhaleSkeleton, drawRib, drawThroat } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
@@ -29,8 +30,9 @@ export class Game {
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
     this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
-    this.shells = []; this.bigBubbles = []; this.skeletons = [];
-    this.reef = 1; this.dockHold = 0; this.sailT = 0;
+    this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = [];
+    this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
+    this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.diver.reset();
   }
 
@@ -40,6 +42,7 @@ export class Game {
     this.score = 0; this.carried = 0; this.lives = GAME.startLives;
     this.air = AIR.max; this.depthReached = 0; this.fireCd = 0;
     this.won = false; this.newHi = false;
+    this.zone = 'reef'; this.savedReef = null;
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
@@ -47,9 +50,10 @@ export class Game {
   }
 
   _generateWorld() {
-    const C = this.cave = new Cave();
+    const C = this.cave = new Cave('reef');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
+    this.whales = []; this.ribs = []; this.whaleExit = null;
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -85,7 +89,6 @@ export class Game {
     for (const s of spread(deepFloors, 3, 500)) this.skeletons.push({ x: s.x, y: s.y - 6 });
 
     // Creatures change with depth: shallow reef → mid water → the deep.
-    const smallShark = () => new Shark(0, 0, 0.7 + Math.random() * 0.4);
     for (let i = 0; i < 36; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
       const deep = c.y / WH, r = Math.random();
@@ -100,6 +103,36 @@ export class Game {
       }
       this.creatures.push(cr);
     }
+
+    // A living whale drifts in one of the larger chambers — swim into its mouth
+    // to enter the belly bonus zone.
+    const roomy = C.chambers(OPEN_BAND + 500);
+    if (roomy.length) {
+      const spot = roomy[(Math.random() * roomy.length) | 0];
+      this.whales.push(new Whale(spot.x, spot.y - 10));
+    }
+  }
+
+  // The whale's belly — a fleshy themed cave packed with a rich trove, a few
+  // swallowed hazards and a glowing throat exit. No boat: grab and get out.
+  _generateBelly() {
+    const C = this.cave = new Cave('belly');
+    this.shells = []; this.treasures = []; this.creatures = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
+    this.skeletons = []; this.whales = []; this.ribs = [];
+    const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
+
+    // Rib bones lining the belly.
+    for (const f of spread(C.floors(), 40, 130)) this.ribs.push({ x: f.x, y: f.y - 40, dir: Math.random() < 0.5 ? 1 : -1 });
+    // A generous trove: chests on ledges, gems & coins everywhere.
+    for (const f of spread(C.floors(), 22, 150)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
+    for (let i = 0; i < 60; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.5 ? 'gem' : 'coin')); }
+    // A couple of blowhole vents so it's survivable, plus swallowed hazards.
+    for (const w of spread(C.walls(), 6, 400)) this.vents.push(new AirVent(w.x, w.y, w.side));
+    for (let i = 0; i < 8; i++) { const c = C.randomOpen(OPEN_BAND + 200); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Jelly(c.x, c.y)); }
+    this.flora = new Flora([]);
+    // Glowing throat exit up in the entrance band; the diver starts down in the belly.
+    this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
   }
 
   // ---- input events (from main) ---------------------------------------
@@ -123,6 +156,7 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 3);
     this.bankPulse = Math.max(0, this.bankPulse - dt * 2);
+    this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
 
     if (this.input.pressed('pause')) this.onAction();
     if (this.input.pressed('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
@@ -149,8 +183,8 @@ export class Game {
     this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
     this.audio.setDepth(Math.min(1, this.camY / WH));
 
-    // Air economy: bank + full refill at the boat; vents refill in the deep.
-    const docked = this.boat.contains(this.diver);
+    // Air economy: bank + full refill at the boat (reef only); vents in the deep.
+    const docked = this.zone === 'reef' && this.boat.contains(this.diver);
     let inVent = false;
     for (const v of this.vents) { v.update(dt, this.t, (x, y, r) => this.particles.bubble(x, y, { r })); if (!inVent && v.collects(this.diver, this.t)) inVent = true; }
 
@@ -179,6 +213,15 @@ export class Game {
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
 
+    // Whales (reef): swim into an open mouth to be swallowed into the belly.
+    if (this.zone === 'reef') {
+      for (const w of this.whales) { w.update(dt, this.t); if (w.swallowReady(this.diver)) { this._enterWhale(w); this.input.endFrame(); return; } }
+    } else if (this.whaleExit) {
+      // Belly: reach the glowing throat to escape back to the reef.
+      const e = this.whaleExit;
+      if (Math.hypot(this.diver.x - e.x, this.diver.y - e.y) < e.r + this.diver.radius) { this._exitWhale(); this.input.endFrame(); return; }
+    }
+
     this._collisions();
 
     this.treasures = this.treasures.filter((tr) => !tr.taken);
@@ -186,7 +229,7 @@ export class Game {
     this.harpoons = this.harpoons.filter((h) => !h.dead);
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
 
-    if (this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
+    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
     this.input.endFrame();
   }
@@ -277,6 +320,43 @@ export class Game {
     this.audio.bank();
   }
 
+  // Swallowed! Snapshot the reef, generate the belly, drop the diver inside.
+  _enterWhale(whale) {
+    this.savedReef = {
+      cave: this.cave, shells: this.shells, treasures: this.treasures, creatures: this.creatures,
+      vents: this.vents, wrecks: this.wrecks, flora: this.flora, skeletons: this.skeletons,
+      bigBubbles: this.bigBubbles, whales: this.whales, ribs: this.ribs, whale,
+    };
+    this.zone = 'belly';
+    this._generateBelly();
+    const c = this.cave.randomOpen(WH * 0.55) || { x: WW / 2, y: WH * 0.6 };
+    this._placeDiver(c.x, c.y, 0);
+    this.shake = 10; this.zoneFade = 1;
+    this.audio.gasp();
+  }
+
+  // Escape: restore the reef and drop the diver just outside the whale's mouth.
+  _exitWhale() {
+    const s = this.savedReef; if (!s) return;
+    Object.assign(this, {
+      cave: s.cave, shells: s.shells, treasures: s.treasures, creatures: s.creatures,
+      vents: s.vents, wrecks: s.wrecks, flora: s.flora, skeletons: s.skeletons,
+      bigBubbles: s.bigBubbles, whales: s.whales, ribs: s.ribs,
+    });
+    this.whaleExit = null; this.zone = 'reef';
+    const m = s.whale.mouthZone();
+    this._placeDiver(m.x + s.whale.facing * 34, m.y, s.whale.facing * 60);
+    this.savedReef = null; this.zoneFade = 1;
+    this.audio.bank();
+  }
+
+  _placeDiver(x, y, vx) {
+    const d = this.diver;
+    d.x = x; d.y = y; d.vx = vx; d.vy = 0; d.invuln = 1.6;
+    this.camX = Math.max(0, Math.min(WW - W, x - W / 2));
+    this.camY = Math.max(0, Math.min(WH - H, y - H / 2));
+  }
+
   // ---- render ----------------------------------------------------------
   draw() {
     if (this.state === 'sailing') { this._sailScreen(); return; }
@@ -291,17 +371,25 @@ export class Game {
 
     if (this.state !== 'menu') {
       if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
+      for (const r of this.ribs) { ctx.save(); ctx.translate(r.x - cx, r.y - cy); drawRib(ctx, this.t, r.dir); ctx.restore(); }
       for (const s of this.skeletons) { ctx.save(); ctx.translate(s.x - cx, s.y - cy); drawWhaleSkeleton(ctx, this.t); ctx.restore(); }
       for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
       for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
       for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
+      for (const w of this.whales) w.draw(ctx, cx, cy, this.t);
       for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
+      if (this.whaleExit) { ctx.save(); ctx.translate(this.whaleExit.x - cx, this.whaleExit.y - cy); drawThroat(ctx, this.t, this.whaleExit.r); ctx.restore(); }
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
       // Depth darkening — the deep swallows the light (drawn under the diver).
-      if (depthT > 0.02) { ctx.fillStyle = `rgba(2,7,15,${0.5 * depthT})`; ctx.fillRect(0, 0, W, H); }
+      if (this.zone === 'belly') {
+        const beat = 0.30 + 0.10 * Math.sin(this.t * 2.2) + 0.04 * Math.sin(this.t * 4.4);
+        ctx.fillStyle = `rgba(60,10,18,${beat})`; ctx.fillRect(0, 0, W, H);       // warm, pulsing "inside a body"
+      } else if (depthT > 0.02) {
+        ctx.fillStyle = `rgba(2,7,15,${0.5 * depthT})`; ctx.fillRect(0, 0, W, H);
+      }
     }
 
     this.particles.draw(ctx, cx, cy);
@@ -316,6 +404,11 @@ export class Game {
 
     if (this.flash > 0.01) {
       ctx.fillStyle = `rgba(255,40,40,${0.35 * this.flash})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    // Zone-change wash (swallowed / escaped).
+    if (this.zoneFade > 0.01) {
+      ctx.fillStyle = this.zone === 'belly' ? `rgba(40,6,12,${this.zoneFade})` : `rgba(120,180,220,${0.7 * this.zoneFade})`;
       ctx.fillRect(0, 0, W, H);
     }
     ctx.restore();
@@ -383,19 +476,30 @@ export class Game {
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
     this._text(`CARRYING ${this.carried}`, W - 20, 46, 14, cp, 'right', 'top');
     this._text(`DEPTH ${Math.round(this.depthReached / 10)} m`, W - 20, 66, 13, '#bfe6ff', 'right', 'top');
-    this._text(`REEF ${this.reef}`, W - 20, 84, 12, '#8fbfda', 'right', 'top');
+    this._text(this.zone === 'belly' ? '🐋 THE BELLY' : `REEF ${this.reef}`, W - 20, 84, 12, this.zone === 'belly' ? PAL.membrane : '#8fbfda', 'right', 'top');
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
 
-    if (this.boat.contains(this.diver)) {
+    // Contextual prompts.
+    if (this.zone === 'belly') {
+      this._text('🐋 Swallowed! Grab the trove — reach the glowing throat to escape.', W / 2, H - 30, 15, PAL.throat, 'center', 'middle');
+    } else if (this.boat.contains(this.diver)) {
       if (this.carried === 0) {
         this._text('◆ DOCKED — banked. Hold ↑ to set sail to a new reef', W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
-        if (this.dockHold > 0) { // boarding progress bar
+        if (this.dockHold > 0) {
           ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160, 6, 3); ctx.fill();
           ctx.fillStyle = PAL.gold; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160 * Math.min(1, this.dockHold / 1.0), 6, 3); ctx.fill();
         }
       } else {
         this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
+      }
+    } else {
+      // Near an open whale mouth?
+      for (const w of this.whales) {
+        if (w.mouthOpen > 0.4 && Math.hypot(this.diver.x - w.x, this.diver.y - w.y) < 320) {
+          this._text('🐋 Its mouth is open — swim in to enter the whale', W / 2, H - 30, 14, PAL.whaleBelly, 'center', 'middle');
+          break;
+        }
       }
     }
     ctx.restore();

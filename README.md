@@ -49,6 +49,15 @@ gold, and puff out air bubbles… then snap shut.
 
 ![A sunken wreck ringed with treasure chests and gems](docs/screenshots/wreck-chest.jpg)
 
+**The whale** — catch its mouth open and swim in to be swallowed.
+
+![A giant whale with its mouth open, ready to swallow the diver](docs/screenshots/whale.jpg)
+
+**The Belly** — inside the whale: a rib-lined, fleshy cavern packed with the
+richest trove in the game. Grab it and find the glowing throat to escape.
+
+![Inside the whale's belly — ribs, chests and gems in a red fleshy cavern](docs/screenshots/the-belly.jpg)
+
 ---
 
 ## About the original
@@ -141,6 +150,11 @@ to **bank** them into your score — before your **air** runs out.
    **bank** everything you're carrying into your score. Then **hold ↑ into the
    boat** to set sail for a brand-new reef (a freshly generated cave; your score
    and lives carry over).
+6. **🐋 Enter the whale (bonus).** A giant whale drifts through one chamber of
+   each reef. Catch its **mouth open** and swim in — you're swallowed into *The
+   Belly*, a rib-lined cavern holding the game's richest trove. There's no boat
+   in there and your air keeps draining, so grab fast and swim to the **glowing
+   throat** to escape back to the reef with your haul.
 
 ### Tips
 
@@ -166,6 +180,8 @@ to **bank** them into your score — before your **air** runs out.
   dark — with **whale skeletons** on the deepest floors.
 - 🫧 **Air management** — vents and bubbles let you push deeper without surfacing.
 - ⛵ **Endless reefs** — sail the boat to a new cave whenever you like.
+- 🐋 **Enter the whale** — a secret bonus zone inside a living whale, packed with
+  the richest trove in the game.
 - 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
   parallax particulate, screen shake and a darkening, vignetting deep.
 - 🔊 **Procedural Web Audio** — ambient bed and SFX, no audio files, mute toggle.
