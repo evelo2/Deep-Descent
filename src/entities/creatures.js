@@ -1,33 +1,44 @@
 // Hazard creatures. Each owns its movement behaviour and knows how to draw
-// itself. Contact costs the diver a life (handled by the Game).
-import { WORLD } from '../config.js';
+// itself. Contact costs the diver a life (handled by the Game). Movement is in
+// the 2D world; the Game confines them to the cave via the Cave collider.
+import { WORLD, SHARK, KILL_POINTS } from '../config.js';
 import { drawOctopus, drawShark, drawJelly, drawPuffer } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
     this.x = x; this.y = y; this.baseY = y;
     this.facing = 1; this.t0 = Math.random() * Math.PI * 2;
-    this.radius = 18;
+    this.radius = 18; this.scale = 1;
   }
+  get points() { return KILL_POINTS[this.constructor.name] ?? 100; }
   hits(diver) {
     return Math.hypot(diver.x - this.x, diver.y - this.y) < this.radius + diver.radius * 0.7;
   }
-  _wrapX(margin = 60) {
-    if (this.x < -margin) this.x = WORLD.W + margin;
-    if (this.x > WORLD.W + margin) this.x = -margin;
+  // Reverse a horizontal mover at the world edges (cave walls are handled by the
+  // Game's collider).
+  _edgeBounce() {
+    if (this.x < this.radius) { this.x = this.radius; this.dir = 1; }
+    if (this.x > WORLD.WW - this.radius) { this.x = WORLD.WW - this.radius; this.dir = -1; }
   }
 }
 
-// Cruises horizontally, fastest and most dangerous.
+// Cruises horizontally. Comes in sizes — small darters to big hunters.
 export class Shark extends Creature {
-  constructor(x, y) { super(x, y); this.radius = 24; this.speed = 95 + Math.random() * 55; this.dir = Math.random() < 0.5 ? 1 : -1; }
+  constructor(x, y, scale = 1) {
+    super(x, y);
+    this.scale = scale;
+    this.radius = 24 * scale;
+    this.speed = (110 - scale * 22) + Math.random() * 40; // bigger = a touch slower
+    this.dir = Math.random() < 0.5 ? 1 : -1;
+  }
+  get points() { return Math.round(220 * this.scale); }
   update(dt, t) {
     this.x += this.speed * this.dir * dt;
-    this.y = this.baseY + Math.sin(t * 1.2 + this.t0) * 26;
+    this.y = this.baseY + Math.sin(t * 1.2 + this.t0) * 26 * this.scale;
     this.facing = this.dir;
-    this._wrapX(70);
+    this._edgeBounce();
   }
-  draw(ctx, camY, t) { blit(ctx, this, camY, drawShark, t); }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawShark, t); }
 }
 
 // Slowly homes toward the diver when nearby; drifts otherwise.
@@ -40,7 +51,7 @@ export class Octopus extends Creature {
     else { this.x += Math.sin(t * 0.7 + this.t0) * 20 * dt; this.y = this.baseY + Math.sin(t * 0.9 + this.t0) * 18; }
     this.facing = dx >= 0 ? 1 : -1;
   }
-  draw(ctx, camY, t) { blit(ctx, this, camY, drawOctopus, t); }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawOctopus, t); }
 }
 
 // Bobs vertically, drifts slowly sideways.
@@ -49,9 +60,9 @@ export class Jelly extends Creature {
   update(dt, t) {
     this.y = this.baseY + Math.sin(t * 0.8 + this.t0) * 40;
     this.x += this.dir * 18 * dt;
-    this._wrapX(40);
+    this._edgeBounce();
   }
-  draw(ctx, camY, t) { blit(ctx, this, camY, drawJelly, t, false); }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawJelly, t, false); }
 }
 
 // Patrols horizontally, slow.
@@ -61,14 +72,15 @@ export class Puffer extends Creature {
     this.x += this.speed * this.dir * dt;
     this.y = this.baseY + Math.sin(t * 1.6 + this.t0) * 14;
     this.facing = this.dir;
-    this._wrapX(50);
+    this._edgeBounce();
   }
-  draw(ctx, camY, t) { blit(ctx, this, camY, drawPuffer, t); }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawPuffer, t); }
 }
 
-function blit(ctx, c, camY, fn, t, flip = true) {
+function blit(ctx, c, camX, camY, fn, t, flip = true) {
   ctx.save();
-  ctx.translate(c.x, c.y - camY);
+  ctx.translate(c.x - camX, c.y - camY);
+  if (c.scale !== 1) ctx.scale(c.scale, c.scale);
   if (flip && c.facing < 0) ctx.scale(-1, 1);
   fn(ctx, t + c.t0, false);
   ctx.restore();

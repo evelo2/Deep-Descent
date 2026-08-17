@@ -48,7 +48,27 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
-## Architecture (src/)
+## v3 expansion — 2D scrolling caves, flora, sized sharks
+
+The original *Scuba Dive* scrolled in 2D through a cave system, so the world grew
+from a vertical column into a full 2D scrolling world (`WORLD.WW`×`WORLD.WH`) with
+a 2D camera. Every `draw()` now takes `camX, camY`.
+
+- **2D cave** (`systems/cave.js`) replaces the old single-axis corridor: a boolean
+  grid is carved by "miner" agents that make **tunnels, vertical drop-offs and
+  chambers** (miner 0 drops a guaranteed shaft under the boat so there's always an
+  entrance and a route down). A chamfer **distance field** over the grid gives
+  organic rock: `collide()` slides entities along curved walls via the field
+  gradient; rendering **soft-carves** the caves out of an offscreen rock layer for
+  smooth, non-blocky edges. Spawn helpers expose open cells, chambers (wrecks),
+  floors (plants) and walls (vents).
+- **Flora** (`render/flora.js`): swaying kelp, branching coral fans, waving
+  anemones, glowing polyps and bushes rooted on cave floors — the "underwatery"
+  layer.
+- **Sized sharks**: `Shark` takes a `scale` (0.7–1.7×); radius, speed and kill
+  points scale with it.
+
+## v2 expansion — caves, harpoon, wrecks, air vents
 - `config.js` — tuning constants + palette.
 - `main.js` — canvas/DPI setup, RAF loop, wiring.
 - `input.js` — keyboard + touch → intent vector.

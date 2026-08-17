@@ -7,7 +7,7 @@ export class Diver {
   constructor() { this.reset(); }
 
   reset() {
-    this.x = WORLD.W / 2;
+    this.x = WORLD.WW / 2;
     this.y = WORLD.SURFACE + 40;
     this.vx = 0; this.vy = 0;
     this.facing = 1;      // +1 right, -1 left
@@ -36,12 +36,11 @@ export class Diver {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Bounds.
+    // World bounds (cave walls are handled separately by the Cave collider).
     const r = this.radius;
-    this.x = Math.max(r, Math.min(WORLD.W - r, this.x));
-    const floor = WORLD.DEPTH_MAX + WORLD.SEABED - r;
+    this.x = Math.max(r, Math.min(WORLD.WW - r, this.x));
     if (this.y < WORLD.SURFACE) { this.y = WORLD.SURFACE; if (this.vy < 0) this.vy = 0; }
-    if (this.y > floor) { this.y = floor; if (this.vy > 0) this.vy = 0; }
+    if (this.y > WORLD.WH - r) { this.y = WORLD.WH - r; if (this.vy > 0) this.vy = 0; }
 
     // Facing + animation.
     if (Math.abs(this.vx) > 8) this.facing = this.vx > 0 ? 1 : -1;
@@ -61,10 +60,9 @@ export class Diver {
 
   hit() { this.hurtT = 0.4; this.invuln = 1.6; this.vx *= -0.6; this.vy = -60; }
 
-  draw(ctx, camY) {
-    const sy = this.y - camY;
+  draw(ctx, camX, camY) {
     ctx.save();
-    ctx.translate(this.x, sy);
+    ctx.translate(this.x - camX, this.y - camY);
     if (this.facing < 0) ctx.scale(-1, 1);
     // Blink while invulnerable.
     if (this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0) ctx.globalAlpha = 0.4;

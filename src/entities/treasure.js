@@ -22,9 +22,9 @@ export class Treasure {
     return Math.hypot(diver.x - this.x, diver.y - this.y) < this.radius + diver.radius;
   }
 
-  draw(ctx, camY, t) {
+  draw(ctx, camX, camY, t) {
     ctx.save();
-    ctx.translate(this.x, this.y - camY);
+    ctx.translate(this.x - camX, this.y - camY);
     if (this.kind === 'gem') drawGem(ctx, t + this.phase);
     else drawTreasure(ctx, this.kind, t + this.phase);
     ctx.restore();

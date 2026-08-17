@@ -2,18 +2,18 @@
 import { WORLD, PAL } from '../config.js';
 
 export class Boat {
-  constructor() { this.x = WORLD.W / 2; }
+  constructor() { this.x = WORLD.WW / 2; }
 
   // The dock zone is a band just under the surface, centred on the boat.
   contains(diver) {
     return diver.y <= WORLD.SURFACE + 55 && Math.abs(diver.x - this.x) < 90;
   }
 
-  draw(ctx, camY, t) {
+  draw(ctx, camX, camY, t) {
     const sy = WORLD.SURFACE - camY;
     if (sy > WORLD.H + 60 || sy < -80) return;
     ctx.save();
-    ctx.translate(this.x, sy);
+    ctx.translate(this.x - camX, sy);
     const bob = Math.sin(t * 1.5) * 3;
     ctx.translate(0, bob);
     // hull

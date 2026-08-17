@@ -60,7 +60,7 @@ function frame(now) {
 
   if (game.state === 'menu') {
     ambientT += dt;
-    if (ambientT > 0.15) { ambientT = 0; particles.bubble(Math.random() * WORLD.W, WORLD.H + 10); }
+    if (ambientT > 0.15) { ambientT = 0; particles.bubble(game.camX + Math.random() * WORLD.W, game.camY + WORLD.H + 10); }
   }
 
   game.update(dt);

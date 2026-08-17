@@ -4,22 +4,17 @@ import { WORLD, PAL } from '../config.js';
 
 export class Background {
   constructor() {
-    // Static-ish parallax motes, seeded once.
-    this.motes = Array.from({ length: 90 }, () => ({
-      x: Math.random() * WORLD.W,
-      wy: Math.random() * WORLD.DEPTH_MAX,
+    // Parallax motes seeded across the whole world.
+    this.motes = Array.from({ length: 140 }, () => ({
+      wx: Math.random() * WORLD.WW,
+      wy: Math.random() * WORLD.WH,
       r: 0.6 + Math.random() * 1.8,
-      s: 0.2 + Math.random() * 0.6, // parallax factor
-    }));
-    this.weeds = Array.from({ length: 14 }, (_, i) => ({
-      x: (i / 14) * WORLD.W + Math.random() * 30,
-      h: 60 + Math.random() * 90,
-      phase: Math.random() * Math.PI * 2,
+      s: 0.3 + Math.random() * 0.5, // parallax factor
     }));
   }
 
   // depthT: 0 (surface) .. 1 (max depth), based on camera.
-  draw(ctx, camY, t, depthT) {
+  draw(ctx, camX, camY, t, depthT) {
     const { W, H } = WORLD;
     // Water gradient interpolated by depth.
     const top = lerpColor(PAL.waterTop, PAL.waterDeep, depthT);
@@ -29,7 +24,7 @@ export class Background {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
     // Water surface (only when near the top).
-    if (camY < 200) {
+    if (camY < 240) {
       const sy = WORLD.SURFACE - camY;
       const sg = ctx.createLinearGradient(0, sy - 40, 0, sy + 20);
       sg.addColorStop(0, 'rgba(120,220,255,0)');
@@ -38,7 +33,7 @@ export class Background {
       ctx.strokeStyle = 'rgba(220,250,255,0.5)'; ctx.lineWidth = 2;
       ctx.beginPath();
       for (let x = 0; x <= W; x += 12) {
-        const yy = sy + Math.sin(x * 0.04 + t * 1.5) * 3;
+        const yy = sy + Math.sin((x + camX) * 0.04 + t * 1.5) * 3;
         x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
       }
       ctx.stroke();
@@ -83,41 +78,12 @@ export class Background {
       ctx.restore();
     }
 
-    // Parallax motes.
-    ctx.fillStyle = 'rgba(200,235,255,0.35)';
+    // Parallax motes drifting through the water column.
+    ctx.fillStyle = 'rgba(200,235,255,0.32)';
     for (const m of this.motes) {
+      const sx = ((m.wx - camX * m.s) % (W + 40) + W + 40) % (W + 40) - 20;
       const sy = ((m.wy - camY * m.s) % (H + 40) + H + 40) % (H + 40) - 20;
-      ctx.beginPath(); ctx.arc(m.x, sy, m.r, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Seabed + weeds, drawn when the floor is on-screen.
-    const bedY = WORLD.DEPTH_MAX + WORLD.SEABED - camY;
-    if (bedY < H + 120) this._seabed(ctx, bedY, t);
-  }
-
-  _seabed(ctx, bedY, t) {
-    const { W, H } = WORLD;
-    const g = ctx.createLinearGradient(0, bedY - 30, 0, H);
-    g.addColorStop(0, PAL.seabedLight); g.addColorStop(1, PAL.seabed);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(0, bedY + 20);
-    for (let x = 0; x <= W; x += 40) {
-      ctx.lineTo(x, bedY + Math.sin(x * 0.03) * 10);
-    }
-    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
-
-    for (const wd of this.weeds) {
-      ctx.strokeStyle = wd.x % 2 < 1 ? PAL.weed : PAL.weedDark;
-      ctx.lineWidth = 6; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(wd.x, bedY);
-      const seg = 4;
-      for (let s = 1; s <= seg; s++) {
-        const yy = bedY - (wd.h / seg) * s;
-        const xx = wd.x + Math.sin(t * 1.5 + wd.phase + s * 0.7) * (4 + s * 3);
-        ctx.lineTo(xx, yy);
-      }
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx, sy, m.r, 0, Math.PI * 2); ctx.fill();
     }
   }
 }

@@ -2,19 +2,21 @@
 // The playfield is a fixed logical size; the canvas scales to fit the viewport.
 
 export const WORLD = {
-  W: 900,          // logical playfield width
-  H: 600,          // logical playfield height (one screen)
-  SEABED: 560,     // y of the ocean floor
-  SURFACE: 70,     // y of the water surface line
-  DEPTH_MAX: 4200, // total dive depth in world units (camera scrolls this far)
+  W: 900,          // viewport (screen) width — logical units
+  H: 600,          // viewport (screen) height
+  WW: 2760,        // full world width  (scrolls in x)
+  WH: 4200,        // full world height (scrolls in y)
+  SURFACE: 90,     // y of the sea surface line
+  OPEN_BAND: 250,  // fully-open sea water down to this y; caves begin below
+  CELL: 60,        // cave grid cell size
 };
 
 export const DIVER = {
-  accel: 620,      // px/s^2 thrust from input
-  drag: 2.4,       // velocity damping per second
-  buoyancy: 42,    // slight upward drift (px/s^2) — water lift
-  maxSpeed: 240,
-  radius: 16,
+  accel: 640,      // px/s^2 thrust from input
+  drag: 2.5,       // velocity damping per second
+  buoyancy: 30,    // gentle upward drift (px/s^2) — water lift
+  maxSpeed: 250,
+  radius: 15,
 };
 
 export const AIR = {
@@ -39,16 +41,19 @@ export const GAME = {
   hitCost: 1,           // lives lost per hit
 };
 
-// Cave terrain: below the open surface zone, rock walls form a winding corridor
-// with wide chambers and narrow passages.
+// 2D cave system. A grid is carved by "miner" agents into tunnels, drop-offs
+// and chambers, then turned into a smooth distance field for organic rock and
+// sliding collision. See systems/cave.js.
 export const CAVE = {
-  openEnd: WORLD.SURFACE + 780,  // full-width open water above this depth
-  minHalfWidth: 150,             // narrowest passage
-  maxHalfWidth: 370,             // widest chamber
-  segment: 250,                  // vertical spacing of wall control points
-  centerRange: 150,              // how far the corridor centre wanders from mid
-  wallDamp: -0.25,               // velocity retained on wall bump (soft)
+  carve: 50,        // px carve radius — wall offset from open-cell centres
+  miners: 5,        // parallel miners carving from the surface
+  minerSteps: 190,  // steps each miner walks
+  branchChance: 0.14,
+  wallDamp: 0.2,    // fraction of into-wall velocity retained on a bump
 };
+
+// Sharks come in sizes — small darters to big hunters.
+export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 
 // Harpoon gun.
 export const HARPOON = {
@@ -101,6 +106,14 @@ export const PAL = {
   gemCore:     '#eafcff',
   ventClam:    '#7fd9c4',
   ventClamDk:  '#3f9a86',
+  kelp:        '#2fae7d',
+  kelpDark:    '#1c7d5b',
+  coral:       '#ff8f6b',
+  coralPink:   '#ff6fa5',
+  coralGold:   '#ffc861',
+  anemone:     '#b06bff',
+  anemoneTip:  '#ffd1f5',
+  polyp:       '#66f0d8',
 };
 
 export const KEYMAP = {
