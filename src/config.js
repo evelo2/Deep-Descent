@@ -59,14 +59,27 @@ export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 // shut, release a big air bubble on opening, hold loot (grab while open), and
 // bite — costing a life — if they close on the diver.
 export const SHELL = {
-  clamRadius: 40, clamCycle: 3.6,   // seconds per open/close cycle
-  chestRadius: 36, chestCycle: 6.5, // rattle → slow open → ~2s hold → snap shut
+  clamRadius: 40, clamCycle: 4.8,   // rattle → slow open → hold → snap shut
+  chestRadius: 36, chestCycle: 6.5,
   openGrab: 0.55,    // openness above which loot can be grabbed
   biteShut: 0.30,    // openness below which a closing shell bites
 };
 
 // Big collectible air bubbles released when a shell opens.
 export const BUBBLE = { air: 22, rise: 44, r: 18, life: 7 };
+
+// Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
+// phase p∈[0,1) to { open, shake }: closed with a building rattle (a bubble
+// forming) → slow eased open → hold open → fast snap shut.
+export function shellShape(p) {
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const smooth = (u) => u * u * (3 - 2 * u);
+  if (p < 0.44) return { open: 0, shake: p > 0.30 ? clamp01((p - 0.30) / 0.14) : 0 };
+  if (p < 0.60) return { open: smooth((p - 0.44) / 0.16), shake: 0 };  // slow open
+  if (p < 0.90) return { open: 1, shake: 0 };                           // hold open
+  if (p < 0.94) return { open: 1 - (p - 0.90) / 0.04, shake: 0 };       // snap shut
+  return { open: 0, shake: 0 };
+}
 
 // Harpoon gun.
 export const HARPOON = {
@@ -77,7 +90,7 @@ export const HARPOON = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
 // bioluminescent highlights. Colour is backed by shape/motion for accessibility.

@@ -41,46 +41,62 @@ export function drawDiver(ctx, t, kick, hurt) {
   ctx.restore();
 }
 
-// Giant clam. `open` 0..1. Pearl visible while shell is open.
-export function drawClam(ctx, open, hasPearl, t) {
+// Giant clam — a scallop whose two shells HINGE at the back-left edge and open
+// like a mouth (not a middle pivot). `open` 0..1; `shake` rattles it while a
+// bubble forms just before it opens. Pearl sits inside, revealed when open.
+export function drawClam(ctx, open, hasPearl, t, shake = 0) {
   ctx.save();
-  const ang = 0.15 + open * 0.9;
-  // pearl
-  if (hasPearl) {
-    ctx.save(); ctx.translate(0, -6);
-    glow(ctx, 16, PAL.glow, 0.35 + Math.sin(t * 3) * 0.1);
+  if (shake > 0.02) ctx.translate(Math.sin(t * 38) * 1.4 * shake, Math.sin(t * 51) * 0.7 * shake);
+  const hinge = -26;              // hinge at the back-left corner
+  const gape = open * 1.0;        // opening angle of each half
+
+  // pearl inside, revealed as it opens
+  if (hasPearl && open > 0.12) {
+    ctx.save(); ctx.translate(hinge + 20, -1);
+    glow(ctx, 15, PAL.glow, (0.3 + Math.sin(t * 3) * 0.1) * Math.min(1, open * 1.6));
     const pg = ctx.createRadialGradient(-3, -3, 1, 0, 0, 9);
     pg.addColorStop(0, '#ffffff'); pg.addColorStop(1, PAL.pearl);
-    ctx.fillStyle = pg;
-    ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+    ctx.globalAlpha = Math.min(1, open * 1.6);
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
     ctx.restore();
   }
-  // lower shell
-  drawShell(ctx, 1, 0);
-  // upper shell (hinges open)
-  drawShell(ctx, -1, ang);
+
+  // forming bubble at the mouth while rattling
+  if (shake > 0.05) {
+    const br = 3 + shake * 7, bx = hinge + 34, by = -2 + Math.sin(t * 43) * 1.2 * shake;
+    ctx.strokeStyle = 'rgba(190,235,255,0.7)'; ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'rgba(160,220,255,0.16)';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill(); ctx.stroke();
+  }
+
+  const jitter = shake > 0.02 ? Math.sin(t * 45) * 0.04 * shake : 0;
+  drawShell(ctx, 1, gape * 0.4 + jitter);   // lower shell opens down a little
+  drawShell(ctx, -1, gape + jitter);        // upper shell opens up
+
   ctx.restore();
 
+  // A scallop half, hinged at (hinge,0), fanning out to the right (+x).
   function drawShell(ctx, dir, rot) {
     ctx.save();
-    ctx.translate(0, 2 * dir);
+    ctx.translate(hinge, 0);
     ctx.rotate(-rot * dir);
-    const grad = ctx.createLinearGradient(0, -18 * dir, 0, 4 * dir);
+    const grad = ctx.createLinearGradient(0, -20 * dir, 0, 2 * dir);
     grad.addColorStop(0, PAL.clam); grad.addColorStop(1, PAL.clamDark);
     ctx.fillStyle = dir < 0 ? grad : PAL.clamDark;
     ctx.beginPath();
-    ctx.moveTo(-28, 2 * dir);
-    ctx.quadraticCurveTo(0, -20 * dir, 28, 2 * dir);
-    ctx.quadraticCurveTo(0, 8 * dir, -28, 2 * dir);
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(26, -24 * dir, 52, -3 * dir);
+    ctx.quadraticCurveTo(26, -6 * dir, 0, 0);
     ctx.fill();
-    // ribs
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1.5;
-    for (let i = -2; i <= 2; i++) {
-      ctx.beginPath();
-      ctx.moveTo(i * 9, 2 * dir);
-      ctx.quadraticCurveTo(i * 11, -12 * dir, i * 6, -16 * dir);
+    // radiating ribs
+    ctx.strokeStyle = 'rgba(0,0,0,0.16)'; ctx.lineWidth = 1.5;
+    for (let i = 1; i <= 4; i++) {
+      ctx.beginPath(); ctx.moveTo(2, -1 * dir);
+      ctx.quadraticCurveTo(i * 11, -18 * dir, i * 12 + 2, -3 * dir);
       ctx.stroke();
     }
+    // hinge knob
+    ctx.fillStyle = PAL.clamDark; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TAU); ctx.fill();
     ctx.restore();
   }
 }
@@ -205,6 +221,56 @@ export function drawTreasure(ctx, kind, t) {
     ctx.fillStyle = PAL.gold;
     for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * 4, -3, 2, 0, TAU); ctx.fill(); }
   }
+  ctx.restore();
+}
+
+// Anglerfish — deep-sea hunter with a bioluminescent lure on a stalk.
+export function drawAngler(ctx, t, hurt) {
+  ctx.save();
+  const lx = 12 + Math.sin(t * 2) * 3, ly = -24 + Math.cos(t * 1.5) * 2;
+  // lure stalk + glowing bulb
+  ctx.strokeStyle = '#2b3f4a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(4, -14); ctx.quadraticCurveTo(10, -24, lx, ly); ctx.stroke();
+  const lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, 15);
+  lg.addColorStop(0, '#d9fff2'); lg.addColorStop(0.4, '#7dffcf'); lg.addColorStop(1, 'rgba(120,255,220,0)');
+  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(lx, ly, 15, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#eafff6'; ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, TAU); ctx.fill();
+  // body
+  ctx.fillStyle = hurt ? PAL.danger : '#254550';
+  ctx.beginPath(); ctx.ellipse(0, 0, 20, 16, 0, 0, TAU); ctx.fill();
+  // tail
+  ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(-30, -10); ctx.lineTo(-27, 0); ctx.lineTo(-30, 10); ctx.closePath(); ctx.fill();
+  // gaping lower jaw
+  ctx.fillStyle = hurt ? PAL.danger : '#152a31';
+  ctx.beginPath(); ctx.moveTo(0, 4); ctx.quadraticCurveTo(20, 3, 21, 11); ctx.quadraticCurveTo(13, 18, 0, 14); ctx.fill();
+  // teeth
+  ctx.fillStyle = '#eef';
+  for (let i = 0; i < 5; i++) { const tx = 5 + i * 3.2; ctx.beginPath(); ctx.moveTo(tx, 6); ctx.lineTo(tx + 1.5, 10); ctx.lineTo(tx + 3, 6); ctx.fill(); }
+  // eye
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(6, -4, 3.5, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(7, -4, 1.8, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Moray eel — long serpentine body that undulates as it swims (+x = forward).
+export function drawEel(ctx, t, hurt) {
+  ctx.save();
+  const wave = (i) => Math.sin(t * 6 - i * 0.7) * 7;
+  ctx.strokeStyle = hurt ? PAL.danger : '#4a7a52'; ctx.lineWidth = 11; ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i <= 10; i++) { const x = -46 + i * 9.2, y = wave(i); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+  ctx.stroke();
+  ctx.strokeStyle = hurt ? PAL.danger : '#6fae78'; ctx.lineWidth = 4;
+  ctx.beginPath();
+  for (let i = 0; i <= 10; i++) { const x = -46 + i * 9.2, y = wave(i) + 3; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+  ctx.stroke();
+  const hx = 46, hy = wave(10);
+  ctx.fillStyle = hurt ? PAL.danger : '#4a7a52';
+  ctx.beginPath(); ctx.ellipse(hx, hy, 9, 7, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#20301f'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(hx + 3, hy + 2); ctx.lineTo(hx + 9, hy + 2); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx + 1, hy - 2, 2.2, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(hx + 2, hy - 2, 1.1, 0, TAU); ctx.fill();
   ctx.restore();
 }
 

@@ -1,68 +1,81 @@
-// Air vent — a "bubble clam" seated on a ledge/wall that pulses open and emits
-// a rising column of bubbles. Swim into the stream while it's flowing to refill
-// air. This is how you survive deep cave dives without returning to the surface.
-import { VENT, PAL } from '../config.js';
+// Air vent — a teal "bubble clam" mounted on a cave wall. It uses the same
+// open/close envelope as the other shells (rattle → slow open → hold → snap):
+// while open it streams collectible bubbles up the corridor. Swim into the
+// stream to refill air — the lifeline for deep dives.
+import { VENT, PAL, shellShape } from '../config.js';
 
 export class AirVent {
   constructor(x, y, side) {
-    this.x = x; this.y = y;         // base of the vent (at the wall)
-    this.side = side;               // +1 opens rightward off left wall, -1 mirror
-    this.phase = Math.random() * Math.PI * 2;
-    this.radius = 20;
-    this._emitAcc = 0;
+    this.x = x; this.y = y;         // base of the vent, at the wall
+    this.side = side;               // +1 opens rightward off a left wall, -1 mirror
+    this.cycleT = VENT.cycle;
+    this.phaseOffset = Math.random();
+    this.open = 0; this.shake = 0;
+    this.radius = 22; this._emitAcc = 0;
   }
 
-  // 0 (shut) .. 1 (fully flowing), pulsing like the pearl clams.
-  flow(t) { return Math.max(0, Math.sin(t * (Math.PI * 2 / VENT.cycle) + this.phase)); }
-
   update(dt, t, emitBubble) {
-    const f = this.flow(t);
-    if (f > 0.15) {
-      this._emitAcc += dt * (10 + f * 26);
+    const p = ((t / this.cycleT + this.phaseOffset) % 1 + 1) % 1;
+    const s = shellShape(p);
+    this.open = s.open; this.shake = s.shake;
+    if (this.open > 0.2) {
+      this._emitAcc += dt * (8 + this.open * 30);
       while (this._emitAcc > 1) {
         this._emitAcc -= 1;
-        const bx = this.x + this.side * (6 + Math.random() * 10);
+        const bx = this.x + this.side * (10 + Math.random() * 14);
         emitBubble(bx, this.y - 6, 2 + Math.random() * 3);
       }
     }
   }
 
   // Is the diver inside the flowing stream right now?
-  collects(diver, t) {
-    if (this.flow(t) < 0.2) return false;
-    const inX = Math.abs(diver.x - (this.x + this.side * 12)) < VENT.streamHalfW + diver.radius;
+  collects(diver) {
+    if (this.open < 0.25) return false;
+    const inX = Math.abs(diver.x - (this.x + this.side * 16)) < VENT.streamHalfW + diver.radius;
     const inY = diver.y < this.y + 6 && diver.y > this.y - VENT.streamHeight;
     return inX && inY;
   }
 
   draw(ctx, camX, camY, t) {
-    const f = this.flow(t);
+    const f = this.open;
     ctx.save();
     ctx.translate(this.x - camX, this.y - camY);
     ctx.scale(this.side, 1);
-    // stream glow while flowing
+    if (this.shake > 0.02) ctx.translate(Math.sin(t * 40) * 1.3 * this.shake, 0);
+
+    // rising stream while flowing
     if (f > 0.15) {
-      const g = ctx.createLinearGradient(12, 0, 12, -VENT.streamHeight);
-      g.addColorStop(0, `rgba(150,235,255,${0.16 * f})`);
+      const g = ctx.createLinearGradient(16, 0, 16, -VENT.streamHeight);
+      g.addColorStop(0, `rgba(150,235,255,${0.18 * f})`);
       g.addColorStop(1, 'rgba(150,235,255,0)');
       ctx.fillStyle = g;
-      ctx.fillRect(12 - VENT.streamHalfW, -VENT.streamHeight, VENT.streamHalfW * 2, VENT.streamHeight);
+      ctx.fillRect(16 - VENT.streamHalfW, -VENT.streamHeight, VENT.streamHalfW * 2, VENT.streamHeight);
     }
-    // vent clam shell (teal, distinct from pearl clams)
-    const ang = 0.1 + f * 0.7;
-    for (const dir of [1, -1]) {
+
+    // teal shells hinged at the wall (x=0), fanning into the corridor
+    const jitter = this.shake > 0.02 ? Math.sin(t * 46) * 0.05 * this.shake : 0;
+    ventHalf(1, f * 0.4 + jitter);
+    ventHalf(-1, f + jitter);
+    ctx.restore();
+
+    function ventHalf(dir, rot) {
       ctx.save();
-      ctx.rotate(-ang * dir * 0.5);
-      const grad = ctx.createLinearGradient(0, -14 * dir, 0, 4 * dir);
+      ctx.rotate(-rot * dir);
+      const grad = ctx.createLinearGradient(0, -16 * dir, 0, 2 * dir);
       grad.addColorStop(0, PAL.ventClam); grad.addColorStop(1, PAL.ventClamDk);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(-20, 2 * dir);
-      ctx.quadraticCurveTo(0, -16 * dir, 20, 2 * dir);
-      ctx.quadraticCurveTo(0, 7 * dir, -20, 2 * dir);
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(20, -18 * dir, 40, -2 * dir);
+      ctx.quadraticCurveTo(20, -5 * dir, 0, 0);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1.2;
+      for (let i = 1; i <= 3; i++) {
+        ctx.beginPath(); ctx.moveTo(2, -1 * dir);
+        ctx.quadraticCurveTo(i * 11, -14 * dir, i * 12, -2 * dir); ctx.stroke();
+      }
+      ctx.fillStyle = PAL.ventClamDk; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-    ctx.restore();
   }
 }

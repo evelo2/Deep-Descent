@@ -48,6 +48,21 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
+## v5 expansion — unified shell animation, deep zones, whale bones, new reefs
+
+- **Shared shell envelope** (`config.shellShape`): all shells (pearl clams, vent
+  clams, chests) now rattle → slow-open → hold → snap-shut, hinged at an edge.
+  `drawClam` and the vent draw two scallop halves hinged at the back; `drawChest`
+  hinges the lid at its left corner. Each rattles with a forming bubble.
+- **Depth zones** (`game._generateWorld`): creatures spawn by depth band —
+  shallow (jelly/puffer/small shark), mid (octopus/shark), deep (big shark + new
+  `Eel` and `Angler` with a bioluminescent lure). The scene darkens with a depth
+  veil + vignette in `game.draw`.
+- **Whale skeletons** (`props.drawWhaleSkeleton`): seated on the deepest floors.
+- **New reefs** (`game._setSail`/`_newReef`): dock, bank, hold ↑ to board the
+  boat → a brief sailing transition → a freshly generated cave; score/lives carry
+  over, air refills. Tracked as REEF n in the HUD.
+
 ## v4 expansion — animated shells (clams & chests) + collectible air bubbles
 
 - **Shell base** (`entities/shell.js`): ledge-mounted open/close containers.
