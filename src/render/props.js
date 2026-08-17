@@ -186,6 +186,44 @@ export function drawWhaleSkeleton(ctx, t) {
   ctx.restore();
 }
 
+// A single curved rib bone lining the belly. `dir` +1 curves right, -1 left.
+export function drawRib(ctx, t, dir = 1) {
+  ctx.save();
+  ctx.scale(dir, 1);
+  ctx.strokeStyle = PAL.rib; ctx.lineWidth = 12; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, -120);
+  ctx.quadraticCurveTo(70, -10, 30, 120);
+  ctx.stroke();
+  // subtle shading
+  ctx.strokeStyle = 'rgba(120,90,90,0.25)'; ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(2, -115); ctx.quadraticCurveTo(66, -10, 28, 112); ctx.stroke();
+  ctx.restore();
+}
+
+// The throat exit inside the whale — a glowing swirl you swim into to leave.
+export function drawThroat(ctx, t, r = 44) {
+  ctx.save();
+  const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, r * 1.6);
+  glow.addColorStop(0, PAL.throat); glow.addColorStop(0.5, '#c96a3a'); glow.addColorStop(1, 'rgba(120,40,30,0)');
+  ctx.globalAlpha = 0.7 + Math.sin(t * 3) * 0.15;
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // rings
+  for (let i = 3; i >= 1; i--) {
+    ctx.strokeStyle = `rgba(255,210,122,${0.25 * i})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, r * (i / 3) * (0.9 + Math.sin(t * 2 + i) * 0.06), 0, TAU); ctx.stroke();
+  }
+  // dark centre
+  ctx.fillStyle = '#2a0e0c'; ctx.beginPath(); ctx.arc(0, 0, r * 0.32, 0, TAU); ctx.fill();
+  // "EXIT" arrow up
+  ctx.fillStyle = PAL.throat;
+  ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(-6, 4); ctx.lineTo(6, 4); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
 // A faceted gemstone — the richest cave/wreck loot.
 export function drawGem(ctx, t) {
   ctx.save();
