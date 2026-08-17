@@ -29,24 +29,29 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
-## v2 expansion — caves, harpoon, wrecks, air vents
+## v9 — objectives, power-ups, minimap, controllers, collision fix
 
-- **Caves** (`systems/terrain.js`): below the open surface zone the world becomes
-  a winding vertical corridor defined by control points (centre + half-width),
-  smoothly interpolated, with wide chambers and narrow passages plus craggy rock
-  pillars. `constrain()` keeps entities inside (soft, damage-free wall bumps);
-  `isSolid()` backs harpoon/rock tests. Rock is drawn *after* creatures so a
-  hunter wandering into a wall is naturally occluded.
-- **Harpoon** (`entities/harpoon.js`): fired along the diver's aim (last swim
-  direction). Spears creatures for points, sticks into rock, short cooldown.
-  Space/F/click, or a quick screen tap on touch (drag = steer, tap = fire).
-- **Air vents** (`entities/airvent.js`): "bubble clams" on cave walls that pulse
-  open and emit a rising bubble stream; swimming through it refills air. This is
-  how deep cave dives stay survivable without surfacing — the boat still gives a
-  full refill and is the only place to *bank* treasure.
-- **Shipwrecks** (`entities/wreck.js` + `render/props.js`): evocative galleons
-  seated in chambers, ringed with the richest loot (gems + chests).
-- **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
+- **Per-reef relic objective** (hybrid) (`entities/relic.js`, `config.RELIC`):
+  each reef spawns one relic (anchor/statue/map/idol). Sailing on unlocks once
+  `canSail = relicBanked || reefBanked >= reefGoal` — bank the relic (2000 pts)
+  or grind the deliberately-steep points goal (8000 + reef·1500). HUD shows the
+  objective + docked prompt; relic travels in the zone snapshot.
+- **Extra life every 5,000 pts** + a **difficulty curve** by reef (creature
+  count 32→56, shark size scales) so runs stay tense as lives accumulate.
+- **Power-ups** (`entities/powerup.js`, `_applyPowerUp`): tank (permanent
+  `airMax`), multifire (timed 3-way spread), shield (timed invuln + bubble),
+  speed fins (accel/max-speed ×1.6, passed to `diver.update`), treasure magnet
+  (pulls loot), and 1-UP. Weighted spawns; HUD buff timers.
+- **Fog-of-war minimap** (`cave.reveal` + `cave.mini` buffer, `game._minimap`):
+  a per-cell `seen` mask painted into a 1px-per-cell buffer as the diver
+  explores; drawn top-right with diver/boat/relic markers. Per-cave (snapshot).
+- **Gamepad support** (`input.js` `poll()`): Gamepad API — left stick/D-pad
+  move, A/X/RB/RT fire, Start pause/confirm, Back mute; merged with keyboard +
+  touch. Works on Steam Deck, ROG Ally, etc.
+- **Collision fix** (`cave.collide`): replaced the uncapped single-push (which
+  could teleport an embedded diver across the map → judder/stuck) with bounded
+  gradient-descent (capped steps, coarse-grid fallback) + full into-wall
+  velocity removal so the diver slides cleanly along walls.
 
 ## v8 — occasional specials + power-ups
 
