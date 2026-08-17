@@ -133,13 +133,17 @@ as-is — see [Deploying](#deploying).)*
 **Goal:** collect pearls, gems and treasure, and bring them back to the surface
 to **bank** them into your score — before your **air** runs out.
 
-| Action | Keyboard | Touch |
-| --- | --- | --- |
-| Swim | Arrow keys / **WASD** | Drag anywhere (virtual joystick) |
-| Fire harpoon | **Space** / **F** | Quick tap |
-| Start / restart | **Space** | Tap |
-| Pause | **P** / **Esc** | — |
-| Mute | **M** | — |
+| Action | Keyboard | Touch | Gamepad |
+| --- | --- | --- | --- |
+| Swim | Arrow keys / **WASD** | Drag (virtual joystick) | Left stick / D-pad |
+| Fire harpoon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
+| Start / confirm | **Space** | Tap | **A / Start** |
+| Pause | **P** / **Esc** | — | **Start** |
+| Mute | **M** | — | **Back / Select** |
+
+**🎮 Controllers work out of the box** — Steam Deck, ROG Ally / Ally X, and any
+pad the browser exposes via the Gamepad API. Open the game in the device's
+browser and press a button.
 
 ### The loop
 
@@ -218,6 +222,9 @@ to **bank** them into your score — before your **air** runs out.
 - 🏛 **Sunken temple** with a key-and-door puzzle and a treasure vault.
 - ⚡ **Power-ups** — air tank, multifire, shield, speed fins, treasure magnet, 1-UP.
 - ❤ **Extra life every 5,000 points**, with a difficulty curve that scales by reef.
+- ⚓ **Per-reef relic objective** — find & bank the relic (or grind the points goal) to sail on.
+- 🗺 **Fog-of-war minimap** that reveals the caves as you explore.
+- 🎮 **Full controller support** (Steam Deck, ROG Ally, and more) alongside keyboard + touch.
 - 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
   parallax particulate, screen shake and a darkening, vignetting deep.
 - 🔊 **Procedural Web Audio** — ambient bed and SFX, no audio files, mute toggle.

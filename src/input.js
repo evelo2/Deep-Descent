@@ -1,12 +1,18 @@
-// Unified input: keyboard + touch → a normalised intent vector {x, y} in [-1,1],
-// plus edge-triggered actions (pause, mute).
+// Unified input: keyboard + touch + gamepad → a normalised intent vector
+// {x, y} in [-1,1], plus edge-triggered actions (pause, mute, fire, start).
+// Gamepad support covers handheld PCs (Steam Deck, ROG Ally, etc.) and any
+// controller the browser exposes via the standard Gamepad API.
 import { KEYMAP } from './config.js';
 
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
     this.touch = { x: 0, y: 0, active: false };
-    this._pressed = new Set();   // edge buffer for one-shot actions
+    this._pressed = new Set();   // edge buffer for one-shot keyboard actions
+    this.pad = { x: 0, y: 0 };    // gamepad stick/dpad intent
+    this._padPrev = {};           // previous gamepad button states
+    this._padEdges = new Set();   // one-shot gamepad actions (pause, mute)
+    this._padStart = false;       // gamepad confirm/start edge (menus)
     this.canvas = canvas;
 
     addEventListener('keydown', (e) => {
@@ -53,14 +59,39 @@ export class Input {
 
   _any(action) { return KEYMAP[action].some((c) => this.keys.has(c)); }
 
-  // Edge-triggered: true once per physical press.
+  // Poll the first connected gamepad. Called once per frame by the game.
+  // Standard mapping: axes 0/1 = left stick; buttons 0=A 1=B 2=X 3=Y, 5/7 =
+  // RB/RT, 8=Back 9=Start, 12-15 = D-pad up/down/left/right.
+  poll() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : null;
+    let gp = null;
+    if (pads) for (const p of pads) if (p && p.connected) { gp = p; break; }
+    if (!gp) { this.pad.x = 0; this.pad.y = 0; this._padPrev = {}; return; }
+    const dead = 0.28;
+    let x = gp.axes[0] || 0, y = gp.axes[1] || 0;
+    x = Math.abs(x) > dead ? x : 0; y = Math.abs(y) > dead ? y : 0;
+    const B = (i) => gp.buttons[i] && gp.buttons[i].pressed;
+    if (B(14)) x = -1; else if (B(15)) x = 1;
+    if (B(12)) y = -1; else if (B(13)) y = 1;
+    this.pad.x = x; this.pad.y = y;
+    const edge = (i) => B(i) && !this._padPrev[i];
+    if (edge(0) || edge(2) || edge(5) || edge(7)) this._tapFire = true;   // A/X/RB/RT → fire
+    if (edge(9)) this._padEdges.add('pause');                            // Start → pause
+    if (edge(8)) this._padEdges.add('mute');                             // Back → mute
+    if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
+    this._padPrev = {};
+    for (let i = 0; i < gp.buttons.length; i++) this._padPrev[i] = gp.buttons[i].pressed;
+  }
+
+  // Edge-triggered action: true once per press (keyboard or gamepad).
   pressed(action) {
     const hit = KEYMAP[action].find((c) => this._pressed.has(c));
     if (hit) { this._pressed.delete(hit); return true; }
+    if (this._padEdges.has(action)) { this._padEdges.delete(action); return true; }
     return false;
   }
 
-  // Continuous movement intent.
+  // Continuous movement intent (keyboard + touch + gamepad).
   vector() {
     let x = 0, y = 0;
     if (this._any('left')) x -= 1;
@@ -68,14 +99,17 @@ export class Input {
     if (this._any('up')) y -= 1;
     if (this._any('down')) y += 1;
     if (this.touch.active) { x += this.touch.x; y += this.touch.y; }
+    x += this.pad.x; y += this.pad.y;
     const m = Math.hypot(x, y);
     if (m > 1) { x /= m; y /= m; }
     return { x, y };
   }
 
-  // True once per quick screen tap (touch fire).
+  // True once per quick screen tap or gamepad fire button.
   consumeTapFire() { const f = this._tapFire; this._tapFire = false; return f; }
+  // True once per gamepad confirm/start press (used on menus).
+  consumeStart() { const s = this._padStart; this._padStart = false; return s; }
 
-  // Clear the edge buffer at end of frame for any keys not consumed.
-  endFrame() { this._pressed.clear(); }
+  // Clear one-shot edge buffers at end of frame.
+  endFrame() { this._pressed.clear(); this._padEdges.clear(); }
 }
