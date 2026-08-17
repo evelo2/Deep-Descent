@@ -46,10 +46,12 @@ python3 -m http.server 8777
 - **Harpoon:** fire along your swim direction to spear hunters for points.
   **Sharks come in sizes** (small darters → big hunters); bigger sharks are worth
   more. Short cooldown; the HUD shows when it's ready.
-- **Giant clams** hold pearls (400). Grab the pearl while the shell is **open**;
-  linger inside when it snaps **shut** and it bites you.
-- **Shipwrecks** rest in the deep chambers, ringed with the richest loot.
-- **Treasure:** coins (60), chests (250), gems (500) — richer the deeper you go.
+- **Clams & chests** sit on ledges and shipwrecks, **opening and closing**. Grab
+  the loot (pearl 400, chest 200–600) while **open**; each time one opens it
+  **releases a big air bubble** — swim into it to top up your air. Linger inside
+  when it snaps **shut** and it bites you: a life lost.
+- **Shipwrecks** rest in the deep chambers, decked with a big chest and gems.
+- **Treasure:** floating coins (60) and gems (500) drift through the water.
 - **Hazards** cost a life on contact: octopus (homes in), shark (fast cruiser),
   jellyfish (bobbing), pufferfish (patrols). Deeper water = more, and richer.
 - Collect and bank everything, then surface, to win with an air + lives bonus.
