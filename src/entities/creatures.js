@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -75,6 +75,30 @@ export class Puffer extends Creature {
     this._edgeBounce();
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawPuffer, t); }
+}
+
+// Anglerfish — deep-sea; drifts, then homes slowly, lured glow leading.
+export class Angler extends Creature {
+  constructor(x, y) { super(x, y); this.radius = 20; this.speed = 38; }
+  update(dt, t, diver) {
+    const dx = diver.x - this.x, dy = diver.y - this.y, dist = Math.hypot(dx, dy) || 1;
+    if (dist < 260) { this.x += (dx / dist) * this.speed * dt; this.y += (dy / dist) * this.speed * dt; this.baseY = this.y; }
+    else { this.x += Math.sin(t * 0.6 + this.t0) * 16 * dt; this.y = this.baseY + Math.sin(t * 0.7 + this.t0) * 14; }
+    this.facing = dx >= 0 ? 1 : -1;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawAngler, t); }
+}
+
+// Moray eel — fast horizontal patroller deep in the caves.
+export class Eel extends Creature {
+  constructor(x, y) { super(x, y); this.radius = 15; this.speed = 55 + Math.random() * 35; this.dir = Math.random() < 0.5 ? 1 : -1; }
+  update(dt, t) {
+    this.x += this.speed * this.dir * dt;
+    this.y = this.baseY + Math.sin(t * 1.1 + this.t0) * 20;
+    this.facing = this.dir;
+    this._edgeBounce();
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawEel, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

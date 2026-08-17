@@ -6,12 +6,13 @@ import { Boat } from './entities/boat.js';
 import { Clam, Chest } from './entities/shell.js';
 import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
-import { Shark, Octopus, Jelly, Puffer } from './entities/creatures.js';
+import { Shark, Octopus, Jelly, Puffer, Eel, Angler } from './entities/creatures.js';
 import { Cave } from './systems/cave.js';
 import { Flora } from './render/flora.js';
 import { Harpoon } from './entities/harpoon.js';
 import { AirVent } from './entities/airvent.js';
 import { Wreck } from './entities/wreck.js';
+import { drawWhaleSkeleton } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
@@ -28,7 +29,8 @@ export class Game {
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
     this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
-    this.shells = []; this.bigBubbles = [];
+    this.shells = []; this.bigBubbles = []; this.skeletons = [];
+    this.reef = 1; this.dockHold = 0; this.sailT = 0;
     this.diver.reset();
   }
 
@@ -47,7 +49,7 @@ export class Game {
   _generateWorld() {
     const C = this.cave = new Cave();
     this.shells = []; this.treasures = []; this.creatures = [];
-    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -78,14 +80,25 @@ export class Game {
     // Flora rooted on cave floors — lots of it, for atmosphere.
     this.flora = new Flora(spread(C.floors(), 110, 70));
 
-    // Creatures, including sharks of varied sizes.
-    for (let i = 0; i < 34; i++) {
+    // Whale skeletons resting on the deepest floors.
+    const deepFloors = C.floors().filter((f) => f.y > WH * 0.72);
+    for (const s of spread(deepFloors, 3, 500)) this.skeletons.push({ x: s.x, y: s.y - 6 });
+
+    // Creatures change with depth: shallow reef → mid water → the deep.
+    const smallShark = () => new Shark(0, 0, 0.7 + Math.random() * 0.4);
+    for (let i = 0; i < 36; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
       const deep = c.y / WH, r = Math.random();
-      if (deep > 0.4 && r < 0.4) this.creatures.push(new Shark(c.x, c.y, SHARK.minScale + Math.random() * (SHARK.maxScale - SHARK.minScale)));
-      else if (deep > 0.25 && r < 0.4) this.creatures.push(new Octopus(c.x, c.y));
-      else if (r < 0.55) this.creatures.push(new Jelly(c.x, c.y));
-      else this.creatures.push(new Puffer(c.x, c.y));
+      let cr;
+      if (deep < 0.30) {                       // shallow reef
+        cr = r < 0.42 ? new Jelly(c.x, c.y) : r < 0.72 ? new Puffer(c.x, c.y) : new Shark(c.x, c.y, 0.7 + Math.random() * 0.35);
+      } else if (deep < 0.62) {                // mid water
+        cr = r < 0.34 ? new Octopus(c.x, c.y) : r < 0.62 ? new Shark(c.x, c.y, 1.0 + Math.random() * 0.4)
+          : r < 0.82 ? new Puffer(c.x, c.y) : new Jelly(c.x, c.y);
+      } else {                                 // the deep
+        cr = r < 0.34 ? new Shark(c.x, c.y, 1.3 + Math.random() * 0.4) : r < 0.64 ? new Eel(c.x, c.y) : new Angler(c.x, c.y);
+      }
+      this.creatures.push(cr);
     }
   }
 
@@ -114,6 +127,12 @@ export class Game {
     if (this.input.pressed('pause')) this.onAction();
     if (this.input.pressed('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
 
+    // Sailing to a new reef: brief transition, then a fresh cave.
+    if (this.state === 'sailing') {
+      this.sailT += dt;
+      if (this.sailT > 1.8) this._newReef();
+      this.input.endFrame(); return;
+    }
     if (this.state !== 'playing') { this.input.endFrame(); return; }
     if (this.input.consumeTapFire()) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
@@ -138,7 +157,11 @@ export class Game {
     if (docked) {
       if (this.air < AIR.max) { this.air = Math.min(AIR.max, this.air + AIR.refillPerSec * dt); if (Math.random() < 0.3) this.audio.refill(); }
       if (this.carried > 0) { this.score += this.carried; this.carried = 0; this.bankPulse = 1; this.audio.bank(); }
+      // Hold ↑ into the boat (once banked) to board and sail to a new reef.
+      if (this.carried === 0 && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
+      else this.dockHold = 0;
     } else {
+      this.dockHold = 0;
       this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * dt;
       if (inVent) { this.air = Math.min(AIR.max, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
@@ -240,8 +263,23 @@ export class Game {
     this._gameOver();
   }
 
+  // Board the boat and set sail for a fresh reef (score & lives carry over).
+  _setSail() {
+    this.state = 'sailing'; this.sailT = 0; this.reef += 1; this.dockHold = 0;
+    this.audio.select();
+  }
+  _newReef() {
+    this._generateWorld();
+    this.diver.reset();
+    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.air = AIR.max;
+    this.state = 'playing';
+    this.audio.bank();
+  }
+
   // ---- render ----------------------------------------------------------
   draw() {
+    if (this.state === 'sailing') { this._sailScreen(); return; }
     const ctx = this.ctx;
     ctx.save();
     if (this.shake > 0.2) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
@@ -253,6 +291,7 @@ export class Game {
 
     if (this.state !== 'menu') {
       if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
+      for (const s of this.skeletons) { ctx.save(); ctx.translate(s.x - cx, s.y - cy); drawWhaleSkeleton(ctx, this.t); ctx.restore(); }
       for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
       for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
       for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
@@ -261,10 +300,19 @@ export class Game {
       for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
+      // Depth darkening — the deep swallows the light (drawn under the diver).
+      if (depthT > 0.02) { ctx.fillStyle = `rgba(2,7,15,${0.5 * depthT})`; ctx.fillRect(0, 0, W, H); }
     }
 
     this.particles.draw(ctx, cx, cy);
     if (this.state !== 'menu') this.diver.draw(ctx, cx, cy);
+
+    // Vignette — subtle at the surface, closing in with depth.
+    if (this.state !== 'menu') {
+      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.34, W / 2, H / 2, H * 0.78);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${0.22 + 0.34 * depthT})`);
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    }
 
     if (this.flash > 0.01) {
       ctx.fillStyle = `rgba(255,40,40,${0.35 * this.flash})`;
@@ -276,6 +324,26 @@ export class Game {
     if (this.state === 'menu') this._menu();
     if (this.state === 'paused') this._overlay('PAUSED', 'Press P / tap to resume');
     if (this.state === 'gameover') this._gameOverScreen();
+  }
+
+  // Transition screen while the boat carries the diver to a new reef.
+  _sailScreen() {
+    const ctx = this.ctx, p = Math.min(1, this.sailT / 1.8), sy = H * 0.42;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, PAL.surfaceLight); g.addColorStop(0.42, PAL.waterTop); g.addColorStop(1, PAL.waterDeep);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // surface line
+    ctx.strokeStyle = 'rgba(220,250,255,0.5)'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = 0; x <= W; x += 12) { const yy = sy + Math.sin(x * 0.04 + this.t * 2) * 3; x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy); }
+    ctx.stroke();
+    // boat sailing across, with a wake
+    const bx = W * 0.12 + p * W * 0.72;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    for (let i = 0; i < 7; i++) { const wx = bx - 34 - i * 16 - ((this.t * 40) % 16); ctx.beginPath(); ctx.arc(wx, sy + 7, 3.2 - i * 0.3, 0, Math.PI * 2); ctx.fill(); }
+    this.boat.draw(ctx, this.boat.x - bx, WORLD.SURFACE - sy, this.t);
+    // caption
+    this._text(`SAILING TO REEF ${this.reef}…`, W / 2, H * 0.72, 26, PAL.hudText, 'center', 'middle', true);
+    this._text(`SCORE ${this.score}   ·   LIVES ${this.lives}`, W / 2, H * 0.72 + 34, 15, '#bfe6ff', 'center', 'middle');
   }
 
   // ---- HUD -------------------------------------------------------------
@@ -315,10 +383,21 @@ export class Game {
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
     this._text(`CARRYING ${this.carried}`, W - 20, 46, 14, cp, 'right', 'top');
     this._text(`DEPTH ${Math.round(this.depthReached / 10)} m`, W - 20, 66, 13, '#bfe6ff', 'right', 'top');
+    this._text(`REEF ${this.reef}`, W - 20, 84, 12, '#8fbfda', 'right', 'top');
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
 
-    if (this.boat.contains(this.diver)) this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
+    if (this.boat.contains(this.diver)) {
+      if (this.carried === 0) {
+        this._text('◆ DOCKED — banked. Hold ↑ to set sail to a new reef', W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
+        if (this.dockHold > 0) { // boarding progress bar
+          ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160, 6, 3); ctx.fill();
+          ctx.fillStyle = PAL.gold; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160 * Math.min(1, this.dockHold / 1.0), 6, 3); ctx.fill();
+        }
+      } else {
+        this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
+      }
+    }
     ctx.restore();
   }
 

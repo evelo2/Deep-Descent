@@ -141,6 +141,51 @@ export function drawChestShell(ctx, open, hasLoot, t, shake = 0) {
   ctx.restore();
 }
 
+// A whale skeleton resting on the deep sea floor. Spine + ribcage + skull, drawn
+// centred on the spine; the shadow sits at the floor. ~300px long.
+export function drawWhaleSkeleton(ctx, t) {
+  const bone = '#e7e2d2';
+  const spineY = (x) => -Math.max(0, x + 40) * 0.05;  // slight rise toward the tail
+  ctx.save();
+  // silt shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(-10, 10, 155, 15, 0, 0, TAU); ctx.fill();
+
+  // ribs arcing up from the spine
+  ctx.strokeStyle = bone; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  for (let x = -95; x <= 60; x += 20) {
+    const y = spineY(x);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x - 16, y - 34, x - 4, y - 58); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 16, y - 34, x + 4, y - 58); ctx.stroke();
+  }
+
+  // spine
+  ctx.strokeStyle = bone; ctx.lineWidth = 7;
+  ctx.beginPath();
+  for (let x = -150; x <= 130; x += 10) { const y = spineY(x); x === -150 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+  ctx.stroke();
+  ctx.fillStyle = bone;
+  for (let x = -120; x <= 110; x += 18) { ctx.beginPath(); ctx.arc(x, spineY(x), 5, 0, TAU); ctx.fill(); }
+
+  // skull at the left
+  ctx.save(); ctx.translate(-150, 0);
+  ctx.fillStyle = bone;
+  ctx.beginPath();
+  ctx.moveTo(2, -9); ctx.quadraticCurveTo(-48, -11, -66, 2);
+  ctx.quadraticCurveTo(-48, 13, 2, 9); ctx.quadraticCurveTo(12, 0, 2, -9); ctx.fill();
+  ctx.strokeStyle = bone; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(-2, 9); ctx.quadraticCurveTo(-44, 22, -62, 7); ctx.stroke();  // lower jaw
+  ctx.fillStyle = '#2f2f28'; ctx.beginPath(); ctx.arc(-12, -1, 4, 0, TAU); ctx.fill();      // eye socket
+  ctx.restore();
+
+  // tail flukes
+  ctx.save(); ctx.translate(122, spineY(122));
+  ctx.strokeStyle = bone; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20, -15); ctx.moveTo(0, 0); ctx.lineTo(20, 9); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
 // A faceted gemstone — the richest cave/wreck loot.
 export function drawGem(ctx, t) {
   ctx.save();

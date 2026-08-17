@@ -46,12 +46,18 @@ python3 -m http.server 8777
 - **Harpoon:** fire along your swim direction to spear hunters for points.
   **Sharks come in sizes** (small darters → big hunters); bigger sharks are worth
   more. Short cooldown; the HUD shows when it's ready.
-- **Clams & chests** sit on ledges and shipwrecks, **opening and closing**. Grab
-  the loot (pearl 400, chest 200–600) while **open**; each time one opens it
-  **releases a big air bubble** — swim into it to top up your air. Linger inside
-  when it snaps **shut** and it bites you: a life lost.
+- **Clams & chests** sit on ledges and shipwrecks and share one animation:
+  **rattle** (a bubble forming) → **slow open** → **hold** → **snap shut**, their
+  lids/shells hinged at an edge. Grab the loot (pearl 400, chest 200–600) while
+  **open**; each opening **releases a big air bubble** to swim through for air.
+  Get caught when it snaps **shut** and it bites you: a life lost.
 - **Shipwrecks** rest in the deep chambers, decked with a big chest and gems.
 - **Treasure:** floating coins (60) and gems (500) drift through the water.
+- **The deep changes:** it gets darker as you descend, the creatures change with
+  depth — shallow jellyfish/pufferfish → mid-water octopus & sharks → the deep's
+  **eels and glowing anglerfish** — and **whale skeletons** rest on the floor.
+- **New reefs:** surface, bank your haul, then **hold ↑ into the boat** to board
+  and sail to a fresh reef (a whole new cave; score & lives carry over).
 - **Hazards** cost a life on contact: octopus (homes in), shark (fast cruiser),
   jellyfish (bobbing), pufferfish (patrols). Deeper water = more, and richer.
 - Collect and bank everything, then surface, to win with an air + lives bonus.
