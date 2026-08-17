@@ -6,14 +6,11 @@ within each group.
 
 ## Power-ups (new pickups)
 
-Built so far: **air tank** (permanent max-air boost) and **multifire** (timed
-3-way harpoon spread). Candidates to add, using the same `entities/powerup.js`
-+ `_applyPowerUp` framework:
+Built so far: **air tank** (permanent max-air boost), **multifire** (timed 3-way
+spread), **shield** (timed invulnerability), **speed fins** (faster swimming),
+**treasure magnet** (pulls nearby loot), and **1-UP** (extra life). Plus an extra
+life every 5,000 points and a per-reef difficulty curve. Still on the table:
 
-- **Shield** — a bubble of brief invulnerability (a few seconds) after pickup.
-- **Speed fins** — temporarily faster swimming (higher accel / max speed).
-- **Treasure magnet** — auto-collects nearby loot for a while.
-- **Extra life** — a one-off +1 life.
 - **Rapid reload** — shorter harpoon cooldown for a while.
 - **Slow-drain regulator** — reduced air consumption for a while.
 

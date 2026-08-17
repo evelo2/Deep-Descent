@@ -47,6 +47,8 @@ export class Game {
     this.state = 'playing';
     this.score = 0; this.carried = 0; this.lives = GAME.startLives;
     this.airMax = AIR.max; this.air = this.airMax; this.multiFireT = 0;
+    this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
+    this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
     this.won = false; this.newHi = false;
     this.zone = 'reef'; this.savedReef = null;
@@ -96,18 +98,21 @@ export class Game {
     const deepFloors = C.floors().filter((f) => f.y > WH * 0.72);
     for (const s of spread(deepFloors, 3, 500)) this.skeletons.push({ x: s.x, y: s.y - 6 });
 
-    // Creatures change with depth: shallow reef → mid water → the deep.
-    for (let i = 0; i < 36; i++) {
+    // Creatures change with depth; density and shark size rise with the reef
+    // number so later reefs stay tense even as lives accumulate.
+    const nCreatures = 32 + Math.min(this.reef - 1, 12) * 2;   // 32 → 56 by reef 13
+    const sizeUp = Math.min((this.reef - 1) * 0.05, 0.4);      // bigger sharks deeper into a run
+    for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
       const deep = c.y / WH, r = Math.random();
       let cr;
       if (deep < 0.30) {                       // shallow reef
-        cr = r < 0.42 ? new Jelly(c.x, c.y) : r < 0.72 ? new Puffer(c.x, c.y) : new Shark(c.x, c.y, 0.7 + Math.random() * 0.35);
+        cr = r < 0.42 ? new Jelly(c.x, c.y) : r < 0.72 ? new Puffer(c.x, c.y) : new Shark(c.x, c.y, 0.7 + sizeUp + Math.random() * 0.35);
       } else if (deep < 0.62) {                // mid water
-        cr = r < 0.34 ? new Octopus(c.x, c.y) : r < 0.62 ? new Shark(c.x, c.y, 1.0 + Math.random() * 0.4)
+        cr = r < 0.34 ? new Octopus(c.x, c.y) : r < 0.62 ? new Shark(c.x, c.y, 1.0 + sizeUp + Math.random() * 0.4)
           : r < 0.82 ? new Puffer(c.x, c.y) : new Jelly(c.x, c.y);
       } else {                                 // the deep
-        cr = r < 0.34 ? new Shark(c.x, c.y, 1.3 + Math.random() * 0.4) : r < 0.64 ? new Eel(c.x, c.y) : new Angler(c.x, c.y);
+        cr = r < 0.34 ? new Shark(c.x, c.y, 1.3 + sizeUp + Math.random() * 0.4) : r < 0.64 ? new Eel(c.x, c.y) : new Angler(c.x, c.y);
       }
       this.creatures.push(cr);
     }
@@ -146,19 +151,23 @@ export class Game {
   }
 
   _makePowerups(count) {
+    const bag = [];
+    for (const [type, w] of Object.entries(POWERUP.weights)) for (let i = 0; i < w; i++) bag.push(type);
     for (let i = 0; i < count; i++) {
       const c = this.cave.randomOpen(OPEN_BAND + 300); if (!c) continue;
-      this.powerups.push(new PowerUp(c.x, c.y, Math.random() < 0.5 ? 'tank' : 'multifire'));
+      this.powerups.push(new PowerUp(c.x, c.y, bag[(Math.random() * bag.length) | 0]));
     }
   }
 
   _applyPowerUp(type) {
-    if (type === 'tank') {
-      this.airMax += POWERUP.tankBonus; this.air = this.airMax;
-      this.particles.sparkle(this.diver.x, this.diver.y, PAL.air, 24); this.audio.bank();
-    } else {
-      this.multiFireT += POWERUP.multifireDuration;
-      this.particles.sparkle(this.diver.x, this.diver.y, PAL.harpoonTip, 24); this.audio.pickup();
+    const d = this.diver;
+    switch (type) {
+      case 'tank': this.airMax += POWERUP.tankBonus; this.air = this.airMax; this.particles.sparkle(d.x, d.y, PAL.air, 24); this.audio.bank(); break;
+      case 'multifire': this.multiFireT += POWERUP.multifireDuration; this.particles.sparkle(d.x, d.y, PAL.harpoonTip, 24); this.audio.pickup(); break;
+      case 'shield': this.shieldT += POWERUP.shieldDuration; this.particles.sparkle(d.x, d.y, PAL.gateGlow, 24); this.audio.pickup(); break;
+      case 'speed': this.speedT += POWERUP.speedDuration; this.particles.sparkle(d.x, d.y, PAL.air, 24); this.audio.pickup(); break;
+      case 'magnet': this.magnetT += POWERUP.magnetDuration; this.particles.sparkle(d.x, d.y, PAL.gold, 24); this.audio.pickup(); break;
+      case 'life': this.lives += 1; this.oneUpT = 2.2; this.particles.sparkle(d.x, d.y, PAL.diver, 28); this.audio.bank(); break;
     }
   }
 
@@ -265,6 +274,7 @@ export class Game {
     this.flash = Math.max(0, this.flash - dt * 3);
     this.bankPulse = Math.max(0, this.bankPulse - dt * 2);
     this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
+    this.oneUpT = Math.max(0, this.oneUpT - dt);
 
     if (this.input.pressed('pause')) this.onAction();
     if (this.input.pressed('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
@@ -279,9 +289,13 @@ export class Game {
     if (this.input.consumeTapFire()) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.multiFireT = Math.max(0, this.multiFireT - dt);
+    this.shieldT = Math.max(0, this.shieldT - dt);
+    this.speedT = Math.max(0, this.speedT - dt);
+    this.magnetT = Math.max(0, this.magnetT - dt);
+    if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
     const intent = this.input.vector();
-    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y));
+    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), this.speedT > 0 ? POWERUP.speedMult : 1);
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
 
@@ -324,6 +338,19 @@ export class Game {
     for (const h of this.harpoons) h.update(dt, this.cave);
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
+    // Treasure magnet: pull nearby loot toward the diver.
+    if (this.magnetT > 0) {
+      const dv = this.diver, R = POWERUP.magnetRadius;
+      for (const tr of this.treasures) {
+        if (tr.locked && !this.hasKey) continue;
+        const dx = dv.x - tr.x, dy = dv.y - tr.baseY, dist = Math.hypot(dx, dy);
+        if (dist > 1 && dist < R) {
+          const speed = 130 + (POWERUP.magnetPull - 130) * (1 - dist / R);
+          const step = Math.min(dist, speed * dt);
+          tr.x += (dx / dist) * step; tr.baseY += (dy / dist) * step;
+        }
+      }
+    }
 
     // Zone transitions & puzzles.
     const d = this.diver;
@@ -356,6 +383,9 @@ export class Game {
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
     this.krakens = this.krakens.filter((k) => !k.dead);
     this.powerups = this.powerups.filter((p) => !p.taken);
+
+    // Extra life every 5000 points banked.
+    while (this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += 5000; this.oneUpT = 2.2; this.audio.bank(); }
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
@@ -573,6 +603,16 @@ export class Game {
 
     this.particles.draw(ctx, cx, cy);
     if (this.state !== 'menu') this.diver.draw(ctx, cx, cy);
+    // Shield bubble (blinks as it runs out).
+    if (this.shieldT > 0 && this.state !== 'menu') {
+      const a = this.shieldT < 1.5 && Math.floor(this.shieldT * 8) % 2 ? 0.15 : 0.42;
+      const sx = this.diver.x - cx, sy = this.diver.y - cy;
+      ctx.save();
+      ctx.strokeStyle = `rgba(143,230,255,${a})`; ctx.lineWidth = 3;
+      ctx.fillStyle = `rgba(143,230,255,${a * 0.22})`;
+      ctx.beginPath(); ctx.arc(sx, sy, this.diver.radius + 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
 
     // Vignette — subtle at the surface, closing in with depth.
     if (this.state !== 'menu') {
@@ -637,21 +677,30 @@ export class Game {
     const airLabel = this.airMax > AIR.max ? `${Math.round(this.air)}/${this.airMax}` : `${Math.round(this.air)}`;
     this._text(airLabel, bx + bw + 8, by + bh / 2, 13, this.airMax > AIR.max ? PAL.air : PAL.hudText, 'left', 'middle');
 
-    for (let i = 0; i < this.lives; i++) {
+    const shownLives = Math.min(this.lives, 6);
+    for (let i = 0; i < shownLives; i++) {
       ctx.save(); ctx.translate(bx + 8 + i * 22, by + bh + 22); ctx.scale(0.7, 0.7);
       ctx.fillStyle = PAL.diver; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PAL.diverGlass; ctx.beginPath(); ctx.arc(2, 0, 3.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
+    let harpIconX = bx + 8 + shownLives * 22;
+    if (this.lives > 6) { this._text(`+${this.lives - 6}`, harpIconX, by + bh + 22, 12, PAL.diver, 'left', 'middle', true); harpIconX += 24; }
     ctx.save();
-    ctx.translate(bx + 8 + this.lives * 22 + 14, by + bh + 22);
+    ctx.translate(harpIconX + 14, by + bh + 22);
     ctx.globalAlpha = this.fireCd > 0 ? 0.3 : 1;
     ctx.strokeStyle = PAL.harpoon; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(6, 0); ctx.stroke();
     ctx.fillStyle = PAL.harpoonTip;
     ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4); ctx.closePath(); ctx.fill();
     ctx.restore();
-    if (this.multiFireT > 0) this._text(`✸×3  ${Math.ceil(this.multiFireT)}s`, bx + 8 + this.lives * 22 + 34, by + bh + 22, 12, PAL.harpoonTip, 'left', 'middle', true);
+    // Active buff timers.
+    let buffX = harpIconX + 34;
+    const buff = (label, secs, col) => { this._text(`${label} ${Math.ceil(secs)}s`, buffX, by + bh + 22, 12, col, 'left', 'middle', true); buffX += this.ctx.measureText(`${label} ${Math.ceil(secs)}s`).width + 14; };
+    if (this.multiFireT > 0) buff('✸×3', this.multiFireT, PAL.harpoonTip);
+    if (this.shieldT > 0) buff('🛡', this.shieldT, PAL.gateGlow);
+    if (this.speedT > 0) buff('»»', this.speedT, PAL.air);
+    if (this.magnetT > 0) buff('🧲', this.magnetT, PAL.gold);
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
@@ -693,6 +742,14 @@ export class Game {
       if (!hinted && this.templeGate && Math.hypot(this.diver.x - this.templeGate.x, this.diver.y - this.templeGate.y) < 320) {
         this._text('🏛 An ancient gate — swim in to enter the sunken temple', W / 2, H - 30, 14, PAL.gateGlow, 'center', 'middle');
       }
+    }
+
+    // 1-UP flourish.
+    if (this.oneUpT > 0) {
+      const a = Math.min(1, this.oneUpT);
+      ctx.globalAlpha = a;
+      this._text('★ EXTRA LIFE ★', W / 2, 150 - (2.2 - this.oneUpT) * 20, 26, PAL.diver, 'center', 'middle', true);
+      ctx.globalAlpha = 1;
     }
 
     // Boss health bar when a kraken is on-screen.
