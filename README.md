@@ -1,96 +1,233 @@
 # 🤿 Deep Descent
 
-A modern browser homage to **Durell Software's _Scuba Dive_ (1983)**, rebuilt
-from the original ZX Spectrum `.z80` snapshot in this repo.
+**A modern, browser-based homage to Durell Software's *Scuba Dive* (1983).**
 
-Dive from your boat into a **2D scrolling cave world** — tunnels, vertical
-drop-offs and chambers — prise pearls from giant clams, plunder **sunken
-shipwrecks** for gems and treasure, and **harpoon** the deep's hunters (sharks
-come in all sizes). Refill at **bubble vents** on the cave walls, surface at the
-boat to bank your haul, and watch your air. Faithful 1983 gameplay, re-imagined
-with modern vector graphics, kelp/coral/anemone flora, particle effects,
-procedural audio, and keyboard + touch controls.
+Dive from your boat into a hand-carved network of underwater caves — thread the
+tunnels and drop-offs, prise pearls from giant clams, crack open sunken treasure
+chests, plunder shipwrecks for gold and gems, and harpoon the hunters of the
+deep. All the while your air ticks down, so keep an eye out for bubble vents…
+and know when to surface. Bank your haul, then sail on to a fresh reef.
 
-## Play
+Built with plain HTML5 Canvas and vanilla JavaScript — **no build step, no
+dependencies, no install.** It runs in any modern browser and works with
+keyboard or touch.
 
-No build step, no dependencies — it's plain ES modules. Serve the folder:
+> This project was reconstructed from the original ZX Spectrum `.z80` memory
+> snapshot of *Scuba Dive* (included in the repo as a historical artifact) and
+> re-imagined with modern graphics, physics, audio, and game feel. **All code
+> and artwork are new and original.**
+
+---
+
+## Table of contents
+
+- [About the original](#about-the-original)
+- [Getting started](#getting-started)
+- [How to play](#how-to-play)
+- [Features](#features)
+- [Under the hood](#under-the-hood)
+- [Project structure](#project-structure)
+- [Credits & acknowledgements](#credits--acknowledgements)
+- [License](#license)
+
+---
+
+## About the original
+
+*Scuba Dive* was released in **1983 by Durell Software Ltd**, a British game
+studio founded by **Robert White** and based in Taunton, Somerset. It became one
+of the era's beloved underwater arcade games on the **ZX Spectrum** (and other
+8-bit home computers): you played a diver descending through the ocean to collect
+pearls and treasure while dodging octopuses, sharks, jellyfish and snapping
+giant clams, managing a dwindling air supply the whole way down.
+
+**Deep Descent** keeps that gameplay loop intact and dresses it in a modern
+coat: smooth vector art, a scrolling 2D cave world, particle effects, procedural
+audio, and depth-driven atmosphere — a love letter to a classic, not a copy of
+its code. Enormous thanks to Durell Software and everyone who made the original;
+this exists because that game left a mark.
+
+---
+
+## Getting started
+
+Deep Descent is just static files and ES modules — but browsers won't load ES
+modules over `file://`, so you need to serve the folder over HTTP. Any tiny web
+server works.
+
+### 1. Get the code
 
 ```bash
-python3 -m http.server 8777
-# then open http://localhost:8777/
+git clone https://github.com/evelo2/Deep-Descent.git
+cd Deep-Descent
 ```
 
-(Opening `index.html` via `file://` won't work — ES modules need `http://`.)
+### 2. Serve it locally
 
-## Controls
+Pick whichever you have:
 
-| Action | Keys |
-|--------|------|
-| Swim   | Arrow keys / **WASD** / touch-drag (virtual joystick) |
-| Fire harpoon | **Space** / **F** / click / quick tap |
-| Start / restart | **Space** / click / tap (on menus) |
-| Pause  | **P** / **Esc** |
-| Mute   | **M** |
+```bash
+# Python 3 (bundled on macOS / most Linux)
+python3 -m http.server 8000
+
+# …or Node
+npx serve .
+
+# …or PHP
+php -S localhost:8000
+```
+
+### 3. Play
+
+Open **<http://localhost:8000/>** in your browser and press **Space** (or tap) to
+dive.
+
+> **Tip:** if you open `index.html` directly (a `file://` URL) the screen stays
+> blank — that's the ES-module rule above. Use a local server.
+
+*(Want it playable from a public URL with zero setup? GitHub Pages will host it
+as-is — see [Deploying](#deploying).)*
+
+---
 
 ## How to play
 
-- **Air** drains constantly and faster the deeper you go. Two ways to refill:
-  return to the **boat** at the surface (full refill + **banks** your carried
-  treasure into score), or swim into the rising stream of a **bubble vent** on a
-  cave wall (partial top-up — your lifeline for deep dives). Run out and you lose
-  a life.
-- **Caves:** below the open surface water lies a **2D cave network** — horizontal
-  tunnels, vertical drop-offs and open chambers, scrolling in both axes. A shaft
-  drops straight down from under the boat; explore sideways for the rest. Bumping
-  a wall is harmless (you slide along it); rock blocks your harpoon.
-- **Harpoon:** fire along your swim direction to spear hunters for points.
-  **Sharks come in sizes** (small darters → big hunters); bigger sharks are worth
-  more. Short cooldown; the HUD shows when it's ready.
-- **Clams & chests** sit on ledges and shipwrecks and share one animation:
-  **rattle** (a bubble forming) → **slow open** → **hold** → **snap shut**, their
-  lids/shells hinged at an edge. Grab the loot (pearl 400, chest 200–600) while
-  **open**; each opening **releases a big air bubble** to swim through for air.
-  Get caught when it snaps **shut** and it bites you: a life lost.
-- **Shipwrecks** rest in the deep chambers, decked with a big chest and gems.
-- **Treasure:** floating coins (60) and gems (500) drift through the water.
-- **The deep changes:** it gets darker as you descend, the creatures change with
-  depth — shallow jellyfish/pufferfish → mid-water octopus & sharks → the deep's
-  **eels and glowing anglerfish** — and **whale skeletons** rest on the floor.
-- **New reefs:** surface, bank your haul, then **hold ↑ into the boat** to board
-  and sail to a fresh reef (a whole new cave; score & lives carry over).
-- **Hazards** cost a life on contact: octopus (homes in), shark (fast cruiser),
-  jellyfish (bobbing), pufferfish (patrols). Deeper water = more, and richer.
-- Collect and bank everything, then surface, to win with an air + lives bonus.
+**Goal:** collect pearls, gems and treasure, and bring them back to the surface
+to **bank** them into your score — before your **air** runs out.
 
-## Why browser / JavaScript (not a Rust binary)?
+| Action | Keyboard | Touch |
+| --- | --- | --- |
+| Swim | Arrow keys / **WASD** | Drag anywhere (virtual joystick) |
+| Fire harpoon | **Space** / **F** | Quick tap |
+| Start / restart | **Space** | Tap |
+| Pause | **P** / **Esc** | — |
+| Mute | **M** | — |
 
-_Scuba Dive_ is a 2D sprite arcade game. HTML5 Canvas + Web Audio run it at
-60fps trivially, and the browser gives zero-install play, URL sharing, desktop
-**and** touch support, and instant iteration. A native binary would add build
-and distribution friction for no gameplay gain. See `docs/DESIGN.md`.
+### The loop
 
-## Structure
+1. **Dive.** A shaft drops straight down from beneath the boat; the rest of the
+   cave — tunnels, vertical drop-offs and open chambers — is yours to explore
+   sideways and down.
+2. **Loot.** Grab floating **coins** and **gems**, and time your approach to the
+   **clams and chests**: they rattle, swing open, hold, then **snap shut**. Take
+   the loot while they're open — get caught inside when they close and you lose a
+   life.
+3. **Breathe.** Air drains constantly (faster the deeper you go). Every time a
+   shell opens it puffs out a **big air bubble** — swim through it to top up.
+   **Bubble vents** on the cave walls stream air too. These are your lifeline for
+   staying down.
+4. **Hunt or flee.** **Harpoon** sharks, octopuses, eels and glowing anglerfish
+   for points — or dodge them. Contact costs a life.
+5. **Bank & sail on.** Return to the **boat** at the surface to refill air and
+   **bank** everything you're carrying into your score. Then **hold ↑ into the
+   boat** to set sail for a brand-new reef (a freshly generated cave; your score
+   and lives carry over).
+
+### Tips
+
+- The deeper you go, the **richer the loot** — and the **darker and more
+  dangerous** the water. Sharks come in all sizes; the deep hides eels and
+  anglerfish.
+- Don't get greedy at a clam or chest — watch the rhythm and leave before the
+  snap.
+- Bank often. Treasure you're *carrying* is lost if you drown far from the boat.
+
+---
+
+## Features
+
+- 🌊 **2D scrolling cave world** — procedurally carved tunnels, drop-offs and
+  chambers, different every dive.
+- 🐚 **Living shells** — clams, chests and air vents that rattle, open, hold and
+  snap, each releasing a collectible air bubble.
+- 🎯 **Harpoon gun** — spear the deep's hunters for points.
+- 🚢 **Shipwrecks & 💎 treasure** — coins, gems, chests and sunken galleons.
+- 🐟 **Depth-driven ecosystem** — jellyfish and pufferfish in the shallows,
+  octopus and sharks in mid-water, eels and bioluminescent anglerfish in the
+  dark — with **whale skeletons** on the deepest floors.
+- 🫧 **Air management** — vents and bubbles let you push deeper without surfacing.
+- ⛵ **Endless reefs** — sail the boat to a new cave whenever you like.
+- 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
+  parallax particulate, screen shake and a darkening, vignetting deep.
+- 🔊 **Procedural Web Audio** — ambient bed and SFX, no audio files, mute toggle.
+- 📱 **Responsive & cross-platform** — one codebase for desktop and touch, crisp
+  on any DPI, high-score saved locally.
+
+---
+
+## Under the hood
+
+- **Vanilla ES modules + HTML5 Canvas.** No framework, no bundler, no
+  `node_modules`. Open the source and read it top to bottom.
+- **Procedural everything.** Graphics are drawn as vector shapes (sharp at any
+  resolution), audio is synthesized with the Web Audio API, and caves are
+  generated by "miner" agents then rendered from a smooth distance field.
+- **Fixed logical playfield** (900×600) scaled to fit any viewport, with a 2D
+  camera that follows the diver through a much larger world.
+
+No dependencies means it will still run in ten years. It's also a compact,
+readable example of a complete little game if you're learning Canvas.
+
+---
+
+## Project structure
 
 ```
-index.html            entry page
+index.html                     entry page (canvas + module bootstrap)
 src/
-  main.js             canvas/DPI setup + RAF loop
-  config.js           tuning constants + palette
-  input.js            keyboard + touch → intent vector, tap-to-fire
-  audio.js            procedural Web Audio SFX + ambient
-  game.js             state machine, world gen, collisions, HUD
-  entities/           diver, boat, clam, treasure, creatures,
-                      harpoon, airvent, wreck
+  main.js                      canvas/DPI setup + requestAnimationFrame loop
+  config.js                    tuning constants, palette, shared curves
+  input.js                     keyboard + touch → intent vector, tap-to-fire
+  audio.js                     procedural Web Audio ambient + SFX
+  game.js                      state machine, world gen, collisions, HUD, camera
+  entities/                    diver, boat, shells (clam/chest), bigbubble,
+                               treasure, creatures, harpoon, airvent, wreck
   systems/
-    particles.js      bubbles + sparkles
-    cave.js           2D cave gen (miners) + distance-field collision + render
-  render/             background (ocean/god-rays), sprites,
-                      props (shipwreck + gem), flora (kelp/coral/anemone)
-docs/DESIGN.md        design + platform decision
-Scuba_Dive_1983_Durell_Software.z80   original snapshot (source of truth)
+    cave.js                    2D cave generation + distance-field collision/render
+    particles.js               bubbles + sparkles
+  render/
+    background.js              ocean, god-rays, caustics, parallax
+    sprites.js                 diver, clam & creature vector art
+    props.js                   shipwreck, chest, gem, whale skeleton
+    flora.js                   kelp, coral, anemones, polyps
+docs/DESIGN.md                 design notes + the platform decision
+Scuba_Dive_1983_Durell_Software.z80   the original snapshot (historical source)
 ```
 
-## Credits
+## Deploying
 
-Homage to the original _Scuba Dive_ by **Durell Software (1983)**. This is a
-non-commercial tribute; all new code and artwork.
+Because it's fully static, **GitHub Pages** hosts it with no build:
+
+1. Push to GitHub (already done if you're reading this there).
+2. Repo **Settings → Pages → Build and deployment → Source: Deploy from a
+   branch**, pick `main` and `/ (root)`, save.
+3. Your game goes live at `https://evelo2.github.io/Deep-Descent/` in a minute
+   or two.
+
+Any static host (Netlify, Vercel, Cloudflare Pages, itch.io) works the same way —
+just point it at the repo root.
+
+---
+
+## Credits & acknowledgements
+
+- **Original game:** *Scuba Dive* © 1983 **Durell Software Ltd** — the
+  inspiration for everything here. Deep gratitude to Durell and its team for a
+  classic that's still fun to think about four decades on.
+- **This homage:** all new code and artwork, built as a personal, non-commercial
+  tribute.
+
+*If you worked on the original Scuba Dive and would like a correction or fuller
+credit here, please open an issue — I'd be glad to get it right.*
+
+---
+
+## License
+
+This is a fan-made, **non-commercial tribute**, not affiliated with or endorsed
+by Durell Software. All original code and art in this repository are the
+author's own. *Scuba Dive* and any related marks belong to their respective
+owners. The included `.z80` snapshot is provided as a historical reference only.
+
+_(No `LICENSE` file is included yet — if you'd like to formally open-source your
+own code here, MIT is a common, permissive choice.)_
