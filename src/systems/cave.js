@@ -137,6 +137,10 @@ export class Cave {
   // ---- spawn helpers ---------------------------------------------------
   cellCentre(gx, gy) { return { x: gx * CELL + CELL / 2, y: gy * CELL + CELL / 2 }; }
 
+  // March from (x,y) until hitting the visible rock surface.
+  surfaceBelow(x, y, maxD = 400) { let s = y; const lim = y + maxD; while (s < lim && !this.isSolid(x, s)) s += 3; return s; }
+  surfaceSide(x, y, dir, maxD = 400) { let s = x; const lim = x + dir * maxD; while (dir * (lim - s) > 0 && !this.isSolid(s, y)) s += dir * 3; return s; }
+
   // A random open cell centre below the given world y.
   randomOpen(minY = OPEN_BAND + CELL, tries = 40) {
     for (let i = 0; i < tries; i++) {
@@ -162,13 +166,15 @@ export class Cave {
   }
 
   // Open cells sitting directly above solid rock — floors for standing plants.
+  // The anchor is the *visible* rock surface (found by marching down through the
+  // carved-out cave), so plants sit on the floor rather than float above it.
   floors(minY = OPEN_BAND + CELL) {
     const out = [];
     for (let gy = 1; gy < this.GH - 1; gy++) for (let gx = 0; gx < this.GW; gx++) {
-      if (this.open[this._idx(gx, gy)] && !this.open[this._idx(gx, gy + 1)]) {
-        const c = this.cellCentre(gx, gy);
-        if (c.y > minY) out.push({ x: c.x, y: c.y + CELL * 0.45 });
-      }
+      if (!this.open[this._idx(gx, gy)] || this.open[this._idx(gx, gy + 1)]) continue;
+      const c = this.cellCentre(gx, gy);
+      if (c.y <= minY) continue;
+      out.push({ x: c.x, y: this.surfaceBelow(c.x, c.y, CELL * 1.5) - 3 });
     }
     return out;
   }
@@ -180,48 +186,58 @@ export class Cave {
       if (!this.open[this._idx(gx, gy)]) continue;
       const c = this.cellCentre(gx, gy);
       if (c.y <= minY) continue;
-      if (!this.open[this._idx(gx - 1, gy)]) out.push({ x: c.x - CELL * 0.4, y: c.y, side: 1 });
-      else if (!this.open[this._idx(gx + 1, gy)]) out.push({ x: c.x + CELL * 0.4, y: c.y, side: -1 });
+      // Mount on the *visible* wall surface so the vent sits flush against rock.
+      if (!this.open[this._idx(gx - 1, gy)]) out.push({ x: this.surfaceSide(c.x, c.y, -1, CELL) + 4, y: c.y, side: 1 });
+      else if (!this.open[this._idx(gx + 1, gy)]) out.push({ x: this.surfaceSide(c.x, c.y, 1, CELL) - 4, y: c.y, side: -1 });
     }
     return out;
   }
 
   // ---- rendering -------------------------------------------------------
+  // Solid rock with a crisp, rim-lit edge. Built by: dark rock fill → a lit
+  // "rim" disc at every open cell → a HARD carve slightly smaller than the rim,
+  // leaving a bright band exactly along each cave outline (no soft shadow).
   draw(ctx, camX, camY) {
-    const { W, H } = WORLD, octx = this.octx, R = this.CARVE * 1.18;
+    const { W, H } = WORLD, octx = this.octx, CARVE = this.CARVE, RIM = 5;
     octx.clearRect(0, 0, W, H);
-    // Rock fill, subtly darker with depth.
     const depthT = Math.min(1, camY / WH);
+
+    // Dark rock body, darker with depth.
     const g = octx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, mix(PAL.rock, PAL.rockDark, depthT * 0.6));
+    g.addColorStop(0, mix(PAL.rock, PAL.rockDark, depthT * 0.55));
     g.addColorStop(1, PAL.rockDark);
     octx.fillStyle = g; octx.fillRect(0, 0, W, H);
 
-    // Carve the caves out with soft brushes at open-cell centres in view.
-    octx.globalCompositeOperation = 'destination-out';
     const gx0 = Math.max(0, (camX / CELL | 0) - 1), gx1 = Math.min(this.GW - 1, ((camX + W) / CELL | 0) + 1);
     const gy0 = Math.max(0, (camY / CELL | 0) - 1), gy1 = Math.min(this.GH - 1, ((camY + H) / CELL | 0) + 1);
+    const each = (fn) => {
+      for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+        if (!this.open[this._idx(gx, gy)]) continue;
+        fn(gx * CELL + CELL / 2 - camX, gy * CELL + CELL / 2 - camY);
+      }
+    };
+
+    // Rock texture: subtle mottling, stable in world space (no shimmer).
+    octx.globalCompositeOperation = 'source-atop';
     for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
-      if (!this.open[this._idx(gx, gy)]) continue;
-      const sx = gx * CELL + CELL / 2 - camX, sy = gy * CELL + CELL / 2 - camY;
-      const br = octx.createRadialGradient(sx, sy, R * 0.4, sx, sy, R);
-      br.addColorStop(0, 'rgba(0,0,0,1)');
-      br.addColorStop(1, 'rgba(0,0,0,0)');
-      octx.fillStyle = br;
-      octx.beginPath(); octx.arc(sx, sy, R, 0, Math.PI * 2); octx.fill();
+      const h = (gx * 73856 ^ gy * 19349) >>> 0;
+      if (h % 3) continue;
+      const sx = gx * CELL + ((h >> 4) % CELL) - camX, sy = gy * CELL + ((h >> 9) % CELL) - camY;
+      octx.fillStyle = (h & 1) ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.12)';
+      octx.beginPath(); octx.arc(sx, sy, 10 + (h % 14), 0, Math.PI * 2); octx.fill();
     }
-    // The open sea band is always water — clear any rock above it.
-    octx.fillStyle = 'rgba(0,0,0,1)';
-    const bandScreenY = OPEN_BAND - camY;
-    if (bandScreenY > 0) octx.fillRect(0, 0, W, Math.min(H, bandScreenY));
     octx.globalCompositeOperation = 'source-over';
 
-    // Rim light along cave edges for definition.
-    octx.globalCompositeOperation = 'source-atop';
-    const rim = octx.createLinearGradient(0, 0, 0, H);
-    rim.addColorStop(0, 'rgba(120,170,210,0.05)');
-    rim.addColorStop(1, 'rgba(0,0,0,0)');
-    octx.fillStyle = rim; octx.fillRect(0, 0, W, H);
+    // Lit rim discs (become a bright band once the caves are carved).
+    octx.fillStyle = PAL.rockLight;
+    each((sx, sy) => { octx.beginPath(); octx.arc(sx, sy, CARVE + RIM, 0, Math.PI * 2); octx.fill(); });
+
+    // HARD carve — crisp cave with only a ~1px anti-alias edge.
+    octx.globalCompositeOperation = 'destination-out';
+    each((sx, sy) => { octx.beginPath(); octx.arc(sx, sy, CARVE, 0, Math.PI * 2); octx.fill(); });
+    // The open sea band is always water — clear any rock above it.
+    const bandScreenY = OPEN_BAND - camY;
+    if (bandScreenY > 0) { octx.fillStyle = '#000'; octx.fillRect(0, 0, W, Math.min(H, bandScreenY)); }
     octx.globalCompositeOperation = 'source-over';
 
     ctx.drawImage(this.oc, 0, 0, W, H);

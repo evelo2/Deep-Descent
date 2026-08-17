@@ -48,19 +48,20 @@ export class Game {
     this.vents = []; this.wrecks = []; this.harpoons = [];
     const kindFor = (y) => { const deep = y / WH, r = Math.random(); return r < 0.1 + deep * 0.18 ? 'gem' : r < 0.42 + deep * 0.3 ? 'chest' : 'coin'; };
 
-    // Pearl clams and scattered treasure in open cells.
-    for (let i = 0; i < 26; i++) { const c = C.randomOpen(); if (c) this.clams.push(new Clam(c.x, c.y)); }
+    // Giant clams rest on cave floors (like the original's ledges).
+    for (const f of spread(C.floors(), 26, 130)) this.clams.push(new Clam(f.x, f.y - 12));
+    // Scattered treasure drifts in open water.
     for (let i = 0; i < 42; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, kindFor(c.y))); }
 
     // Air vents on cave walls, spread out.
     for (const w of spread(C.walls(), 14, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
 
-    // Shipwrecks in the roomiest chambers, ringed with rich loot.
+    // Shipwrecks seated on the floor of the roomiest chambers, ringed with loot.
     for (const ch of spread(C.chambers(), 4, 700)) {
-      this.wrecks.push(new Wreck(ch.x, ch.y + 30));
+      const floorY = C.surfaceBelow(ch.x, ch.y, 300);
+      this.wrecks.push(new Wreck(ch.x, floorY - 42));
       for (let k = 0; k < 4; k++) {
-        const near = C.randomOpen(OPEN_BAND);
-        const tx = ch.x + (Math.random() - 0.5) * 200, ty = ch.y + (Math.random() - 0.5) * 90;
+        const tx = ch.x + (Math.random() - 0.5) * 200, ty = floorY - 20 - Math.random() * 60;
         if (!C.isSolid(tx, ty)) this.treasures.push(new Treasure(tx, ty, Math.random() < 0.5 ? 'gem' : 'chest'));
       }
     }
