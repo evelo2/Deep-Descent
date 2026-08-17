@@ -71,4 +71,8 @@ export class Audio {
   refill()  { this._tone({ type: 'sine', f0: 300, f1: 520, t: 0.12, gain: 0.12 }); }
   gasp()    { this._tone({ type: 'sine', f0: 180, f1: 90, t: 0.5, gain: 0.3 }); }
   select()  { this._tone({ type: 'square', f0: 520, f1: 720, t: 0.08, gain: 0.15 }); }
+  fire()    { this._tone({ type: 'square', f0: 900, f1: 240, t: 0.14, gain: 0.22 }); }
+  kill()    { this._tone({ type: 'sawtooth', f0: 500, f1: 120, t: 0.2, gain: 0.28 });
+              this._tone({ type: 'triangle', f0: 700, f1: 300, t: 0.16, gain: 0.16 }); }
+  gem()     { [784,1046,1318,1568].forEach((f,i)=>setTimeout(()=>this._tone({type:'sine',f0:f,f1:f*1.2,t:0.18,gain:0.28}), i*55)); }
 }

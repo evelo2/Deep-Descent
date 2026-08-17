@@ -18,10 +18,12 @@ export class Input {
     addEventListener('blur', () => this.keys.clear());
 
     // Virtual joystick: touch anywhere, drag from the initial touch point.
-    const origin = { x: 0, y: 0 };
+    // A quick tap (little drag) fires the harpoon instead of steering.
+    this._tapFire = false;
+    const origin = { x: 0, y: 0, ts: 0, maxDrag: 0 };
     const onStart = (e) => {
       const t = e.changedTouches[0];
-      origin.x = t.clientX; origin.y = t.clientY;
+      origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
       this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
       e.preventDefault();
     };
@@ -29,12 +31,16 @@ export class Input {
       if (!this.touch.active) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
+      origin.maxDrag = Math.max(origin.maxDrag, Math.hypot(dx, dy));
       const R = 60;
       this.touch.x = Math.max(-1, Math.min(1, dx / R));
       this.touch.y = Math.max(-1, Math.min(1, dy / R));
       e.preventDefault();
     };
-    const onEnd = (e) => { this.touch.active = false; this.touch.x = 0; this.touch.y = 0; e.preventDefault(); };
+    const onEnd = (e) => {
+      if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260) this._tapFire = true;
+      this.touch.active = false; this.touch.x = 0; this.touch.y = 0; e.preventDefault();
+    };
     canvas.addEventListener('touchstart', onStart, { passive: false });
     canvas.addEventListener('touchmove', onMove, { passive: false });
     canvas.addEventListener('touchend', onEnd, { passive: false });
@@ -66,6 +72,9 @@ export class Input {
     if (m > 1) { x /= m; y /= m; }
     return { x, y };
   }
+
+  // True once per quick screen tap (touch fire).
+  consumeTapFire() { const f = this._tapFire; this._tapFire = false; return f; }
 
   // Clear the edge buffer at end of frame for any keys not consumed.
   endFrame() { this._pressed.clear(); }

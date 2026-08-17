@@ -3,10 +3,11 @@
 A modern browser homage to **Durell Software's _Scuba Dive_ (1983)**, rebuilt
 from the original ZX Spectrum `.z80` snapshot in this repo.
 
-Dive from your boat, prise pearls from giant clams, scoop up treasure, and
-surface to bank your haul — all while your air runs down and the deep's
-hunters circle. Faithful 1983 gameplay, re-imagined with modern vector
-graphics, particle effects, procedural audio, and responsive touch controls.
+Dive from your boat through winding **caves**, prise pearls from giant clams,
+plunder **sunken shipwrecks** for gems and treasure, and **harpoon** the deep's
+hunters — all while your air runs down. Refill at **bubble vents** on the cave
+walls, and surface to bank your haul. Faithful 1983 gameplay, re-imagined with
+modern vector graphics, particle effects, procedural audio, and touch controls.
 
 ## Play
 
@@ -24,18 +25,28 @@ python3 -m http.server 8777
 | Action | Keys |
 |--------|------|
 | Swim   | Arrow keys / **WASD** / touch-drag (virtual joystick) |
-| Dive / start / restart | **Space** / click / tap |
+| Fire harpoon | **Space** / **F** / click / quick tap |
+| Start / restart | **Space** / click / tap (on menus) |
 | Pause  | **P** / **Esc** |
 | Mute   | **M** |
 
 ## How to play
 
-- **Air** drains constantly and faster the deeper you go. Return to the **boat**
-  at the surface to refill it — and to **bank** the treasure you're carrying
-  into your score. Run out of air and you lose a life.
-- **Giant clams** hold pearls (400 pts). Grab the pearl while the shell is
-  **open**; linger inside when it snaps **shut** and it bites you.
-- **Treasure** — coins (60) and chests (250) — is scattered through the depths.
+- **Air** drains constantly and faster the deeper you go. Two ways to refill:
+  return to the **boat** at the surface (full refill + **banks** your carried
+  treasure into score), or swim into the rising stream of a **bubble vent** on a
+  cave wall (partial top-up — your lifeline for deep dives). Run out and you lose
+  a life.
+- **Caves:** below the open surface water, rock walls form a winding corridor of
+  wide chambers and narrow passages. Bumping a wall is harmless; rock pillars
+  block you (and your harpoon).
+- **Harpoon:** fire along your swim direction to spear hunters for points —
+  shark 300, octopus 200, pufferfish 150, jellyfish 100. Short cooldown; the
+  HUD shows when it's ready.
+- **Giant clams** hold pearls (400). Grab the pearl while the shell is **open**;
+  linger inside when it snaps **shut** and it bites you.
+- **Shipwrecks** rest in the deep chambers, ringed with the richest loot.
+- **Treasure:** coins (60), chests (250), gems (500) — richer the deeper you go.
 - **Hazards** cost a life on contact: octopus (homes in), shark (fast cruiser),
   jellyfish (bobbing), pufferfish (patrols). Deeper water = more, and richer.
 - Collect and bank everything, then surface, to win with an air + lives bonus.
@@ -54,12 +65,16 @@ index.html            entry page
 src/
   main.js             canvas/DPI setup + RAF loop
   config.js           tuning constants + palette
-  input.js            keyboard + touch → intent vector
+  input.js            keyboard + touch → intent vector, tap-to-fire
   audio.js            procedural Web Audio SFX + ambient
   game.js             state machine, world gen, collisions, HUD
-  entities/           diver, boat, clam, treasure, creatures
-  systems/particles.js  bubbles + sparkles
-  render/             background (ocean/god-rays/seabed), sprites
+  entities/           diver, boat, clam, treasure, creatures,
+                      harpoon, airvent, wreck
+  systems/
+    particles.js      bubbles + sparkles
+    terrain.js        cave corridor + rock walls/pillars + collision
+  render/             background (ocean/god-rays/seabed), sprites,
+                      props (shipwreck + gem)
 docs/DESIGN.md        design + platform decision
 Scuba_Dive_1983_Durell_Software.z80   original snapshot (source of truth)
 ```
