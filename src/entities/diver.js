@@ -14,6 +14,7 @@ export class Diver {
     this.kick = 0;        // fin animation phase
     this.hurtT = 0;       // red-flash timer
     this.invuln = 0;      // mercy invulnerability timer
+    this.aimX = 1; this.aimY = 0; // harpoon aim (last travel dir, else facing)
   }
 
   get radius() { return DIVER.radius; }
@@ -45,6 +46,10 @@ export class Diver {
     // Facing + animation.
     if (Math.abs(this.vx) > 8) this.facing = this.vx > 0 ? 1 : -1;
     this.kick += (sp * 0.03 + 3) * dt;
+
+    // Aim follows the direction of travel; falls back to facing when drifting.
+    if (sp > 24) { this.aimX = this.vx / sp; this.aimY = this.vy / sp; }
+    else { this.aimX = this.facing; this.aimY = 0; }
 
     // Trailing bubbles.
     this._bubT = (this._bubT || 0) + dt;

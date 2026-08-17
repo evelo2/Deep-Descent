@@ -1,12 +1,16 @@
-// Collectable treasure — coins and chests. Bob gently in place until grabbed.
+// Collectable treasure — coins, chests, and gems. Bob gently until grabbed.
 import { drawTreasure } from '../render/sprites.js';
+import { drawGem } from '../render/props.js';
+
+const VALUE = { coin: 60, chest: 250, gem: 500 };
+const RADIUS = { coin: 10, chest: 18, gem: 12 };
 
 export class Treasure {
   constructor(x, y, kind) {
     this.x = x; this.y = y;
-    this.kind = kind;                       // 'coin' | 'chest'
-    this.value = kind === 'chest' ? 250 : 60;
-    this.radius = kind === 'chest' ? 18 : 10;
+    this.kind = kind;                       // 'coin' | 'chest' | 'gem'
+    this.value = VALUE[kind] ?? 60;
+    this.radius = RADIUS[kind] ?? 10;
     this.phase = Math.random() * Math.PI * 2;
     this.baseY = y;
     this.taken = false;
@@ -21,7 +25,8 @@ export class Treasure {
   draw(ctx, camY, t) {
     ctx.save();
     ctx.translate(this.x, this.y - camY);
-    drawTreasure(ctx, this.kind, t + this.phase);
+    if (this.kind === 'gem') drawGem(ctx, t + this.phase);
+    else drawTreasure(ctx, this.kind, t + this.phase);
     ctx.restore();
   }
 }

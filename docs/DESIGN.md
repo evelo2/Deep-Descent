@@ -29,6 +29,25 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v2 expansion — caves, harpoon, wrecks, air vents
+
+- **Caves** (`systems/terrain.js`): below the open surface zone the world becomes
+  a winding vertical corridor defined by control points (centre + half-width),
+  smoothly interpolated, with wide chambers and narrow passages plus craggy rock
+  pillars. `constrain()` keeps entities inside (soft, damage-free wall bumps);
+  `isSolid()` backs harpoon/rock tests. Rock is drawn *after* creatures so a
+  hunter wandering into a wall is naturally occluded.
+- **Harpoon** (`entities/harpoon.js`): fired along the diver's aim (last swim
+  direction). Spears creatures for points, sticks into rock, short cooldown.
+  Space/F/click, or a quick screen tap on touch (drag = steer, tap = fire).
+- **Air vents** (`entities/airvent.js`): "bubble clams" on cave walls that pulse
+  open and emit a rising bubble stream; swimming through it refills air. This is
+  how deep cave dives stay survivable without surfacing — the boat still gives a
+  full refill and is the only place to *bank* treasure.
+- **Shipwrecks** (`entities/wreck.js` + `render/props.js`): evocative galleons
+  seated in chambers, ringed with the richest loot (gems + chests).
+- **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
+
 ## Architecture (src/)
 - `config.js` — tuning constants + palette.
 - `main.js` — canvas/DPI setup, RAF loop, wiring.
