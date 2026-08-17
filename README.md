@@ -2,6 +2,10 @@
 
 **A modern, browser-based homage to Durell Software's *Scuba Dive* (1983).**
 
+### ▶ [Play it in your browser](https://evelo2.github.io/Deep-Descent/) — no install
+
+![Deep Descent title screen](docs/screenshots/title.jpg)
+
 Dive from your boat into a hand-carved network of underwater caves — thread the
 tunnels and drop-offs, prise pearls from giant clams, crack open sunken treasure
 chests, plunder shipwrecks for gold and gems, and harpoon the hunters of the
@@ -21,6 +25,7 @@ keyboard or touch.
 
 ## Table of contents
 
+- [Screenshots](#screenshots)
 - [About the original](#about-the-original)
 - [Getting started](#getting-started)
 - [How to play](#how-to-play)
@@ -29,6 +34,20 @@ keyboard or touch.
 - [Project structure](#project-structure)
 - [Credits & acknowledgements](#credits--acknowledgements)
 - [License](#license)
+
+---
+
+## Screenshots
+
+**The deep** — it darkens as you descend, and the creatures change: eels and a
+glowing anglerfish prowl the dark, with whale skeletons on the floor.
+
+![The deep — anglerfish, eel and a whale skeleton](docs/screenshots/the-deep.jpg)
+
+**Shipwrecks & treasure** — chests hinge open on ledges and wreck decks, spill
+gold, and puff out air bubbles… then snap shut.
+
+![A sunken wreck ringed with treasure chests and gems](docs/screenshots/wreck-chest.jpg)
 
 ---
 
