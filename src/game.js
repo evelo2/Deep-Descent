@@ -1,9 +1,10 @@
 // Game orchestration: state machine, 2D world generation, 2D camera, collisions,
 // air/score/lives economy, and the HUD. Rendered onto a fixed logical canvas.
-import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, PAL } from './config.js';
+import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL } from './config.js';
 import { Diver } from './entities/diver.js';
 import { Boat } from './entities/boat.js';
-import { Clam } from './entities/clam.js';
+import { Clam, Chest } from './entities/shell.js';
+import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
 import { Shark, Octopus, Jelly, Puffer } from './entities/creatures.js';
 import { Cave } from './systems/cave.js';
@@ -27,6 +28,7 @@ export class Game {
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
     this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
+    this.shells = []; this.bigBubbles = [];
     this.diver.reset();
   }
 
@@ -44,25 +46,32 @@ export class Game {
 
   _generateWorld() {
     const C = this.cave = new Cave();
-    this.clams = []; this.treasures = []; this.creatures = [];
-    this.vents = []; this.wrecks = []; this.harpoons = [];
-    const kindFor = (y) => { const deep = y / WH, r = Math.random(); return r < 0.1 + deep * 0.18 ? 'gem' : r < 0.42 + deep * 0.3 ? 'chest' : 'coin'; };
+    this.shells = []; this.treasures = []; this.creatures = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
+    const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
-    // Giant clams rest on cave floors (like the original's ledges).
-    for (const f of spread(C.floors(), 26, 130)) this.clams.push(new Clam(f.x, f.y - 12));
-    // Scattered treasure drifts in open water.
-    for (let i = 0; i < 42; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, kindFor(c.y))); }
+    // Clams and chests rest on cave-floor ledges, opening and closing.
+    for (const f of spread(C.floors(), 34, 150)) {
+      if (Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
+      else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
+    }
+    // Scattered coins & gems drift in open water.
+    for (let i = 0; i < 40; i++) {
+      const c = C.randomOpen(); if (!c) continue;
+      this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WH) * 0.18 ? 'gem' : 'coin'));
+    }
 
     // Air vents on cave walls, spread out.
     for (const w of spread(C.walls(), 14, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
 
-    // Shipwrecks seated on the floor of the roomiest chambers, ringed with loot.
+    // Shipwrecks seated on chamber floors, with a big chest on the deck + gems.
     for (const ch of spread(C.chambers(), 4, 700)) {
       const floorY = C.surfaceBelow(ch.x, ch.y, 300);
       this.wrecks.push(new Wreck(ch.x, floorY - 42));
-      for (let k = 0; k < 4; k++) {
-        const tx = ch.x + (Math.random() - 0.5) * 200, ty = floorY - 20 - Math.random() * 60;
-        if (!C.isSolid(tx, ty)) this.treasures.push(new Treasure(tx, ty, Math.random() < 0.5 ? 'gem' : 'chest'));
+      this.shells.push(new Chest(ch.x, floorY - 66, chestValue(ch.y) + 200));
+      for (let k = 0; k < 3; k++) {
+        const tx = ch.x + (Math.random() - 0.5) * 200, ty = floorY - 24 - Math.random() * 60;
+        if (!C.isSolid(tx, ty)) this.treasures.push(new Treasure(tx, ty, 'gem'));
       }
     }
 
@@ -137,7 +146,9 @@ export class Game {
     }
 
     // Entities.
-    for (const c of this.clams) c.update(dt, this.t);
+    const emitBig = (x, y) => this.bigBubbles.push(new BigBubble(x, y));
+    for (const s of this.shells) s.update(dt, this.t, emitBig);
+    for (const b of this.bigBubbles) b.update(dt, this.cave);
     for (const tr of this.treasures) tr.update(dt, this.t);
     for (const cr of this.creatures) {
       cr.update(dt, this.t, this.diver);
@@ -147,12 +158,12 @@ export class Game {
 
     this._collisions();
 
-    this.clams = this.clams.filter((c) => !c.gone);
     this.treasures = this.treasures.filter((tr) => !tr.taken);
     this.creatures = this.creatures.filter((cr) => !cr.dead);
     this.harpoons = this.harpoons.filter((h) => !h.dead);
+    this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
 
-    if (this.clams.every((c) => !c.hasPearl) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
+    if (this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
     this.input.endFrame();
   }
@@ -166,13 +177,23 @@ export class Game {
         tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
       }
     }
-    for (const c of this.clams) {
-      if (c.canTakePearl(d)) {
-        c.takePearl(); this.carried += 400;
-        this.particles.sparkle(c.x, c.y, PAL.pearl, 22);
+    // Shells (clams & chests): grab loot while open, get bitten when they shut.
+    for (const s of this.shells) {
+      if (s.canTakeLoot(d)) {
+        this.carried += s.takeLoot();
+        this.particles.sparkle(s.x, s.y, s.lootColor, 24);
         this.audio.pearl();
-      } else if (c.hasPearl && c.bites(d) && d.invuln <= 0) {
+      } else if (s.bites(d) && d.invuln <= 0) {
         this._hit();
+      }
+    }
+    // Big air bubbles from opening shells — collect to refill air.
+    for (const b of this.bigBubbles) {
+      if (!b.dead && b.collected(d)) {
+        b.dead = true;
+        this.air = Math.min(AIR.max, this.air + BUBBLE.air);
+        this.particles.sparkle(b.x, b.y, PAL.air, 12);
+        this.audio.refill();
       }
     }
     for (const h of this.harpoons) {
@@ -234,10 +255,11 @@ export class Game {
       if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
       for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
       for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
-      for (const c of this.clams) c.draw(ctx, cx, cy, this.t);
+      for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
       for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
+      for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
     }
 

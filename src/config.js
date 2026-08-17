@@ -55,6 +55,19 @@ export const CAVE = {
 // Sharks come in sizes — small darters to big hunters.
 export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 
+// Ledge-mounted open/close containers (clams & chests). They pulse open and
+// shut, release a big air bubble on opening, hold loot (grab while open), and
+// bite — costing a life — if they close on the diver.
+export const SHELL = {
+  clamRadius: 40, clamCycle: 3.6,   // seconds per open/close cycle
+  chestRadius: 36, chestCycle: 4.4,
+  openGrab: 0.55,    // openness above which loot can be grabbed
+  biteShut: 0.30,    // openness below which a closing shell bites
+};
+
+// Big collectible air bubbles released when a shell opens.
+export const BUBBLE = { air: 22, rise: 44, r: 18, life: 7 };
+
 // Harpoon gun.
 export const HARPOON = {
   speed: 640,

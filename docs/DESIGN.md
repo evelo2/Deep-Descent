@@ -48,6 +48,19 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
+## v4 expansion — animated shells (clams & chests) + collectible air bubbles
+
+- **Shell base** (`entities/shell.js`): ledge-mounted open/close containers.
+  `open` is a saturating sine (clear shut + open dwells). On each opening it
+  emits a **big air bubble**; loot is grabbable while open; it **bites** (life
+  lost) when it shuts on the diver — even after being emptied. `Clam` (pearl,
+  larger) and `Chest` (depth-scaled treasure, larger) extend it, seated on cave
+  floors and wreck decks via the surface-finding helpers.
+- **BigBubble** (`entities/bigbubble.js`): rises, wobbles, pops on ceiling/timeout;
+  collecting one refills a chunk of air — a second air source alongside vents.
+- Chests replaced the old floating "chest" treasure; floating loot is now just
+  coins and gems.
+
 ## v3 expansion — 2D scrolling caves, flora, sized sharks
 
 The original *Scuba Dive* scrolled in 2D through a cave system, so the world grew
