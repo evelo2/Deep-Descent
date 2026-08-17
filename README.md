@@ -30,6 +30,7 @@ keyboard or touch.
 - [Getting started](#getting-started)
 - [How to play](#how-to-play)
 - [Features](#features)
+- [Roadmap](#roadmap)
 - [Under the hood](#under-the-hood)
 - [Project structure](#project-structure)
 - [Credits & acknowledgements](#credits--acknowledgements)
@@ -220,6 +221,12 @@ to **bank** them into your score — before your **air** runs out.
   on any DPI, high-score saved locally.
 
 ---
+
+## Roadmap
+
+Ideas and possible future features (shields, speed fins, treasure magnet, extra
+lives, enterable wrecks, a balance pass, and more) are parked in
+**[docs/ROADMAP.md](docs/ROADMAP.md)** — suggestions welcome.
 
 ## Under the hood
 
