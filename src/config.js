@@ -55,6 +55,9 @@ export const CAVE = {
 // Sharks come in sizes — small darters to big hunters.
 export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 
+// The kraken boss — guards a hoard in a deep chamber.
+export const KRAKEN = { hp: 8, radius: 54, arms: 7, hitPoints: 120, killBonus: 2500, range: 320 };
+
 // The living whale — a benign giant you can swim into to enter its belly.
 export const WHALE = {
   scale: 1.0,        // overall size multiplier (whale is authored ~360px long)
@@ -142,6 +145,9 @@ export const PAL = {
   gemCore:     '#eafcff',
   ventClam:    '#7fd9c4',
   ventClamDk:  '#3f9a86',
+  kraken:      '#7a3b6b',
+  krakenDark:  '#45203f',
+  krakenEye:   '#ffd34d',
   whale:       '#4a6d86',
   whaleDark:   '#2f4a5e',
   whaleBelly:  '#9fb8c8',

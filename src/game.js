@@ -13,7 +13,9 @@ import { Harpoon } from './entities/harpoon.js';
 import { AirVent } from './entities/airvent.js';
 import { Wreck } from './entities/wreck.js';
 import { Whale } from './entities/whale.js';
+import { Kraken } from './entities/kraken.js';
 import { Current } from './entities/current.js';
+import { KRAKEN } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -31,7 +33,7 @@ export class Game {
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
     this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
-    this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = [];
+    this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.diver.reset();
@@ -54,7 +56,7 @@ export class Game {
     const C = this.cave = new Cave('reef');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
-    this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = [];
+    this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -115,6 +117,17 @@ export class Game {
 
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
     this._makeCurrents(5);
+
+    // A kraken lurks in the deepest big chamber, guarding a rich hoard.
+    const deepChambers = C.chambers(WH * 0.55);
+    if (deepChambers.length) {
+      const den = deepChambers[(Math.random() * deepChambers.length) | 0];
+      this.krakens.push(new Kraken(den.x, den.y));
+      for (let k = 0; k < 6; k++) {
+        const gx = den.x + (Math.random() - 0.5) * 260, gy = den.y + (Math.random() - 0.5) * 200;
+        if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, Math.random() < 0.6 ? 'gem' : 'coin'));
+      }
+    }
   }
 
   // Scatter current zones on open cells, flowing along the cave.
@@ -137,7 +150,7 @@ export class Game {
     const C = this.cave = new Cave('belly');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
-    this.skeletons = []; this.whales = []; this.ribs = []; this.currents = [];
+    this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
@@ -232,6 +245,7 @@ export class Game {
       if (this.cave.collide(cr) && cr.dir !== undefined) cr.dir = cr._nx > 0 ? -1 : 1; // turn off walls
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
+    for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
 
     // Whales (reef): swim into an open mouth to be swallowed into the belly.
     if (this.zone === 'reef') {
@@ -248,6 +262,7 @@ export class Game {
     this.creatures = this.creatures.filter((cr) => !cr.dead);
     this.harpoons = this.harpoons.filter((h) => !h.dead);
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
+    this.krakens = this.krakens.filter((k) => !k.dead);
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
@@ -290,6 +305,20 @@ export class Game {
           this.score += cr.points;
           this.particles.sparkle(cr.x, cr.y, PAL.danger, 20);
           this.audio.kill();
+          break;
+        }
+      }
+      // Harpoon vs kraken — chip its health; big reward on defeat.
+      if (!h.dead) for (const k of this.krakens) {
+        if (k.hp > 0 && k.harpoonHit(h)) {
+          h.dead = true; k.takeDamage(1);
+          this.score += KRAKEN.hitPoints;
+          const tip = h.tip(); this.particles.sparkle(tip.x, tip.y, PAL.krakenEye, 16); this.audio.kill();
+          if (k.hp === 0) {
+            this.score += KRAKEN.killBonus; this.shake = 16; this.flash = 0.6;
+            this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank();
+            for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem'));
+          }
           break;
         }
       }
@@ -345,7 +374,7 @@ export class Game {
     this.savedReef = {
       cave: this.cave, shells: this.shells, treasures: this.treasures, creatures: this.creatures,
       vents: this.vents, wrecks: this.wrecks, flora: this.flora, skeletons: this.skeletons,
-      bigBubbles: this.bigBubbles, whales: this.whales, ribs: this.ribs, currents: this.currents, whale,
+      bigBubbles: this.bigBubbles, whales: this.whales, ribs: this.ribs, currents: this.currents, krakens: this.krakens, whale,
     };
     this.zone = 'belly';
     this._generateBelly();
@@ -361,7 +390,7 @@ export class Game {
     Object.assign(this, {
       cave: s.cave, shells: s.shells, treasures: s.treasures, creatures: s.creatures,
       vents: s.vents, wrecks: s.wrecks, flora: s.flora, skeletons: s.skeletons,
-      bigBubbles: s.bigBubbles, whales: s.whales, ribs: s.ribs, currents: s.currents,
+      bigBubbles: s.bigBubbles, whales: s.whales, ribs: s.ribs, currents: s.currents, krakens: s.krakens,
     });
     this.whaleExit = null; this.zone = 'reef';
     const m = s.whale.mouthZone();
@@ -400,6 +429,7 @@ export class Game {
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
       for (const w of this.whales) w.draw(ctx, cx, cy, this.t);
+      for (const k of this.krakens) k.draw(ctx, cx, cy, this.t);
       for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
       if (this.whaleExit) { ctx.save(); ctx.translate(this.whaleExit.x - cx, this.whaleExit.y - cy); drawThroat(ctx, this.t, this.whaleExit.r); ctx.restore(); }
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
@@ -522,6 +552,15 @@ export class Game {
           break;
         }
       }
+    }
+
+    // Boss health bar when a kraken is on-screen.
+    const boss = this.krakens.find((k) => k.hp > 0 && k.x > this.camX - 140 && k.x < this.camX + W + 140 && k.y > this.camY - 140 && k.y < this.camY + H + 140);
+    if (boss) {
+      const bw2 = 300, bx2 = W / 2 - bw2 / 2, by2 = 56;
+      this._text('⚔ KRAKEN', W / 2, by2 - 4, 12, PAL.krakenEye, 'center', 'bottom', true);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(bx2, by2, bw2, 10, 5); ctx.fill();
+      ctx.fillStyle = PAL.danger; ctx.beginPath(); ctx.roundRect(bx2, by2, Math.max(2, bw2 * (boss.hp / boss.maxHp)), 10, 5); ctx.fill();
     }
     ctx.restore();
   }
