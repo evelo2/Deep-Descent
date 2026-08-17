@@ -48,6 +48,21 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
   seated in chambers, ringed with the richest loot (gems + chests).
 - **Gems**: a new 500-pt treasure tier, weighted toward deep water and wrecks.
 
+## v7 expansion — currents, kraken boss, sunken temple (phased)
+
+- **Currents** (`entities/current.js`): rectangular flow zones that add force to
+  the diver each frame, drawn with animated streaks + chevrons. ~5 per reef, some
+  in the belly/temple; part of the zone snapshot.
+- **Kraken boss** (`entities/kraken.js`): per-frame tentacle geometry shared by
+  draw + collision; tentacles reach for the diver (contact = a life). Harpoon it
+  (8 hits, boss health bar in HUD); on defeat it recoils, sinks and drops a big
+  bonus + gems. One per reef in the deepest chamber over a hoard.
+- **Sunken temple** (`game._generateTemple`, entered via a stone gate placed in
+  the reef): a `'temple'` cave biome (sandstone) with columns, a key, a locked
+  door (AABB barrier that lifts once you hold the key) and a vault of key-gated
+  loot, plus an exit gate. Uses the generalised zone stack
+  (`_snapshotReef`/`_restoreReef`) shared with the whale belly.
+
 ## v6 expansion — the whale bonus zone
 
 - **Living whale** (`entities/whale.js`): a big benign whale drifts in one reef

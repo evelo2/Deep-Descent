@@ -202,10 +202,10 @@ export class Cave {
     const { W, H } = WORLD, octx = this.octx, CARVE = this.CARVE, RIM = 5;
     octx.clearRect(0, 0, W, H);
     const depthT = Math.min(1, camY / WH);
-    const belly = this.biome === 'belly';
-    const C1 = belly ? PAL.fleshRock : PAL.rock;
-    const C2 = belly ? PAL.fleshDark : PAL.rockDark;
-    const RIMC = belly ? PAL.membrane : PAL.rockLight;
+    const b = this.biome;
+    const C1 = b === 'belly' ? PAL.fleshRock : b === 'temple' ? PAL.templeRock : PAL.rock;
+    const C2 = b === 'belly' ? PAL.fleshDark : b === 'temple' ? PAL.templeDark : PAL.rockDark;
+    const RIMC = b === 'belly' ? PAL.membrane : b === 'temple' ? PAL.templeRim : PAL.rockLight;
 
     // Body, darker with depth.
     const g = octx.createLinearGradient(0, 0, 0, H);
