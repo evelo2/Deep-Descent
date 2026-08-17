@@ -20,6 +20,27 @@ export class Cave {
     this.oc = document.createElement('canvas');
     this.oc.width = WORLD.W; this.oc.height = WORLD.H;
     this.octx = this.oc.getContext('2d');
+    // Fog-of-war minimap buffer: 1px per cell, revealed as the diver explores.
+    this.seen = new Uint8Array(this.GW * this.GH);
+    this.mini = document.createElement('canvas');
+    this.mini.width = this.GW; this.mini.height = this.GH;
+    this.miniCtx = this.mini.getContext('2d');
+    this.miniCtx.fillStyle = '#0a1119'; this.miniCtx.fillRect(0, 0, this.GW, this.GH);
+  }
+
+  // Reveal the fog around a world point (radius in cells); paints newly-seen
+  // cells into the minimap buffer.
+  reveal(x, y, rCells) {
+    const cgx = Math.floor(x / CELL), cgy = Math.floor(y / CELL), r = Math.ceil(rCells);
+    for (let gy = Math.max(0, cgy - r); gy <= Math.min(this.GH - 1, cgy + r); gy++)
+      for (let gx = Math.max(0, cgx - r); gx <= Math.min(this.GW - 1, cgx + r); gx++) {
+        if ((gx - cgx) ** 2 + (gy - cgy) ** 2 > r * r) continue;
+        const idx = gy * this.GW + gx;
+        if (this.seen[idx]) continue;
+        this.seen[idx] = 1;
+        this.miniCtx.fillStyle = this.open[idx] ? '#2e6790' : '#1b2a38';
+        this.miniCtx.fillRect(gx, gy, 1, 1);
+      }
   }
 
   _idx(gx, gy) { return gy * this.GW + gx; }

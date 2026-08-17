@@ -306,6 +306,7 @@ export class Game {
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), this.speedT > 0 ? POWERUP.speedMult : 1);
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
+    this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
 
     // 2D camera follows the diver, clamped to the world.
     const tx = Math.max(0, Math.min(WW - W, this.diver.x - W / 2));
@@ -788,7 +789,38 @@ export class Game {
       ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(bx2, by2, bw2, 10, 5); ctx.fill();
       ctx.fillStyle = PAL.danger; ctx.beginPath(); ctx.roundRect(bx2, by2, Math.max(2, bw2 * (boss.hp / boss.maxHp)), 10, 5); ctx.fill();
     }
+
+    this._minimap();
     ctx.restore();
+  }
+
+  // Fog-of-war minimap in the top-right corner.
+  _minimap() {
+    const ctx = this.ctx, C = this.cave; if (!C) return;
+    const mw = 116, mh = Math.round(mw * WH / WW), mx = W - mw - 16, my = 128;
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,12,22,0.72)';
+    ctx.beginPath(); ctx.roundRect(mx - 4, my - 4, mw + 8, mh + 8, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,200,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(C.mini, mx, my, mw, mh);
+    const wx = (x) => mx + (x / WW) * mw, wy = (y) => my + (y / WH) * mh;
+    // boat + relic markers (reef only, relic once seen)
+    if (this.zone === 'reef') {
+      ctx.fillStyle = '#e07a4a'; ctx.fillRect(wx(this.boat.x) - 2, wy(WORLD.SURFACE) - 1, 4, 3);
+      if (this.relic && !this.relic.taken) {
+        const rgx = Math.floor(this.relic.x / CELL), rgy = Math.floor(this.relic.y / CELL);
+        if (C.seen[rgy * C.GW + rgx]) { ctx.fillStyle = PAL.key; ctx.beginPath(); ctx.arc(wx(this.relic.x), wy(this.relic.y), 2.6, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+    // diver (blinking)
+    ctx.fillStyle = Math.floor(this.t * 4) % 2 ? '#eaffff' : '#7ff3ff';
+    ctx.beginPath(); ctx.arc(wx(this.diver.x), wy(this.diver.y), 2.8, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#04121f'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+    // label
+    this._text('MAP', mx + mw - 2, my - 6, 9, 'rgba(150,200,230,0.7)', 'right', 'bottom');
   }
 
   _menu() {
