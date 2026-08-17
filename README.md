@@ -176,6 +176,13 @@ to **bank** them into your score — before your **air** runs out.
   Swim in to enter the temple, **find the key** to open the locked **door**, and
   plunder the **vault** behind it — then reach the exit gate to return.
 
+> Each reef holds **at most one** special (whale, kraken *or* temple), and only
+> sometimes — so every dive feels different.
+
+- **⚡ Power-ups.** Grab floating pickups: an **air tank** permanently raises your
+  max air for the run, and **multifire** gives your harpoon a 3-way spread for a
+  while. Watch the HUD for your boosted air and the multifire timer.
+
 ### Tips
 
 - The deeper you go, the **richer the loot** — and the **darker and more
@@ -205,6 +212,7 @@ to **bank** them into your score — before your **air** runs out.
 - 🌊 **Currents** that sweep you through tunnels.
 - 🦑 **Kraken boss** guarding a hoard in the deep — harpoon it down.
 - 🏛 **Sunken temple** with a key-and-door puzzle and a treasure vault.
+- ⚡ **Power-ups** — bigger air tank and a multifire harpoon spread.
 - 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
   parallax particulate, screen shake and a darkening, vignetting deep.
 - 🔊 **Procedural Web Audio** — ambient bed and SFX, no audio files, mute toggle.

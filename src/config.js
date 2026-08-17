@@ -81,6 +81,13 @@ export const BUBBLE = { air: 22, rise: 44, r: 18, life: 7 };
 // Water currents that sweep the diver along.
 export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 
+// Power-ups.
+export const POWERUP = {
+  tankBonus: 30,        // extra max air per tank (persists for the run)
+  multifireDuration: 30, // seconds of 3-way harpoon spread per pickup
+  spread: 0.28,         // radians between spread shots
+};
+
 // Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
 // phase p∈[0,1) to { open, shake }: closed with a building rattle (a bubble
 // forming) → slow eased open → hold open → fast snap shut.
