@@ -57,6 +57,14 @@ export const SHARK = { minScale: 0.7, maxScale: 1.7 };
 // The kraken boss — guards a hoard in a deep chamber.
 export const KRAKEN = { hp: 8, radius: 54, arms: 7, hitPoints: 120, killBonus: 2500, range: 320 };
 
+// Per-reef objective: bank the relic OR bank the points goal to sail on.
+export const RELIC = {
+  value: 2000,          // score for banking the relic (the primary way to sail on)
+  goalBase: 8000,       // high points fallback for reef 1 (grind-heavy alternative)
+  goalPerReef: 1500,    // added per reef
+  types: ['anchor', 'statue', 'map', 'idol'],
+};
+
 // The living whale — a benign giant you can swim into to enter its belly.
 export const WHALE = {
   scale: 1.0,        // overall size multiplier (whale is authored ~360px long)
