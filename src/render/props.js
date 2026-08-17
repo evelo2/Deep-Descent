@@ -62,10 +62,15 @@ export function drawWreck(ctx, t) {
   ctx.restore();
 }
 
-// A treasure chest that opens and closes. `open` 0..1 swings the lid; when open
-// and still full, gold spills from inside. Authored ~64px wide (radius ~36).
-export function drawChestShell(ctx, open, hasLoot, t) {
-  const ang = open * 1.15;
+// A treasure chest that opens and closes. `open` 0..1 lifts the lid — hinged at
+// its LEFT edge, so it swings up like a real lid, not spinning about its middle.
+// `shake` (0..1) rattles the whole chest and lid while a bubble forms beneath
+// the lid, just before it opens. Authored ~64px wide (radius ~36).
+export function drawChestShell(ctx, open, hasLoot, t, shake = 0) {
+  ctx.save();
+  // Whole-chest rattle while the bubble builds.
+  if (shake > 0.02) ctx.translate(Math.sin(t * 37) * 1.6 * shake, Math.sin(t * 53) * 0.8 * shake);
+
   // silt shadow
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.ellipse(0, 22, 42, 9, 0, 0, TAU); ctx.fill();
@@ -97,27 +102,43 @@ export function drawChestShell(ctx, open, hasLoot, t) {
   ctx.strokeStyle = '#2c1a0c'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(-32, -2, 64, 26, 4); ctx.stroke();
 
-  // lid — hinged at the back-top, swings open
+  // A bubble forming at the lid seam as the chest rattles.
+  if (shake > 0.05) {
+    const br = 3 + shake * 8;
+    const bx = 6 + Math.sin(t * 41) * 1.5 * shake;
+    ctx.strokeStyle = 'rgba(190,235,255,0.7)'; ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'rgba(160,220,255,0.16)';
+    ctx.beginPath(); ctx.arc(bx, -4, br, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.arc(bx - br * 0.3, -4 - br * 0.3, br * 0.28, 0, TAU); ctx.fill();
+  }
+
+  // lid — hinged at the LEFT edge (pivot at the top-left corner), swinging up.
   ctx.save();
-  ctx.translate(0, -2); ctx.rotate(-ang);
+  const jA = shake > 0.02 ? Math.sin(t * 44) * 0.05 * shake : 0;
+  ctx.translate(-32, -2);
+  ctx.rotate(-open * 1.15 - jA);
   const lw = ctx.createLinearGradient(0, -18, 0, 0);
   lw.addColorStop(0, '#8a5528'); lw.addColorStop(1, '#5c3719');
   ctx.fillStyle = lw;
+  // lid drawn in local coords 0..64 from the hinge
   ctx.beginPath();
-  ctx.moveTo(-32, 0); ctx.lineTo(-32, -9);
-  ctx.quadraticCurveTo(0, -24, 32, -9); ctx.lineTo(32, 0); ctx.closePath(); ctx.fill();
+  ctx.moveTo(0, 0); ctx.lineTo(0, -9);
+  ctx.quadraticCurveTo(32, -24, 64, -9); ctx.lineTo(64, 0); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = '#2c1a0c'; ctx.lineWidth = 2; ctx.stroke();
-  // lid gold trim + studs
   ctx.strokeStyle = PAL.gold; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-32, -6); ctx.quadraticCurveTo(0, -20, 32, -6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -6); ctx.quadraticCurveTo(32, -20, 64, -6); ctx.stroke();
   ctx.fillStyle = PAL.gold;
-  for (const bx of [-20, 0, 20]) { ctx.beginPath(); ctx.arc(bx, -10, 2, 0, TAU); ctx.fill(); }
+  for (const bx of [12, 32, 52]) { ctx.beginPath(); ctx.arc(bx, -10, 2, 0, TAU); ctx.fill(); }
+  // hinge knob at the pivot
+  ctx.fillStyle = '#2c1a0c'; ctx.beginPath(); ctx.arc(0, -1, 3, 0, TAU); ctx.fill();
   ctx.restore();
 
   // front lock plate
   ctx.fillStyle = PAL.gold;
   ctx.beginPath(); ctx.roundRect(-6, 3, 12, 10, 2); ctx.fill();
   ctx.fillStyle = '#5c3719'; ctx.beginPath(); ctx.arc(0, 8, 2, 0, TAU); ctx.fill();
+  ctx.restore();
 }
 
 // A faceted gemstone — the richest cave/wreck loot.
