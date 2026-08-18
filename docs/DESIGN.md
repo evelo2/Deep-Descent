@@ -29,6 +29,32 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v11 — gold economy, dive bells, weapons & the shop
+
+A roguelike-style gear loop, built in three phases.
+
+- **Gold economy** (`config.GOLD`, `game._bankLoot`): banking carried loot at
+  the boat or a dive bell yields full **score points plus gold** (50% of value).
+  Gold is a per-run currency shown in the HUD purse.
+- **Dive bells** (`entities/divebell.js`, `config.BELL`): 1–2 brass bells hang
+  in deep chambers each reef. Swim in to **bank loot and fast-refill air** — a
+  mid-depth safe haven. You still surface to the boat to sail on. Bells persist
+  in the zone snapshot and show on the minimap.
+- **Weapons** (`entities/weapons.js`, `config.WEAPON_*`): the harpoon is joined
+  by four buyable weapons — **net gun** (snares a creature), **speargun** (rapid
+  burst), **depth charge** (lobbed area blast), **shock prod** (stun ring).
+  Cycle with Q/E, `[`/`]`, gamepad Y/LB, or the touch SWAP button; the HUD shows
+  the current weapon. Snared creatures (`Creature.snareT`) freeze, deal no
+  contact damage and wear a mesh overlay.
+- **Dive shop** (`state 'shop'`, `game._shopItems`/`_shopBuy`/`_shopScreen`):
+  open at the boat or a bell (B / gamepad B / touch ⚙ SHOP). Spend gold to
+  unlock weapons (reef-gated: net r1, shock/speargun r2, depth charge r3),
+  upgrade them (Lv1→3 — each level boosts the key stat and trims cooldown), and
+  buy air-tank upgrades. Navigate ↑/↓ + Space/A, gamepad D-pad + A, or tap rows.
+- **Supply crates** (`entities/weapons.js SupplyCrate`): a crate sometimes
+  drifts in a reef; reaching it grants a random reef-available weapon, else an
+  upgrade, else gold, with a cartoon flourish.
+
 ## v10 — mobile touch buttons
 
 - **On-screen touch buttons** (`input.js` `touchButtons`/`_hitButton`/

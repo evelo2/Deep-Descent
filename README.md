@@ -136,8 +136,10 @@ to **bank** them into your score — before your **air** runs out.
 | Action | Keyboard | Touch | Gamepad |
 | --- | --- | --- | --- |
 | Swim | Arrow keys / **WASD** | Drag (virtual joystick) | Left stick / D-pad |
-| Fire harpoon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
-| Start / confirm | **Space** | Tap | **A / Start** |
+| Fire weapon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
+| Switch weapon | **Q** / **E** or **[** **]** | ⋯ SWAP button | **Y / LB** |
+| Open shop (at a station) | **B** | ⚙ SHOP button | **B** |
+| Start / confirm / buy | **Space** | Tap | **A / Start** |
 | Pause | **P** / **Esc** | ⏸ button (top) | **Start** |
 | Mute | **M** | 🔊 button (top) | **Back / Select** |
 | Sail to a new reef | Hold **↑** at the boat | ⛵ **Sail On** button | Hold **↑** at the boat |
@@ -226,6 +228,12 @@ notches and home indicators via safe-area insets.
 - 🌊 **Currents** that sweep you through tunnels.
 - 🦑 **Kraken boss** guarding a hoard in the deep — harpoon it down.
 - 🏛 **Sunken temple** with a key-and-door puzzle and a treasure vault.
+- 🔫 **Five weapons** — harpoon, **net gun** (snare), **speargun** (burst),
+  **depth charge** (area blast) and **shock prod** (stun ring); switch on the fly.
+- 🔔 **Dive bells** — deep checkpoints that bank loot and refill air without surfacing.
+- 💰 **Gold economy & shop** — banked loot pays out **points + gold**; spend gold
+  at the boat or a bell to unlock/upgrade weapons and buy bigger air tanks
+  (reef-gated). **Supply crates** drop free gear out in the reef.
 - ⚡ **Power-ups** — air tank, multifire, shield, speed fins, treasure magnet, 1-UP.
 - ❤ **Extra life every 5,000 points**, with a difficulty curve that scales by reef.
 - ⚓ **Per-reef relic objective** — find & bank the relic (or grind the points goal) to sail on.
