@@ -15,10 +15,10 @@ function glow(ctx, r, color, alpha = 0.5) {
 }
 
 // Diver faces +x. `kick` animates the fins, `hurt` flashes red.
-export function drawDiver(ctx, t, kick, hurt) {
+export function drawDiver(ctx, t, kick, hurt, aimA = null) {
   ctx.save();
-  // fins
-  const fin = Math.sin(kick) * 0.5;
+  // fins — held steadier while bracing to aim
+  const fin = Math.sin(kick) * (aimA === null ? 0.5 : 0.15);
   ctx.fillStyle = PAL.diverSuit;
   ctx.save(); ctx.translate(-16, 0); ctx.rotate(fin);
   ctx.beginPath(); ctx.ellipse(-6, 0, 10, 5, 0, 0, TAU); ctx.fill(); ctx.restore();
@@ -28,9 +28,29 @@ export function drawDiver(ctx, t, kick, hurt) {
   // tank
   ctx.fillStyle = '#4a5c78';
   ctx.beginPath(); ctx.roundRect(-12, -9, 7, 12, 3); ctx.fill();
-  // arm
-  ctx.strokeStyle = PAL.diverSuit; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(6, 2); ctx.lineTo(15, 6 + Math.sin(kick) * 2); ctx.stroke();
+  if (aimA === null) {
+    // arm — relaxed
+    ctx.strokeStyle = PAL.diverSuit; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(6, 2); ctx.lineTo(15, 6 + Math.sin(kick) * 2); ctx.stroke();
+  } else {
+    // aiming — extend both arms and level the harpoon along the aim direction
+    const ax = Math.cos(aimA), ay = Math.sin(aimA);
+    const sx = 4, sy = 0;                        // shoulder
+    ctx.strokeStyle = PAL.diverSuit; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ax * 13, sy + ay * 13); ctx.stroke();
+    // harpoon held out along the aim
+    const hx = sx + ax * 9, hy = sy + ay * 9;
+    ctx.strokeStyle = PAL.harpoon; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(hx - ax * 7, hy - ay * 7); ctx.lineTo(hx + ax * 17, hy + ay * 17); ctx.stroke();
+    // barbed tip
+    const tx = hx + ax * 17, ty = hy + ay * 17, px = -ay, py = ax;
+    ctx.fillStyle = PAL.harpoonTip;
+    ctx.beginPath();
+    ctx.moveTo(tx + ax * 4, ty + ay * 4);
+    ctx.lineTo(tx + px * 3, ty + py * 3);
+    ctx.lineTo(tx - px * 3, ty - py * 3);
+    ctx.closePath(); ctx.fill();
+  }
   // helmet + glass
   ctx.fillStyle = PAL.diver;
   ctx.beginPath(); ctx.arc(11, -2, 8, 0, TAU); ctx.fill();

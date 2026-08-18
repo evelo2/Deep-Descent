@@ -114,9 +114,8 @@ export class Input {
       if (B(14)) x = -1; else if (B(15)) x = 1;
       if (B(12)) y = -1; else if (B(13)) y = 1;
       this.pad.x = x; this.pad.y = y;
-      this._padFire = B(0) || B(2) || B(5) || B(7);                       // fire held (for aim mode)
+      this._padFire = B(0) || B(2) || B(5) || B(7);                       // fire held (drives tap + aim)
       const edge = (i) => B(i) && !this._padPrev[i];
-      if (edge(0) || edge(2) || edge(5) || edge(7)) this._tapFire = true;   // A/X/RB/RT → fire
       if (edge(9)) this._padEdges.add('pause');                            // Start → pause
       if (edge(8)) this._padEdges.add('mute');                             // Back → mute
       if (edge(3)) this._padEdges.add('weaponNext');                       // Y → next weapon

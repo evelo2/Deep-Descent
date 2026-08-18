@@ -61,13 +61,17 @@ export class Diver {
 
   hit() { this.hurtT = 0.4; this.invuln = 1.6; this.vx *= -0.6; this.vy = -60; }
 
-  draw(ctx, camX, camY) {
+  draw(ctx, camX, camY, aiming = false, aimAngle = 0) {
     ctx.save();
     ctx.translate(this.x - camX, this.y - camY);
-    if (this.facing < 0) ctx.scale(-1, 1);
+    // While aiming, face the target; otherwise use travel facing.
+    const face = aiming ? (Math.cos(aimAngle) < 0 ? -1 : 1) : this.facing;
+    if (face < 0) ctx.scale(-1, 1);
+    // Aim angle expressed in the (possibly mirrored) local frame.
+    const localAim = aiming ? Math.atan2(Math.sin(aimAngle), Math.cos(aimAngle) * face) : null;
     // Blink while invulnerable.
     if (this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0) ctx.globalAlpha = 0.4;
-    drawDiver(ctx, 0, this.kick, this.hurtT > 0);
+    drawDiver(ctx, 0, this.kick, this.hurtT > 0, localAim);
     ctx.restore();
   }
 }
