@@ -16,7 +16,12 @@ html, body {
   height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 8px;
+  /* Keep the canvas clear of notches / rounded corners / home indicators. */
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
 }
 
 #game {
