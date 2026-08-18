@@ -26,6 +26,22 @@ const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
 
+// Reef flavour: each reef gets a wacky procedural name and a light theme (a
+// tag emoji + a faint water tint + themed words mixed into the name).
+const REEF_THEMES = [
+  { key: 'kelp',     tag: '🌿', tint: [60, 175, 120], adjs: ['Overgrown', 'Mossy', 'Tangled', 'Verdant'], nouns: ['Kelp Forest', 'Seagrass Meadow', 'Weed Bank'] },
+  { key: 'volcanic', tag: '🌋', tint: [220, 95, 55],  adjs: ['Smoldering', 'Molten', 'Blistered', 'Scalding'], nouns: ['Caldera', 'Ember Trench', 'Lava Vent'] },
+  { key: 'frozen',   tag: '❄',  tint: [120, 185, 235], adjs: ['Frostbitten', 'Glacial', 'Shivering', 'Icebound'], nouns: ['Ice Shelf', 'Frost Grotto', 'Glacier Drop'] },
+  { key: 'haunted',  tag: '👻', tint: [155, 115, 205], adjs: ['Haunted', 'Ghostly', 'Whispering', 'Cursed'], nouns: ['Wreckyard', 'Bone Reef', 'Spirit Hollow'] },
+  { key: 'neon',     tag: '✨', tint: [90, 220, 215],  adjs: ['Glowing', 'Bioluminescent', 'Electric', 'Radiant'], nouns: ['Glow Gardens', 'Neon Shoals', 'Lantern Deep'] },
+  { key: 'junk',     tag: '⚓', tint: [195, 155, 95],  adjs: ['Rusty', 'Crusty', 'Barnacled', 'Salvaged'], nouns: ['Scrapyard', 'Anchor Graveyard', 'Rust Basin'] },
+];
+const WACKY_ADJ = ['Soggy', 'Bubbly', 'Grumpy', 'Wobbly', 'Sneaky', 'Salty', 'Squishy', 'Giggling', 'Suspicious', 'Sleepy', 'Cranky', 'Slippery', 'Peculiar', 'Ludicrous', 'Damp'];
+const WACKY_PLACE = ['Trench', 'Grotto', 'Cove', 'Lagoon', 'Abyss', 'Hollow', 'Gully', 'Chasm', 'Sinkhole', 'Gorge', 'Nook', 'Reef'];
+const WACKY_CRITTER = ['Barnacle', 'Anglerfish', 'Urchin', 'Clam', 'Seahorse', 'Eel', 'Jellyfish', 'Octopus', 'Pufferfish', 'Squid'];
+const WACKY_NAMES = ['Captain Sniffle', 'Old Barnacle Pete', 'Sir Wobbles', 'Grandma Squid', 'Mad Morgan', 'Bubbles McGee', 'Admiral Flapjack', 'Nana Nautilus'];
+const WACKY_OF = ['of Doom', 'of Secrets', 'of Regret', 'of Lost Socks', 'of Whispers', 'of No Return', 'of Questionable Snacks', 'of Eternal Dampness', 'of Mild Peril', 'of the Ancients'];
+
 // How-to-play pages shown on the Help screen.
 const HELP_PAGES = [
   { title: '🐟 CONTROLS', lines: [
@@ -89,6 +105,7 @@ export class Game {
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
+    this.reefName = ''; this.reefTheme = REEF_THEMES[0];
     this.puT = 0; this.puName = ''; this.puCol = '#fff';   // power-up name flourish
     this.diver.reset();
   }
@@ -124,6 +141,7 @@ export class Game {
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
+    this._newReefName();
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
@@ -253,6 +271,18 @@ export class Game {
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
     const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
+  }
+
+  // Roll a wacky, theme-flavoured name for the upcoming reef.
+  _newReefName() {
+    const pick = (a) => a[(Math.random() * a.length) | 0];
+    const theme = pick(REEF_THEMES);
+    this.reefTheme = theme;
+    const p = (Math.random() * 4) | 0;
+    if (p === 0) this.reefName = `The ${pick([...theme.adjs, ...WACKY_ADJ])} ${pick([...theme.nouns, ...WACKY_PLACE])} ${pick(WACKY_OF)}`;
+    else if (p === 1) this.reefName = `${pick(WACKY_ADJ)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
+    else if (p === 2) this.reefName = `${pick(WACKY_NAMES)}’s ${pick([...theme.nouns, ...WACKY_PLACE])}`;
+    else this.reefName = `The ${pick(theme.adjs)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
   }
 
   _makePowerups(count) {
@@ -1018,6 +1048,7 @@ export class Game {
   // Board the boat and set sail for a fresh reef (score & lives carry over).
   _setSail() {
     this.state = 'sailing'; this.sailT = 0; this.reef += 1; this.dockHold = 0;
+    this._newReefName();   // name the destination so the sail screen can show it
     this.audio.select();
   }
   _newReef() {
@@ -1110,6 +1141,11 @@ export class Game {
     const cx = this.camX, cy = this.camY;
     const depthT = Math.min(1, cy / WH);
     this.bg.draw(ctx, cx, cy, this.t, depthT);
+    // Faint theme tint so each reef has its own mood.
+    if (this.zone === 'reef' && this.state !== 'menu' && this.reefTheme) {
+      const [tr, tg, tb] = this.reefTheme.tint;
+      ctx.fillStyle = `rgba(${tr},${tg},${tb},0.06)`; ctx.fillRect(0, 0, W, H);
+    }
     this.boat.draw(ctx, cx, cy, this.t);
 
     if (this.state !== 'menu' && this.cave) {
@@ -1289,9 +1325,11 @@ export class Game {
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     for (let i = 0; i < 7; i++) { const wx = bx - 34 - i * 16 - ((this.t * 40) % 16); ctx.beginPath(); ctx.arc(wx, sy + 7, 3.2 - i * 0.3, 0, Math.PI * 2); ctx.fill(); }
     this.boat.draw(ctx, this.boat.x - bx, WORLD.SURFACE - sy, this.t);
-    // caption
-    this._text(`SAILING TO REEF ${this.reef}…`, W / 2, H * 0.72, 26, PAL.hudText, 'center', 'middle', true);
-    this._text(`SCORE ${this.score}   ·   LIVES ${this.lives}`, W / 2, H * 0.72 + 34, 15, '#bfe6ff', 'center', 'middle');
+    // caption — the wacky destination name
+    const t3 = this.reefTheme.tint;
+    this._text('SAILING TO…', W / 2, H * 0.68, 15, '#bfe6ff', 'center', 'middle');
+    this._text(`${this.reefTheme.tag} ${this.reefName}`, W / 2, H * 0.72 + 4, 26, `rgb(${t3[0]},${t3[1]},${t3[2]})`, 'center', 'middle', true);
+    this._text(`Reef ${this.reef}   ·   SCORE ${this.score}   ·   LIVES ${this.lives}`, W / 2, H * 0.72 + 40, 15, '#bfe6ff', 'center', 'middle');
   }
 
   // ---- touch buttons ---------------------------------------------------
@@ -1440,8 +1478,9 @@ export class Game {
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
     this._text(`CARRYING ${this.carried}`, W - 20, 46, 14, cp, 'right', 'top');
     this._text(`DEPTH ${Math.round(this.depthReached / 10)} m`, W - 20, 66, 13, '#bfe6ff', 'right', 'top');
-    const zoneTag = this.zone === 'belly' ? '🐋 THE BELLY' : this.zone === 'temple' ? '🏛 THE TEMPLE' : `REEF ${this.reef}`;
-    const zoneCol = this.zone === 'belly' ? PAL.membrane : this.zone === 'temple' ? PAL.templeRim : '#8fbfda';
+    const t3 = this.reefTheme.tint;
+    const zoneTag = this.zone === 'belly' ? '🐋 THE BELLY' : this.zone === 'temple' ? '🏛 THE TEMPLE' : `${this.reefTheme.tag} ${this.reefName}`;
+    const zoneCol = this.zone === 'belly' ? PAL.membrane : this.zone === 'temple' ? PAL.templeRim : `rgb(${t3[0]},${t3[1]},${t3[2]})`;
     this._text(zoneTag, W - 20, 84, 12, zoneCol, 'right', 'top');
     if (this.zone === 'temple' && this.hasKey) this._text('🔑 KEY', W - 20, 102, 12, PAL.key, 'right', 'top');
     if (this.zone === 'reef') {
