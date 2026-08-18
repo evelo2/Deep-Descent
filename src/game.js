@@ -18,7 +18,8 @@ import { Current } from './entities/current.js';
 import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL } from './config.js';
+import { Net, DepthCharge } from './entities/weapons.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -47,7 +48,7 @@ export class Game {
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
-    this.harpoons = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
+    this.harpoons = []; this.nets = []; this.charges = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
     this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
@@ -66,6 +67,10 @@ export class Game {
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
+    // Weapons: harpoon always; the rest all unlocked for now (shop gates them
+    // in a later phase). weaponIdx cycles this list.
+    this.weapons = [...WEAPON_ORDER]; this.weaponIdx = 0; this.weaponSwapT = 0;
+    this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
@@ -78,7 +83,7 @@ export class Game {
   _generateWorld() {
     const C = this.cave = new Cave('reef');
     this.shells = []; this.treasures = []; this.creatures = [];
-    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = []; this.skeletons = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
@@ -217,7 +222,7 @@ export class Game {
   _generateTemple() {
     const C = this.cave = new Cave('temple');
     this.shells = []; this.treasures = []; this.creatures = [];
-    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = [];
     const value = (y) => 400 + Math.round((y / WH) * 500);
@@ -266,7 +271,7 @@ export class Game {
   _generateBelly() {
     const C = this.cave = new Cave('belly');
     this.shells = []; this.treasures = []; this.creatures = [];
-    this.vents = []; this.wrecks = []; this.harpoons = []; this.bigBubbles = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
     this.templeGate = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
@@ -293,18 +298,62 @@ export class Game {
     else if (this.state === 'playing') this.state = 'paused';
   }
 
+  get weapon() { return this.weapons[this.weaponIdx]; }
+
+  _cycleWeapon(dir) {
+    if (this.weapons.length < 2) return;
+    this.weaponIdx = (this.weaponIdx + dir + this.weapons.length) % this.weapons.length;
+    this.weaponSwapT = 1.2;   // brief HUD flash of the new weapon name
+    this.audio.select();
+  }
+
+  // Fire the current weapon (respecting its cooldown).
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
-    const d = this.diver;
-    if (this.multiFireT > 0) {
-      for (const a of [-POWERUP.spread, 0, POWERUP.spread]) {
-        const ca = Math.cos(a), sa = Math.sin(a);
-        this.harpoons.push(new Harpoon(d.x, d.y, d.aimX * ca - d.aimY * sa, d.aimX * sa + d.aimY * ca));
-      }
-    } else {
-      this.harpoons.push(new Harpoon(d.x, d.y, d.aimX, d.aimY));
+    const id = this.weapon;
+    this.fireCd = WEAPON_INFO[id].cd;
+    switch (id) {
+      case 'harpoon':  this._fireHarpoon(); break;
+      case 'net':      this._fireNet(); break;
+      case 'speargun': this.burst = SPEARGUN.shots; this.burstT = 0; break;   // fired out over update()
+      case 'charge':   this._fireCharge(); break;
+      case 'shock':    this._fireShock(); break;
     }
-    this.fireCd = HARPOON.cooldown;
+  }
+
+  _spear(angleOff = 0) {
+    const d = this.diver, ca = Math.cos(angleOff), sa = Math.sin(angleOff);
+    this.harpoons.push(new Harpoon(d.x, d.y, d.aimX * ca - d.aimY * sa, d.aimX * sa + d.aimY * ca));
+    this.audio.fire();
+  }
+  _fireHarpoon() {
+    if (this.multiFireT > 0) for (const a of [-POWERUP.spread, 0, POWERUP.spread]) this._spear(a);
+    else this._spear(0);
+  }
+  _fireNet() {
+    const d = this.diver;
+    this.nets.push(new Net(d.x, d.y, d.aimX, d.aimY));
+    this.audio.fire();
+  }
+  _fireCharge() {
+    const d = this.diver;
+    this.charges.push(new DepthCharge(d.x, d.y, d.aimX, d.aimY));
+    this.audio.fire();
+  }
+  _fireShock() {
+    const d = this.diver, R = SHOCK.radius;
+    for (const cr of this.creatures) {
+      if (cr.dead) continue;
+      const dist = Math.hypot(cr.x - d.x, cr.y - d.y);
+      if (dist < R) {
+        cr.snareT = Math.max(cr.snareT || 0, SHOCK.stun);
+        const a = Math.atan2(cr.y - d.y, cr.x - d.x);          // knock outward
+        if (cr.vx !== undefined) { cr.vx += Math.cos(a) * SHOCK.knock; cr.vy += Math.sin(a) * SHOCK.knock; }
+        this.particles.sparkle(cr.x, cr.y, PAL.gateGlow, 8);
+      }
+    }
+    this.shockT = 0.28;
+    this.particles.sparkle(d.x, d.y, PAL.gateGlow, 20);
     this.audio.fire();
   }
 
@@ -333,12 +382,26 @@ export class Game {
       this.input.endFrame(); return;
     }
     if (this.state !== 'playing') { this.input.endFrame(); return; }
+    // Switch weapons (keyboard Q/E or [ ], gamepad Y/LB, touch weapon button).
+    if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
+    if (this.input.pressed('weaponPrev')) this._cycleWeapon(-1);
+    this.weaponSwapT = Math.max(0, this.weaponSwapT - dt);
     if (this.input.consumeTapFire()) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
+    // Speargun burst: fire the queued shots out over a few frames.
+    if (this.burst > 0) {
+      this.burstT -= dt;
+      if (this.burstT <= 0) {
+        const j = (SPEARGUN.shots - this.burst) - (SPEARGUN.shots - 1) / 2;
+        this._spear(j * SPEARGUN.spread);
+        this.burst -= 1; this.burstT = SPEARGUN.interval;
+      }
+    }
     this.multiFireT = Math.max(0, this.multiFireT - dt);
     this.shieldT = Math.max(0, this.shieldT - dt);
     this.speedT = Math.max(0, this.speedT - dt);
     this.magnetT = Math.max(0, this.magnetT - dt);
+    this.shockT = Math.max(0, this.shockT - dt);
     if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
     const intent = this.input.vector();
@@ -389,10 +452,13 @@ export class Game {
     for (const b of this.bigBubbles) b.update(dt, this.cave);
     for (const tr of this.treasures) tr.update(dt, this.t);
     for (const cr of this.creatures) {
+      if (cr.snareT > 0) { cr.snareT -= dt; if (cr.vx !== undefined) { cr.x += cr.vx * dt; cr.y += cr.vy * dt; cr.vx *= 0.9; cr.vy *= 0.9; } this.cave.collide(cr); continue; }  // netted/stunned: held in place
       cr.update(dt, this.t, this.diver);
       if (this.cave.collide(cr) && cr.dir !== undefined) cr.dir = cr._nx > 0 ? -1 : 1; // turn off walls
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
+    for (const n of this.nets) n.update(dt, this.cave);
+    for (const ch of this.charges) { ch.update(dt, this.cave); if (ch.exploded) this._explode(ch); }
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
     // Relic objective — pick it up, carry it back to the boat to bank it.
@@ -447,6 +513,8 @@ export class Game {
     this.treasures = this.treasures.filter((tr) => !tr.taken);
     this.creatures = this.creatures.filter((cr) => !cr.dead);
     this.harpoons = this.harpoons.filter((h) => !h.dead);
+    this.nets = this.nets.filter((n) => !n.dead);
+    this.charges = this.charges.filter((c) => !c.dead);
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
     this.krakens = this.krakens.filter((k) => !k.dead);
     this.powerups = this.powerups.filter((p) => !p.taken);
@@ -514,8 +582,42 @@ export class Game {
         }
       }
     }
+    // Nets snare the first creature they touch (crowd control, not a kill).
+    for (const n of this.nets) {
+      if (n.dead) continue;
+      for (const cr of this.creatures) {
+        if (!cr.dead && cr.snareT <= 0 && n.hits(cr)) {
+          cr.snareT = NET.snare; n.dead = true;
+          if (cr.vx !== undefined) { cr.vx = 0; cr.vy = 0; }
+          this.particles.sparkle(cr.x, cr.y, '#dbe9f2', 12); this.audio.pickup();
+          break;
+        }
+      }
+    }
+    // Contact damage — but a snared (netted/stunned) creature is harmless to swim past.
     if (d.invuln <= 0) {
-      for (const cr of this.creatures) { if (cr.hits(d)) { this._hit(); break; } }
+      for (const cr of this.creatures) { if (cr.snareT <= 0 && cr.hits(d)) { this._hit(); break; } }
+    }
+  }
+
+  // Depth-charge blast: kill every creature in range and chip any kraken.
+  _explode(ch) {
+    this.shake = Math.max(this.shake, 10); this.flash = Math.max(this.flash, 0.3);
+    this.particles.sparkle(ch.x, ch.y, PAL.puffer, 40);
+    this.particles.sparkle(ch.x, ch.y, PAL.gold, 20);
+    this.audio.kill();
+    const R = ch.blast;
+    for (const cr of this.creatures) {
+      if (!cr.dead && Math.hypot(cr.x - ch.x, cr.y - ch.y) < R + (cr.radius || 14)) {
+        cr.dead = true; this.score += cr.points;
+        this.particles.sparkle(cr.x, cr.y, PAL.danger, 14);
+      }
+    }
+    for (const k of this.krakens) {
+      if (k.hp > 0 && Math.hypot(k.x - ch.x, k.y - ch.y) < R + k.radius) {
+        k.takeDamage(2); this.score += KRAKEN.hitPoints * 2;
+        if (k.hp === 0) { this.score += KRAKEN.killBonus; this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank(); for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem')); }
+      }
     }
   }
 
@@ -657,6 +759,19 @@ export class Game {
       for (const pu of this.powerups) pu.draw(ctx, cx, cy, this.t);
       for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
+      // Snared (netted/stunned) creatures wear a shimmering mesh so you can tell
+      // they're safe to pass.
+      for (const cr of this.creatures) {
+        if (cr.snareT > 0) {
+          const scx = cr.x - cx, scy = cr.y - cy, rr = (cr.radius || 16) + 4;
+          ctx.save();
+          ctx.globalAlpha = 0.5 + 0.2 * Math.sin(this.t * 10);
+          ctx.strokeStyle = '#dbe9f2'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.arc(scx, scy, rr, 0, Math.PI * 2); ctx.stroke();
+          for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3 + this.t; ctx.beginPath(); ctx.moveTo(scx + Math.cos(a) * rr, scy + Math.sin(a) * rr); ctx.lineTo(scx - Math.cos(a) * rr, scy - Math.sin(a) * rr); ctx.stroke(); }
+          ctx.restore();
+        }
+      }
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
       for (const w of this.whales) w.draw(ctx, cx, cy, this.t);
       for (const k of this.krakens) k.draw(ctx, cx, cy, this.t);
@@ -671,6 +786,8 @@ export class Game {
       if (this.relic && !this.relic.taken) this.relic.draw(ctx, cx, cy, this.t);
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
+      for (const n of this.nets) n.draw(ctx, cx, cy);
+      for (const ch of this.charges) ch.draw(ctx, cx, cy);
       // Depth darkening — the deep swallows the light (drawn under the diver).
       if (this.zone === 'belly') {
         const beat = 0.30 + 0.10 * Math.sin(this.t * 2.2) + 0.04 * Math.sin(this.t * 4.4);
@@ -690,6 +807,22 @@ export class Game {
       ctx.strokeStyle = `rgba(143,230,255,${a})`; ctx.lineWidth = 3;
       ctx.fillStyle = `rgba(143,230,255,${a * 0.22})`;
       ctx.beginPath(); ctx.arc(sx, sy, this.diver.radius + 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // Shock-prod discharge: a crackling electric ring around the diver.
+    if (this.shockT > 0 && this.state !== 'menu') {
+      const sx = this.diver.x - cx, sy = this.diver.y - cy;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.shockT / 0.28);
+      ctx.strokeStyle = PAL.gateGlow; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        const rr = SHOCK.radius * (0.9 + 0.14 * Math.sin(a * 6 + this.t * 40));
+        const px = sx + Math.cos(a) * rr, py = sy + Math.sin(a) * rr;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.stroke();
       ctx.restore();
     }
 
@@ -752,6 +885,9 @@ export class Game {
           this.boat.contains(this.diver) && this.canSail && this.carried === 0) {
         btns.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
       }
+      if (this.state === 'playing' && this.weapons.length > 1) {
+        btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
+      }
     }
     this._touchBtns = btns;
     this.input.touchButtons = btns;
@@ -775,6 +911,9 @@ export class Game {
       this._text(this.muted ? '🔇' : '🔊', cx, cy + 1, 16, PAL.hudText, 'center', 'middle');
     } else if (b.id === 'sail') {
       this._text('⛵ SAIL ON', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+    } else if (b.id === 'weapon') {
+      this._text(WEAPON_INFO[this.weapon].glyph, cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
+      this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     }
   }
 
@@ -806,16 +945,18 @@ export class Game {
     }
     let harpIconX = bx + 8 + shownLives * 22;
     if (this.lives > 6) { this._text(`+${this.lives - 6}`, harpIconX, by + bh + 22, 12, PAL.diver, 'left', 'middle', true); harpIconX += 24; }
-    ctx.save();
-    ctx.translate(harpIconX + 14, by + bh + 22);
-    ctx.globalAlpha = this.fireCd > 0 ? 0.3 : 1;
-    ctx.strokeStyle = PAL.harpoon; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(6, 0); ctx.stroke();
-    ctx.fillStyle = PAL.harpoonTip;
-    ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4); ctx.closePath(); ctx.fill();
+    // Current weapon chip (glyph + name), dimmed while on cooldown; the name
+    // flashes cyan briefly after a swap.
+    const wInfo = WEAPON_INFO[this.weapon];
+    const wy2 = by + bh + 22;
+    ctx.save(); ctx.globalAlpha = this.fireCd > 0 ? 0.5 : 1;
+    this._text(wInfo.glyph, harpIconX + 12, wy2, 16, PAL.harpoonTip, 'center', 'middle');
+    this._text(wInfo.name, harpIconX + 24, wy2, 12, this.weaponSwapT > 0 ? PAL.air : '#bcd3e6', 'left', 'middle', true);
+    const nameW = this.ctx.measureText(wInfo.name).width;
     ctx.restore();
+    if (this.weapons.length > 1) this._text('◂ Q E ▸', harpIconX + 30 + nameW, wy2, 10, 'rgba(150,190,220,0.6)', 'left', 'middle');
     // Active buff timers.
-    let buffX = harpIconX + 34;
+    let buffX = harpIconX + 30 + nameW + 54;
     const buff = (label, secs, col) => { this._text(`${label} ${Math.ceil(secs)}s`, buffX, by + bh + 22, 12, col, 'left', 'middle', true); buffX += this.ctx.measureText(`${label} ${Math.ceil(secs)}s`).width + 14; };
     if (this.multiFireT > 0) buff('✸×3', this.multiFireT, PAL.harpoonTip);
     if (this.shieldT > 0) buff('🛡', this.shieldT, PAL.gateGlow);
@@ -1014,7 +1155,7 @@ export class Game {
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
-    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap / A   ·   Pause: P / Start', cx, 452, 13, '#9fc6e0', 'center', 'middle');
+    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap / A   ·   Weapons: Q / E / Y   ·   Pause: P / Start', cx, 452, 13, '#9fc6e0', 'center', 'middle');
     this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
   }
