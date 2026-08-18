@@ -35,16 +35,20 @@ resize();
 // Menus/pause vs. firing. During play, Space/F/click fire the harpoon; on the
 // menus they start/resume. (Pause is P/Esc, handled inside the game.)
 function action() { audio.ensure(); audio.resume(); game.onAction(); }
+// Space/Enter/F: start/confirm on the menus. During play, firing is driven by
+// the held-fire state the game polls each frame (hold to aim), so we don't fire
+// here. e.repeat is ignored so autorepeat can't spam confirms.
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyF') {
     e.preventDefault();
+    if (e.repeat) return;
     audio.ensure(); audio.resume();
-    if (game.state === 'playing') game.fire(); else action();
+    if (game.state !== 'playing') action();
   }
 });
 canvas.addEventListener('mousedown', () => {
   audio.ensure(); audio.resume();
-  if (game.state === 'playing') game.fire(); else game.onAction();
+  if (game.state !== 'playing') game.onAction();
 });
 // Touch: tap-to-fire is detected inside Input; a tap on the menus starts the game.
 // (Paused is resumed via the on-screen ▶ button, so tap-anywhere is limited to

@@ -19,7 +19,7 @@ import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -75,6 +75,8 @@ export class Game {
     this.weaponIdx = 0; this.weaponSwapT = 0;
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
+    // Hold-to-aim state.
+    this.aimLevel = 0; this.aiming = false; this.fireHeldT = 0; this.aimAngle = 0; this.aimTarget = null;
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
@@ -240,6 +242,8 @@ export class Game {
       if (this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel)
         items.push({ kind: 'upgrade', id: w, label: `${WEAPON_INFO[w].glyph} Upgrade ${WEAPON_INFO[w].name} → Lv${this.weaponLevel[w] + 1}`, cost: SHOP.weaponUpgradeBase * this.weaponLevel[w] });
     }
+    if (this.aimLevel < AIM.maxLevel)
+      items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: AIM.cost[this.aimLevel + 1] });
     if (this.tankLevel < SHOP.tankMaxLevel)
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: SHOP.tankBaseCost + this.tankLevel * SHOP.tankCostGrowth });
     items.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
@@ -267,6 +271,9 @@ export class Game {
     } else if (it.kind === 'tank') {
       this.tankLevel += 1; this.airMax += SHOP.tankBonus; this.air = this.airMax;
       this.puName = 'BIGGER TANK!'; this.puCol = PAL.air; this.puT = 1.6;
+    } else if (it.kind === 'aim') {
+      this.aimLevel += 1;
+      this.puName = `TARGETING Lv${this.aimLevel}`; this.puCol = PAL.gateGlow; this.puT = 1.6;
     }
     this.audio.bank();
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
@@ -412,7 +419,8 @@ export class Game {
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
     const id = this.weapon, lvl = this.weaponLevel[id];
-    this.fireCd = WEAPON_INFO[id].cd * (1 - 0.08 * (lvl - 1));
+    const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
+    this.fireCd = WEAPON_INFO[id].cd * (1 - 0.08 * (lvl - 1)) * fireMult;
     switch (id) {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
@@ -421,6 +429,24 @@ export class Game {
       case 'shock':    this._fireShock(lvl); break;
     }
   }
+
+  // Nearest live, un-snared threat (creature or kraken) within aim range.
+  _nearestThreat() {
+    const d = this.diver; let best = null, bd = AIM.range * AIM.range;
+    for (const cr of this.creatures) {
+      if (cr.dead || cr.snareT > 0) continue;
+      const dx = cr.x - d.x, dy = cr.y - d.y, dd = dx * dx + dy * dy;
+      if (dd < bd) { bd = dd; best = cr; }
+    }
+    for (const k of this.krakens) {
+      if (k.hp <= 0) continue;
+      const dx = k.x - d.x, dy = k.y - d.y, dd = dx * dx + dy * dy;
+      if (dd < bd) { bd = dd; best = k; }
+    }
+    return best;
+  }
+  _angleDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+  _angleToward(a, target, maxStep) { const d = this._angleDiff(a, target); return a + Math.max(-maxStep, Math.min(maxStep, d)); }
 
   _spear(angleOff = 0) {
     const d = this.diver, ca = Math.cos(angleOff), sa = Math.sin(angleOff);
@@ -502,7 +528,9 @@ export class Game {
     if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
     if (this.input.pressed('weaponPrev')) this._cycleWeapon(-1);
     this.weaponSwapT = Math.max(0, this.weaponSwapT - dt);
-    if (this.input.consumeTapFire()) this.fire();
+    // Fire: a quick tap/click/press shoots once; holding fire engages aim mode.
+    const firePress = this.input.firePress, tapFire = this.input.consumeTapFire();
+    if (firePress || tapFire) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
     // Speargun burst: fire the queued shots out over a few frames.
     if (this.burst > 0) {
@@ -520,8 +548,27 @@ export class Game {
     this.shockT = Math.max(0, this.shockT - dt);
     if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
-    const intent = this.input.vector();
+    // Hold-to-aim: after a brief hold, root the diver and lock the nearest
+    // threat; the aim swings toward it (rate rises with the Targeting upgrade)
+    // and auto-fires once lined up.
+    const holding = this.input.fireHeld();
+    this.fireHeldT = holding ? this.fireHeldT + dt : 0;
+    let intent = this.input.vector();
+    const threat = (holding && this.fireHeldT >= AIM.threshold) ? this._nearestThreat() : null;
+    this.aiming = !!threat; this.aimTarget = threat;
+    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position
+
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), this.speedT > 0 ? POWERUP.speedMult : 1);
+
+    if (this.aiming) {
+      const ta = Math.atan2(threat.y - this.diver.y, threat.x - this.diver.x);
+      const rate = AIM.baseRate + AIM.ratePerLevel * this.aimLevel;
+      this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
+      this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
+      if (Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol) this.fire();
+    } else {
+      this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);   // keep synced for a smooth engage
+    }
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
     this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
@@ -947,6 +994,23 @@ export class Game {
       ctx.closePath(); ctx.stroke();
       ctx.restore();
     }
+    // Hold-to-aim: guide line + a reticle locking onto the target.
+    if (this.aiming && this.aimTarget && this.state === 'playing') {
+      const dx = this.diver.x - cx, dy = this.diver.y - cy;
+      const tx = this.aimTarget.x - cx, ty = this.aimTarget.y - cy;
+      const ta = Math.atan2(this.aimTarget.y - this.diver.y, this.aimTarget.x - this.diver.x);
+      const locked = Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol;
+      ctx.save();
+      ctx.strokeStyle = locked ? PAL.danger : 'rgba(230,245,255,0.55)'; ctx.lineWidth = locked ? 2 : 1.4;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + Math.cos(this.aimAngle) * 300, dy + Math.sin(this.aimAngle) * 300); ctx.stroke();
+      ctx.setLineDash([]);
+      const rr = (this.aimTarget.radius || 20) + 8;
+      ctx.strokeStyle = locked ? PAL.danger : PAL.gateGlow; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tx, ty, rr, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * rr, ty + Math.sin(a) * rr); ctx.lineTo(tx + Math.cos(a) * (rr + 6), ty + Math.sin(a) * (rr + 6)); ctx.stroke(); }
+      ctx.restore();
+    }
 
     // Vignette — subtle at the surface, closing in with depth.
     if (this.state !== 'menu') {
@@ -1008,8 +1072,9 @@ export class Game {
           this.boat.contains(this.diver) && this.canSail && this.carried === 0) {
         btns.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
       }
-      if (this.state === 'playing' && this.weapons.length > 1) {
-        btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
+      if (this.state === 'playing') {
+        btns.push({ id: 'aim', x: W - 124, y: H - 74, w: 52, h: 44 });   // hold to aim
+        if (this.weapons.length > 1) btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
       }
       // At a station with loot banked: a SHOP button.
       const atStation = this.state === 'playing' && this.zone === 'reef' && this.carried === 0 &&
@@ -1028,7 +1093,7 @@ export class Game {
   // Draw one on-screen touch button with its icon/label.
   _touchBtn(b) {
     const ctx = this.ctx;
-    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail';
+    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive);
     ctx.save();
     ctx.fillStyle = active ? 'rgba(18,58,88,0.85)' : 'rgba(6,22,38,0.72)';
     ctx.strokeStyle = 'rgba(120,200,255,0.35)'; ctx.lineWidth = 1.5;
@@ -1048,6 +1113,9 @@ export class Game {
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     } else if (b.id === 'shop') {
       this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+    } else if (b.id === 'aim') {
+      this._text('🎯', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
+      this._text('HOLD', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     }
   }
 
@@ -1293,7 +1361,7 @@ export class Game {
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
-    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap / A   ·   Weapons: Q / E / Y   ·   Pause: P / Start', cx, 452, 13, '#9fc6e0', 'center', 'middle');
+    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap   ·   Hold fire: auto-aim   ·   Weapons: Q / E   ·   Shop: B', cx, 452, 13, '#9fc6e0', 'center', 'middle');
     this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
   }
