@@ -29,6 +29,66 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v15 — dark caves & flares
+
+- **Dark caves** (`config.DARKZONE`, `game.darkZones`): 1–2 pitch-black chambers
+  per reef (deep chambers). While the diver is inside one, the scene is blacked
+  out except a small pool of light around the diver (radial-gradient overlay,
+  drawn before the vignette). They hide richer loot — extra gems, a flare and a
+  supply crate.
+- **Flares** (`config.FLARE`): a consumable light source. Press **G** / gamepad
+  LT / the 🔥 touch button to light one — it widens the visible radius to
+  `litRadius` and warms it for `duration` seconds. Start with a couple, buy packs
+  at the shop, or pick up flares found in the world (a `flare` power-up type,
+  often stashed in the dark rooms). HUD shows the flare count and a "light a
+  flare" prompt in the dark; part of the zone snapshot.
+
+## v14 — help screen + quality-of-life
+
+- **Help screen** (`state 'help'`, `game.HELP_PAGES`/`_helpScreen`): a paged
+  HOW TO PLAY overlay (Controls, Weapons, Stay Alive, Gold & Gear) reachable
+  with **H** or the ❔ button from the menu, pause and game-over. Page with
+  ←/→ (or Q/E, gamepad, on-screen ‹ ›); close with H/Esc/Close.
+- **Fire grace** (`game._fireGrace`): entering play from the menu, a shop or
+  pause sets a 0.3 s grace so the fire button press that started the game /
+  closed the menu no longer wastes a shot (covers held keys, gamepad, mouse and
+  touch taps).
+- **Translucent minimap** (`game._minimap` `_mapAlpha`): the map is drawn
+  semi-transparent and eases to a much lower opacity when the diver's on-screen
+  position overlaps it, so it never hides the action.
+- **Diver aim pose** (`sprites.drawDiver` `aimA`): while aiming, the diver braces
+  and levels the harpoon along the aim direction. Weapon-swap keys shown as
+  `[Q][E]` keycaps. Game-over distinguishes **YOU DIED** (a creature/hazard,
+  `deathCause`) from **OUT OF AIR**; the best score also records the reef reached.
+
+## v13 — combat & economy overhaul
+
+Rebalances and reworks the v11/v12 weapon set (superseding some numbers there).
+
+- **Limited-ammo harpoon, unlimited net** (`config.HARPOON` ammo, `game.harpoonAmmo`):
+  both are owned from the start. The **net gun is the free, unlimited fallback**
+  (snare/utility); the **harpoon is a scarce kill-shot** — start with 10, carry
+  up to 20. Buy packs, find floor pickups (an `ammo` power-up, 1–5), or upgrade
+  capacity. The harpoon is now deliberately slow (cooldown 2.6 s, floored at 2.0 s
+  even fully upgraded); the aim swing ramps gently with the Targeting upgrade.
+- **Shock rod → chain lightning** (`config.SHOCK`): fires a lightning bolt at the
+  nearest creature that arcs to nearby ones — **+1 target per upgrade level**.
+  Runs on a **battery** that drains per zap and recharges slowly (can't be
+  spammed). Jagged-bolt render + HUD battery gauge.
+- **Depth charge → hand-detonated mine** (`config.CHARGE`, `entities/weapons.js`):
+  a **scarce, expensive** consumable (start 3, capacity upgrades add 1 slot up to
+  10). **Click to throw** (it sinks and settles), **click again to detonate**
+  (12 s safety fuse otherwise). Blast reaches **10× the charge's size** and
+  **hurts the diver too** — caught in your own blast costs 50 % of current air.
+  Expanding shockwave ring.
+- **Doubling upgrade prices** (`game._dblCost`): every upgrade (weapon levels,
+  targeting, air tank, harpoon/charge capacity) doubles in cost each level;
+  consumable refills (harpoon/charge/flare packs) stay flat.
+- **Per-reef oxygen penalty** (`config.GAME.oxygenPenaltyPerReef`): air drains
+  +10 % per reef (capped) on top of the creature-count/size scaling.
+- **Pearls start deeper** (`config.GAME.pearlMinDepthFrac`): clams only spawn
+  below ~16 % depth; shallow ledges hold chests instead.
+
 ## v12 — hold-to-aim auto-targeting
 
 - **Hold-to-aim** (`config.AIM`, `game._nearestThreat`/`_angleToward`, unified
