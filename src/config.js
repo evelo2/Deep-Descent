@@ -88,6 +88,18 @@ export const BUBBLE = { air: 22, rise: 44, r: 18, life: 7 };
 // Water currents that sweep the diver along.
 export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 
+// Gold economy: banking carried loot at the boat or a dive bell yields full
+// score points plus gold (a fraction of the value) to spend on gear.
+export const GOLD = { rate: 0.5 };       // gold earned per point of loot banked
+
+// Dive bells: deep refuel/bank checkpoints so you don't have to surface.
+export const BELL = {
+  count: 2,          // attempted bells per reef
+  minDepthFrac: 0.42, // only place below this fraction of the world height
+  radius: 46,        // interaction radius (swim in to dock)
+  refillPerSec: 90,  // fast air refill while inside (tops you up quickly)
+};
+
 // Power-ups.
 export const POWERUP = {
   tankBonus: 30,         // extra max air per tank (persists for the run)
@@ -194,6 +206,10 @@ export const PAL = {
   anemone:     '#b06bff',
   anemoneTip:  '#ffd1f5',
   polyp:       '#66f0d8',
+  bell:        '#c8a24a',
+  bellDark:    '#7c5f28',
+  bellLight:   '#ffe9a6',
+  bellGlass:   '#ffdf8f',
 };
 
 export const KEYMAP = {
