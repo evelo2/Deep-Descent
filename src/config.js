@@ -39,6 +39,11 @@ export const GAME = {
   startLives: 3,
   invulnAfterHit: 1.6,  // seconds of mercy invulnerability
   hitCost: 1,           // lives lost per hit
+  // Each new reef bites a little harder: air drains this much faster per reef
+  // (10% each), capped, on top of the creature-count/size scaling.
+  oxygenPenaltyPerReef: 0.10,
+  oxygenPenaltyCap: 8,
+  pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
 };
 
 // 2D cave system. A grid is carved by "miner" agents into tunnels, drop-offs
@@ -99,9 +104,11 @@ export const WEAPON_ORDER = ['harpoon', 'net', 'speargun', 'charge', 'shock'];
 // first appears in the shop (harpoon is owned from the start). Higher reefs
 // surface stronger (and pricier) gear.
 export const WEAPON_INFO = {
-  harpoon:  { name: 'HARPOON',      cd: 0.52, glyph: '➤', cost: 0,   minReef: 0 },
+  // The harpoon is a slow, deliberate weapon: even fully upgraded it fires at
+  // most once every 2s (minCd floor), so aimed single shots matter.
+  harpoon:  { name: 'HARPOON',      cd: 2.6,  minCd: 2.0, glyph: '➤', cost: 0,   minReef: 0 },
   net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸', cost: 150, minReef: 1 },
-  shock:    { name: 'SHOCK PROD',   cd: 0.70, glyph: '⚡', cost: 300, minReef: 2 },
+  shock:    { name: 'SHOCK ROD',    cd: 0.55, glyph: '⚡', cost: 300, minReef: 2 },
   speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙', cost: 260, minReef: 2 },
   charge:   { name: 'DEPTH CHARGE', cd: 1.15, glyph: '💣', cost: 520, minReef: 3 },
 };
@@ -117,7 +124,15 @@ export const SHOP = {
 };
 export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
 export const CHARGE = { speed: 250, gravity: 240, up: 70, fuse: 1.5, blast: 115 };
-export const SHOCK = { radius: 125, stun: 3.5, knock: 150 };
+// Shock rod: fires a lightning bolt at the nearest creature that then arcs to
+// nearby ones (one extra target per upgrade level). Drains a battery that
+// recharges slowly, so it can't be spammed.
+export const SHOCK = {
+  primaryRange: 320,   // range to the first struck creature
+  chainRange: 240,     // arc distance from one creature to the next
+  stun: 3.5, knock: 150,
+  batteryMax: 100, cost: 40, recharge: 11,   // ~2-3 zaps on a full battery, ~9s to refill
+};
 export const SPEARGUN = { shots: 3, interval: 0.07, spread: 0.06 };
 
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
@@ -150,7 +165,7 @@ export const POWERUP = {
 export const AIM = {
   threshold: 0.14,        // seconds of hold before aim mode engages
   baseRate: 1.5,          // rad/s the aim swings toward target at level 0 (deliberately slow)
-  ratePerLevel: 2.4,      // extra rad/s per targeting level
+  ratePerLevel: 0.8,      // extra rad/s per targeting level (gentle — high upgrades stay measured)
   fireMultPerLevel: 0.78, // cooldown ×= this per targeting level (faster fire)
   lockTol: 0.17,          // radians within which it will fire
   range: 720,             // only auto-target threats within this range
