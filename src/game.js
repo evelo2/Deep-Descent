@@ -79,6 +79,7 @@ export class Game {
     this.aimLevel = 0; this.aiming = false; this.fireHeldT = 0; this.aimAngle = 0; this.aimTarget = null;
     this._prevHolding = false; this._didAim = false;
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
+    this.shockBattery = SHOCK.batteryMax; this.shockBolts = [];
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
@@ -96,9 +97,11 @@ export class Game {
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
-    // Clams and chests rest on cave-floor ledges, opening and closing.
+    // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
+    // (clams) only appear below a minimum depth — the shallows hold chests.
+    const pearlMinDepth = WH * GAME.pearlMinDepthFrac;
     for (const f of spread(C.floors(), 34, 150)) {
-      if (Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
+      if (f.y > pearlMinDepth && Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
       else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
     }
     // Scattered coins & gems drift in open water.
@@ -419,9 +422,10 @@ export class Game {
   // key stat per weapon and shaves a little off every cooldown.
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
-    const id = this.weapon, lvl = this.weaponLevel[id];
+    const id = this.weapon, lvl = this.weaponLevel[id], info = WEAPON_INFO[id];
+    if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
-    this.fireCd = WEAPON_INFO[id].cd * (1 - 0.08 * (lvl - 1)) * fireMult;
+    this.fireCd = Math.max(info.minCd || 0, info.cd * (1 - 0.08 * (lvl - 1)) * fireMult);
     switch (id) {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
@@ -470,21 +474,32 @@ export class Game {
     this.charges.push(ch);
     this.audio.fire();
   }
+  // Shock rod: strike the nearest creature with lightning, then arc to nearby
+  // ones — one extra target per upgrade level. Drains the battery.
   _fireShock(lvl = 1) {
-    const d = this.diver, R = SHOCK.radius * (1 + 0.2 * (lvl - 1));
-    this.shockR = R;
-    for (const cr of this.creatures) {
-      if (cr.dead) continue;
-      const dist = Math.hypot(cr.x - d.x, cr.y - d.y);
-      if (dist < R) {
-        cr.snareT = Math.max(cr.snareT || 0, SHOCK.stun * (1 + 0.3 * (lvl - 1)));
-        const a = Math.atan2(cr.y - d.y, cr.x - d.x);          // knock outward
-        if (cr.vx !== undefined) { cr.vx += Math.cos(a) * SHOCK.knock; cr.vy += Math.sin(a) * SHOCK.knock; }
-        this.particles.sparkle(cr.x, cr.y, PAL.gateGlow, 8);
+    this.shockBattery -= SHOCK.cost;
+    const maxTargets = lvl;                 // level 1 → 1, each upgrade → +1 arc
+    const used = new Set();
+    const bolts = [];
+    let from = { x: this.diver.x, y: this.diver.y };
+    for (let n = 0; n < maxTargets; n++) {
+      const reach = n === 0 ? SHOCK.primaryRange : SHOCK.chainRange;
+      let best = null, bd = reach * reach;
+      for (const cr of this.creatures) {
+        if (cr.dead || used.has(cr)) continue;
+        const dd = (cr.x - from.x) ** 2 + (cr.y - from.y) ** 2;
+        if (dd < bd) { bd = dd; best = cr; }
       }
+      if (!best) break;
+      used.add(best);
+      bolts.push({ x1: from.x, y1: from.y, x2: best.x, y2: best.y });
+      best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
+      const a = Math.atan2(best.y - from.y, best.x - from.x);
+      if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
+      this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+      from = best;
     }
-    this.shockT = 0.28;
-    this.particles.sparkle(d.x, d.y, PAL.gateGlow, 20);
+    this.shockBolts = bolts; this.shockT = 0.22;
     this.audio.fire();
   }
 
@@ -547,6 +562,7 @@ export class Game {
     this.speedT = Math.max(0, this.speedT - dt);
     this.magnetT = Math.max(0, this.magnetT - dt);
     this.shockT = Math.max(0, this.shockT - dt);
+    this.shockBattery = Math.min(SHOCK.batteryMax, this.shockBattery + SHOCK.recharge * dt);   // slow recharge
     if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
     // Hold-to-aim: after a brief hold, root the diver and lock the nearest
@@ -613,7 +629,8 @@ export class Game {
       if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
-      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * dt;
+      const oxyMult = 1 + GAME.oxygenPenaltyPerReef * Math.min(this.reef - 1, GAME.oxygenPenaltyCap);   // deeper reefs = less air
+      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
@@ -987,21 +1004,26 @@ export class Game {
       ctx.beginPath(); ctx.arc(sx, sy, this.diver.radius + 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
-    // Shock-prod discharge: a crackling electric ring around the diver.
-    if (this.shockT > 0 && this.state !== 'menu') {
-      const sx = this.diver.x - cx, sy = this.diver.y - cy;
+    // Shock rod: jagged lightning bolts arcing diver → target → target.
+    if (this.shockT > 0 && this.shockBolts && this.shockBolts.length && this.state !== 'menu') {
       ctx.save();
-      ctx.globalAlpha = Math.min(1, this.shockT / 0.28);
-      ctx.strokeStyle = PAL.gateGlow; ctx.lineWidth = 2;
-      ctx.beginPath();
-      const shockR = this.shockR || SHOCK.radius;
-      for (let i = 0; i <= 24; i++) {
-        const a = (i / 24) * Math.PI * 2;
-        const rr = shockR * (0.9 + 0.14 * Math.sin(a * 6 + this.t * 40));
-        const px = sx + Math.cos(a) * rr, py = sy + Math.sin(a) * rr;
-        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      ctx.globalAlpha = Math.min(1, this.shockT / 0.22);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const b of this.shockBolts) {
+        const x1 = b.x1 - cx, y1 = b.y1 - cy, x2 = b.x2 - cx, y2 = b.y2 - cy;
+        const segs = 6, nx = -(y2 - y1), ny = (x2 - x1), nl = Math.hypot(nx, ny) || 1;
+        const path = (jitter, w, col) => {
+          ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1);
+          for (let i = 1; i < segs; i++) {
+            const tt = i / segs;
+            const off = (Math.sin(i * 12.9 + this.t * 60) * jitter);
+            ctx.lineTo(x1 + (x2 - x1) * tt + (nx / nl) * off, y1 + (y2 - y1) * tt + (ny / nl) * off);
+          }
+          ctx.lineTo(x2, y2); ctx.stroke();
+        };
+        path(9, 5, 'rgba(143,230,255,0.35)');   // glow
+        path(9, 2, '#eaffff');                  // core
       }
-      ctx.closePath(); ctx.stroke();
       ctx.restore();
     }
     // Hold-to-aim: guide line + a reticle locking onto the target.
@@ -1184,6 +1206,15 @@ export class Game {
 
     // Gold purse (spendable currency, earned when you bank loot).
     this._text(`💰 ${this.gold}`, bx + 8, by + bh + 46, 15, PAL.gold, 'left', 'middle', true);
+
+    // Shock-rod battery gauge (when owned) — drains on use, recharges slowly.
+    if (this.owned.has('shock')) {
+      const byb = by + bh + 66, bwb = 92, bhb = 7, bxb = bx + 24;
+      this._text('⚡', bx + 10, byb + bhb / 2, 12, PAL.gateGlow, 'left', 'middle');
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.roundRect(bxb, byb, bwb, bhb, 3); ctx.fill();
+      const bf = this.shockBattery / SHOCK.batteryMax;
+      ctx.fillStyle = bf < 0.3 ? '#ff9a6b' : PAL.gateGlow; ctx.beginPath(); ctx.roundRect(bxb, byb, Math.max(2, bwb * bf), bhb, 3); ctx.fill();
+    }
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
