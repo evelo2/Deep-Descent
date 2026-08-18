@@ -69,15 +69,22 @@ export class DepthCharge {
     this.x = x + (dx / m) * 16; this.y = y + (dy / m) * 16;
     this.vx = (dx / m) * CHARGE.speed;
     this.vy = (dy / m) * CHARGE.speed - CHARGE.up;   // a little lob before it sinks
-    this.fuse = CHARGE.fuse; this.blast = CHARGE.blast;
-    this.r = 9; this.dead = false; this.exploded = false; this.t = 0;
+    this.fuse = CHARGE.safetyFuse; this.size = CHARGE.size; this.blast = CHARGE.size * 10;
+    this.r = this.size; this.dead = false; this.exploded = false; this.settled = false; this.t = 0;
   }
+  // Manual trigger (the player's second click) — or the safety fuse.
+  detonate() { this.exploded = true; this.dead = true; }
   update(dt, cave) {
     this.t += dt;
-    this.vy += CHARGE.gravity * dt; this.vx *= 0.995;
-    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (!this.settled) {
+      const px = this.x, py = this.y;
+      this.vy += CHARGE.gravity * dt; this.vx *= 0.99;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      // Rest on the first rock it meets instead of blowing up on contact.
+      if (cave && cave.isSolid(this.x, this.y)) { this.x = px; this.y = py; this.vx = this.vy = 0; this.settled = true; }
+    }
     this.fuse -= dt;
-    if (this.fuse <= 0 || (cave && cave.isSolid(this.x, this.y))) { this.exploded = true; this.dead = true; }
+    if (this.fuse <= 0) this.detonate();   // safety: don't leave a live charge forever
   }
   draw(ctx, camX, camY) {
     ctx.save();
@@ -88,10 +95,10 @@ export class DepthCharge {
     // body
     ctx.fillStyle = '#2b3540'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
     ctx.fillStyle = '#3c4854'; ctx.beginPath(); ctx.arc(-2, -2, 3, 0, TAU); ctx.fill();
-    // blinking fuse light (faster as the fuse runs down)
-    const blink = Math.sin(this.t * (10 + (CHARGE.fuse - this.fuse) * 12)) > 0;
-    ctx.fillStyle = blink ? PAL.danger : '#611';
-    ctx.beginPath(); ctx.arc(0, -11, 2.4, 0, TAU); ctx.fill();
+    // armed light — blinks urgently once it's settled and waiting for the trigger
+    const rate = this.settled ? 16 : 8;
+    ctx.fillStyle = Math.sin(this.t * rate) > 0 ? PAL.danger : '#611';
+    ctx.beginPath(); ctx.arc(0, -11, 2.6, 0, TAU); ctx.fill();
     ctx.restore();
   }
 }

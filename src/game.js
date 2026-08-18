@@ -48,7 +48,7 @@ export class Game {
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
-    this.harpoons = []; this.nets = []; this.charges = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
+    this.harpoons = []; this.nets = []; this.charges = []; this.explosions = []; this.vents = []; this.wrecks = []; this.cave = null; this.flora = null;
     this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
@@ -76,6 +76,8 @@ export class Game {
     this.weapons = WEAPON_ORDER.filter((w) => this.owned.has(w));
     this.weaponIdx = 0; this.weaponSwapT = 0;
     this.harpoonAmmo = HARPOON.startAmmo; this.harpoonMax = HARPOON.baseMax; this.harpoonCapLevel = 0;
+    this.chargeAmmo = CHARGE.startAmmo; this.chargeMax = CHARGE.baseMax; this.chargeCapLevel = 0;
+    this.armedCharge = null; this.explosions = [];
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
     // Hold-to-aim state.
@@ -222,7 +224,7 @@ export class Game {
       this.owned.add(w); this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
       this.puName = `${WEAPON_INFO[w].name}!`; this.puCol = PAL.gold; this.puT = 1.7;
     } else {
-      const upg = WEAPON_ORDER.filter((w) => this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
+      const upg = WEAPON_ORDER.filter((w) => w !== 'charge' && this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
       if (upg.length) {
         const w = upg[(Math.random() * upg.length) | 0]; this.weaponLevel[w] += 1;
         this.puName = `${WEAPON_INFO[w].name} Lv${this.weaponLevel[w]}`; this.puCol = PAL.air; this.puT = 1.7;
@@ -249,20 +251,28 @@ export class Game {
         items.push({ kind: 'weapon', id: w, label: `${info.glyph} Unlock ${info.name}`, cost: info.cost });
     }
     for (const w of WEAPON_ORDER) {
+      if (w === 'charge') continue;   // the depth charge upgrades capacity, not level
       if (this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel)
-        items.push({ kind: 'upgrade', id: w, label: `${WEAPON_INFO[w].glyph} Upgrade ${WEAPON_INFO[w].name} → Lv${this.weaponLevel[w] + 1}`, cost: SHOP.weaponUpgradeBase * this.weaponLevel[w] });
+        items.push({ kind: 'upgrade', id: w, label: `${WEAPON_INFO[w].glyph} Upgrade ${WEAPON_INFO[w].name} → Lv${this.weaponLevel[w] + 1}`, cost: this._dblCost(SHOP.weaponUpgradeBase, this.weaponLevel[w] - 1) });
     }
     if (this.harpoonAmmo < this.harpoonMax)
       items.push({ kind: 'harpoons', id: 'harpoons', label: `➤ Harpoons ×${SHOP.harpoonPack}  (${this.harpoonAmmo}/${this.harpoonMax})`, cost: SHOP.harpoonPackCost });
     if (this.harpoonCapLevel < SHOP.harpoonCapMaxLevel)
-      items.push({ kind: 'harpooncap', id: 'harpooncap', label: `➤ Harpoon Capacity +${SHOP.harpoonCapStep} (Lv${this.harpoonCapLevel + 1})`, cost: SHOP.harpoonCapCost[this.harpoonCapLevel + 1] });
+      items.push({ kind: 'harpooncap', id: 'harpooncap', label: `➤ Harpoon Capacity +${SHOP.harpoonCapStep} (Lv${this.harpoonCapLevel + 1})`, cost: this._dblCost(SHOP.harpoonCapBase, this.harpoonCapLevel) });
+    if (this.owned.has('charge') && this.chargeAmmo < this.chargeMax)
+      items.push({ kind: 'charges', id: 'charges', label: `💣 Depth Charge ×1  (${this.chargeAmmo}/${this.chargeMax})`, cost: CHARGE.refillCost });
+    if (this.owned.has('charge') && this.chargeMax < CHARGE.capMax)
+      items.push({ kind: 'chargecap', id: 'chargecap', label: `💣 Charge Capacity +1 (${this.chargeMax}→${this.chargeMax + 1})`, cost: this._dblCost(CHARGE.capCostBase, this.chargeCapLevel) });
     if (this.aimLevel < AIM.maxLevel)
-      items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: AIM.cost[this.aimLevel + 1] });
+      items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: this._dblCost(AIM.baseCost, this.aimLevel) });
     if (this.tankLevel < SHOP.tankMaxLevel)
-      items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: SHOP.tankBaseCost + this.tankLevel * SHOP.tankCostGrowth });
+      items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     items.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
     return items;
   }
+
+  // Upgrade prices double each level: base at level 0, 2× at level 1, 4× at 2…
+  _dblCost(base, level) { return Math.round(base * Math.pow(2, level)); }
 
   _shopRow(i) { const w = 470, x = (W - w) / 2, y = 178 + i * 46; return { x, y, w, h: 40 }; }
 
@@ -293,6 +303,11 @@ export class Game {
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
       this.puName = `HARPOON CAP ${this.harpoonMax}`; this.puCol = PAL.harpoon; this.puT = 1.6;
+    } else if (it.kind === 'charges') {
+      this.chargeAmmo = Math.min(this.chargeMax, this.chargeAmmo + 1);
+    } else if (it.kind === 'chargecap') {
+      this.chargeCapLevel += 1; this.chargeMax = Math.min(CHARGE.capMax, this.chargeMax + 1);
+      this.puName = `CHARGE CAP ${this.chargeMax}`; this.puCol = PAL.puffer; this.puT = 1.6;
     }
     this.audio.bank();
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
@@ -444,7 +459,9 @@ export class Game {
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
     const id = this.weapon, lvl = this.weaponLevel[id], info = WEAPON_INFO[id];
+    const armed = this.armedCharge && !this.armedCharge.dead;
     if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }        // out of harpoons
+    if (id === 'charge' && !armed && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; } // out of charges
     if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
     this.fireCd = Math.max(info.minCd || 0, info.cd * (1 - 0.08 * (lvl - 1)) * fireMult);
@@ -452,7 +469,10 @@ export class Game {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
       case 'speargun': this.burst = SPEARGUN.shots + (lvl - 1); this.burstT = 0; break;   // +1 shot per level
-      case 'charge':   this._fireCharge(lvl); break;
+      case 'charge':   // first click throws, second click detonates
+        if (armed) { this.armedCharge.detonate(); this.armedCharge = null; }
+        else { this._fireCharge(); this.chargeAmmo -= 1; }
+        break;
       case 'shock':    this._fireShock(lvl); break;
     }
   }
@@ -492,11 +512,11 @@ export class Game {
     this.nets.push(new Net(d.x, d.y, d.aimX, d.aimY));
     this.audio.fire();
   }
-  _fireCharge(lvl = 1) {
+  _fireCharge() {
     const d = this.diver;
     const ch = new DepthCharge(d.x, d.y, d.aimX, d.aimY);
-    ch.blast = CHARGE.blast * (1 + 0.3 * (lvl - 1));   // bigger blast when upgraded
     this.charges.push(ch);
+    this.armedCharge = ch;
     this.audio.fire();
   }
   // Shock rod: strike the nearest creature with lightning, then arc to nearby
@@ -676,6 +696,9 @@ export class Game {
     for (const h of this.harpoons) h.update(dt, this.cave);
     for (const n of this.nets) n.update(dt, this.cave);
     for (const ch of this.charges) { ch.update(dt, this.cave); if (ch.exploded) this._explode(ch); }
+    if (this.armedCharge && this.armedCharge.dead) this.armedCharge = null;
+    for (const ex of this.explosions) { ex.t += dt; ex.r += (ex.maxR - ex.r) * Math.min(1, dt * 12); }
+    this.explosions = this.explosions.filter((e) => e.t < 0.4);
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
     for (const cr of this.crates) { cr.update(dt, this.t); if (this.zone === 'reef' && cr.reached(this.diver)) { cr.taken = true; this._openCrate(); } }
@@ -821,11 +844,20 @@ export class Game {
 
   // Depth-charge blast: kill every creature in range and chip any kraken.
   _explode(ch) {
-    this.shake = Math.max(this.shake, 10); this.flash = Math.max(this.flash, 0.3);
+    if (this.armedCharge === ch) this.armedCharge = null;
+    this.shake = Math.max(this.shake, 14); this.flash = Math.max(this.flash, 0.4);
     this.particles.sparkle(ch.x, ch.y, PAL.puffer, 40);
     this.particles.sparkle(ch.x, ch.y, PAL.gold, 20);
+    this.explosions.push({ x: ch.x, y: ch.y, r: ch.size, maxR: ch.blast, t: 0 });   // expanding shockwave
     this.audio.kill();
     const R = ch.blast;
+    // Caught in your own blast? Lose half your air.
+    const d = this.diver;
+    if (Math.hypot(d.x - ch.x, d.y - ch.y) < R + d.radius) {
+      this.air = Math.max(0, this.air * (1 - CHARGE.diverAirLoss));
+      this.flash = 1; this.shake = Math.max(this.shake, 16); this.diver.hurtT = 0.4;
+      this.particles.sparkle(d.x, d.y, PAL.airLow, 20);
+    }
     for (const cr of this.creatures) {
       if (!cr.dead && Math.hypot(cr.x - ch.x, cr.y - ch.y) < R + (cr.radius || 14)) {
         cr.dead = true; this.score += cr.points;
@@ -1008,6 +1040,15 @@ export class Game {
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
       for (const n of this.nets) n.draw(ctx, cx, cy);
       for (const ch of this.charges) ch.draw(ctx, cx, cy);
+      for (const ex of this.explosions) {
+        const a = Math.max(0, 1 - ex.t / 0.4);
+        ctx.save();
+        ctx.globalAlpha = a * 0.5; ctx.fillStyle = PAL.puffer;
+        ctx.beginPath(); ctx.arc(ex.x - cx, ex.y - cy, ex.r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = a; ctx.strokeStyle = '#ffe9a6'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(ex.x - cx, ex.y - cy, ex.r, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       // Depth darkening — the deep swallows the light (drawn under the diver).
       if (this.zone === 'belly') {
         const beat = 0.30 + 0.10 * Math.sin(this.t * 2.2) + 0.04 * Math.sin(this.t * 4.4);
@@ -1234,6 +1275,8 @@ export class Game {
     const lowAmmo = this.harpoonAmmo <= 3;
     this._text(`➤ ${this.harpoonAmmo}/${this.harpoonMax}`, bx + 104, by + bh + 46, 14,
       lowAmmo && Math.floor(this.t * 5) % 2 === 0 ? PAL.danger : (lowAmmo ? '#ff9a6b' : '#cfe0ee'), 'left', 'middle', true);
+    if (this.owned.has('charge'))
+      this._text(`💣 ${this.chargeAmmo}/${this.chargeMax}`, bx + 184, by + bh + 46, 14, this.chargeAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
 
     // Shock-rod battery gauge (when owned) — drains on use, recharges slowly.
     if (this.owned.has('shock')) {
@@ -1298,6 +1341,12 @@ export class Game {
     // Shop hint at any station once loot is banked.
     if (this.zone === 'reef' && this.carried === 0 && (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)))) {
       this._text(this.input.isTouch ? 'Tap ⚙ SHOP to spend gold on gear' : 'Press B to open the ⚙ SHOP', W / 2, H - 52, 13, PAL.gold, 'center', 'middle');
+    }
+
+    // Armed depth charge — remind the player they detonate with a second shot.
+    if (this.armedCharge && !this.armedCharge.dead) {
+      const blink = Math.floor(this.t * 4) % 2 === 0;
+      this._text('💣 FIRE AGAIN TO DETONATE', W / 2, H - 74, 14, blink ? PAL.danger : PAL.puffer, 'center', 'middle', true);
     }
 
     // Point the way to the exit in the special zones (they're easy to lose).
