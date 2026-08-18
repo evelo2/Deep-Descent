@@ -285,10 +285,11 @@ export class Game {
     this.oneUpT = Math.max(0, this.oneUpT - dt);
 
     this.input.poll();   // gamepad
+    this._syncTouchButtons();   // on-screen buttons for touch play
     // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
     if (this.input.consumeStart() && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
-    if (this.input.pressed('pause')) this.onAction();
-    if (this.input.pressed('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
+    if (this.input.pressed('pause') || this.input.consumeButton('pause')) this.onAction();
+    if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
 
     // Sailing to a new reef: brief transition, then a fresh cave.
     if (this.state === 'sailing') {
@@ -333,6 +334,8 @@ export class Game {
       // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
       if (this.carried === 0 && this.canSail && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
       else this.dockHold = 0;
+      // Touch players tap the on-screen SAIL ON button instead of holding ↑.
+      if (this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
       this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * dt;
@@ -660,7 +663,7 @@ export class Game {
 
     if (this.state === 'playing' || this.state === 'paused') this._hud();
     if (this.state === 'menu') this._menu();
-    if (this.state === 'paused') this._overlay('PAUSED', 'Press P / tap to resume');
+    if (this.state === 'paused') this._overlay('PAUSED', this.input.isTouch ? 'Press P or tap ▶ to resume' : 'Press P / click to resume');
     if (this.state === 'gameover') this._gameOverScreen();
   }
 
@@ -682,6 +685,47 @@ export class Game {
     // caption
     this._text(`SAILING TO REEF ${this.reef}…`, W / 2, H * 0.72, 26, PAL.hudText, 'center', 'middle', true);
     this._text(`SCORE ${this.score}   ·   LIVES ${this.lives}`, W / 2, H * 0.72 + 34, 15, '#bfe6ff', 'center', 'middle');
+  }
+
+  // ---- touch buttons ---------------------------------------------------
+  // Compute the on-screen buttons for the current state and hand their logical
+  // rects to Input for hit-testing. Only ever populated on touch devices, so
+  // desktop/gamepad play is untouched. Rects are fixed; visibility is by state.
+  _syncTouchButtons() {
+    const btns = [];
+    if (this.input.isTouch) {
+      if (this.state === 'playing' || this.state === 'paused') {
+        btns.push({ id: 'pause', x: 300, y: 8, w: 46, h: 34 });
+        btns.push({ id: 'mute', x: 352, y: 8, w: 46, h: 34 });
+      }
+      if (this.state === 'playing' && this.zone === 'reef' &&
+          this.boat.contains(this.diver) && this.canSail && this.carried === 0) {
+        btns.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
+      }
+    }
+    this._touchBtns = btns;
+    this.input.touchButtons = btns;
+  }
+
+  // Draw one on-screen touch button with its icon/label.
+  _touchBtn(b) {
+    const ctx = this.ctx;
+    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail';
+    ctx.save();
+    ctx.fillStyle = active ? 'rgba(18,58,88,0.85)' : 'rgba(6,22,38,0.72)';
+    ctx.strokeStyle = 'rgba(120,200,255,0.35)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 8); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    if (b.id === 'pause') {
+      ctx.fillStyle = PAL.hudText;
+      if (this.state === 'paused') { ctx.beginPath(); ctx.moveTo(cx - 5, cy - 7); ctx.lineTo(cx - 5, cy + 7); ctx.lineTo(cx + 8, cy); ctx.closePath(); ctx.fill(); }
+      else { ctx.fillRect(cx - 6, cy - 7, 4, 14); ctx.fillRect(cx + 2, cy - 7, 4, 14); }
+    } else if (b.id === 'mute') {
+      this._text(this.muted ? '🔇' : '🔊', cx, cy + 1, 16, PAL.hudText, 'center', 'middle');
+    } else if (b.id === 'sail') {
+      this._text('⛵ SAIL ON', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+    }
   }
 
   // ---- HUD -------------------------------------------------------------
@@ -754,7 +798,8 @@ export class Game {
       if (this.carried > 0) {
         this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
       } else if (this.canSail) {
-        this._text('◆ DOCKED — objective met. Hold ↑ to set sail to a new reef', W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
+        const sailHint = this.input.isTouch ? '◆ DOCKED — objective met. Tap ⛵ SAIL ON to reach a new reef' : '◆ DOCKED — objective met. Hold ↑ to set sail to a new reef';
+        this._text(sailHint, W / 2, H - 30, 15, PAL.gold, 'center', 'middle');
         if (this.dockHold > 0) {
           ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160, 6, 3); ctx.fill();
           ctx.fillStyle = PAL.gold; ctx.beginPath(); ctx.roundRect(W / 2 - 80, H - 16, 160 * Math.min(1, this.dockHold / 1.0), 6, 3); ctx.fill();
@@ -794,6 +839,7 @@ export class Game {
     }
 
     this._minimap();
+    if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
     ctx.restore();
   }
 

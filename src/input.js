@@ -2,7 +2,7 @@
 // {x, y} in [-1,1], plus edge-triggered actions (pause, mute, fire, start).
 // Gamepad support covers handheld PCs (Steam Deck, ROG Ally, etc.) and any
 // controller the browser exposes via the standard Gamepad API.
-import { KEYMAP } from './config.js';
+import { KEYMAP, WORLD } from './config.js';
 
 export class Input {
   constructor(canvas) {
@@ -14,6 +14,13 @@ export class Input {
     this._padEdges = new Set();   // one-shot gamepad actions (pause, mute)
     this._padStart = false;       // gamepad confirm/start edge (menus)
     this.canvas = canvas;
+    // On-screen touch buttons (pause/mute/sail): the game sets their logical
+    // rects each frame, we hit-test taps against them so touch-only players get
+    // the actions that are otherwise keyboard/gamepad-only.
+    this.isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+    this.touchButtons = [];       // [{id, x, y, w, h}] in logical (900×600) units
+    this._btnHits = new Set();    // one-shot: buttons tapped this frame
+    this._btnTouch = false;       // the active touch landed on a button
 
     addEventListener('keydown', (e) => {
       if (this._isGameKey(e.code)) e.preventDefault();
@@ -29,6 +36,8 @@ export class Input {
     const origin = { x: 0, y: 0, ts: 0, maxDrag: 0 };
     const onStart = (e) => {
       const t = e.changedTouches[0];
+      const hit = this._hitButton(t.clientX, t.clientY);
+      if (hit) { this._btnHits.add(hit); this._btnTouch = true; e.preventDefault(); return; }
       origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
       this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
       e.preventDefault();
@@ -44,6 +53,7 @@ export class Input {
       e.preventDefault();
     };
     const onEnd = (e) => {
+      if (this._btnTouch) { this._btnTouch = false; e.preventDefault(); return; }
       if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260) this._tapFire = true;
       this.touch.active = false; this.touch.x = 0; this.touch.y = 0; e.preventDefault();
     };
@@ -55,6 +65,27 @@ export class Input {
 
   _isGameKey(code) {
     return Object.values(KEYMAP).some((arr) => arr.includes(code));
+  }
+
+  // Map a client (CSS-pixel) point to logical playfield units and return the id
+  // of the first touch button it lands on, or null. The canvas letterboxes the
+  // logical 900×600 field, so scale by the rendered rect.
+  _hitButton(clientX, clientY) {
+    if (!this.touchButtons.length) return null;
+    const r = this.canvas.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    const lx = (clientX - r.left) / r.width * WORLD.W;
+    const ly = (clientY - r.top) / r.height * WORLD.H;
+    for (const b of this.touchButtons) {
+      if (lx >= b.x && lx <= b.x + b.w && ly >= b.y && ly <= b.y + b.h) return b.id;
+    }
+    return null;
+  }
+
+  // True once per tap on the given on-screen button.
+  consumeButton(id) {
+    if (this._btnHits.has(id)) { this._btnHits.delete(id); return true; }
+    return false;
   }
 
   _any(action) { return KEYMAP[action].some((c) => this.keys.has(c)); }
@@ -111,5 +142,5 @@ export class Input {
   consumeStart() { const s = this._padStart; this._padStart = false; return s; }
 
   // Clear one-shot edge buffers at end of frame.
-  endFrame() { this._pressed.clear(); this._padEdges.clear(); }
+  endFrame() { this._pressed.clear(); this._padEdges.clear(); this._btnHits.clear(); }
 }
