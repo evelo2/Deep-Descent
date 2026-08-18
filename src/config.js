@@ -97,6 +97,22 @@ export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 // score points plus gold (a fraction of the value) to spend on gear.
 export const GOLD = { rate: 0.5 };       // gold earned per point of loot banked
 
+// Dark caves: pitch-black chambers that only light up around a burning flare.
+// They hide rich loot, so a flare is the price of admission.
+export const DARKZONE = {
+  count: 2,             // attempted dark rooms per reef
+  minDepthFrac: 0.38,   // only place below this fraction of the world
+  radius: 360,          // room radius
+};
+export const FLARE = {
+  startCount: 2,
+  duration: 9,          // seconds a flare burns
+  litRadius: 300,       // visible radius while a flare is lit
+  diverRadius: 74,      // dim radius you can see without a flare
+  pack: 3, packCost: 90, // shop pack
+  findMin: 1, findMax: 3, // pickup grant
+};
+
 // Weapons. The harpoon is always carried; the rest are unlocked/bought later.
 // Order here is the cycle order; each has a fire cooldown (s) and a HUD glyph.
 export const WEAPON_ORDER = ['harpoon', 'net', 'speargun', 'charge', 'shock'];

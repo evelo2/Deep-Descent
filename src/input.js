@@ -121,6 +121,7 @@ export class Input {
       if (edge(3)) this._padEdges.add('weaponNext');                       // Y → next weapon
       if (edge(4)) this._padEdges.add('weaponPrev');                       // LB → prev weapon
       if (edge(1)) this._padEdges.add('shop');                             // B → open shop (at a station)
+      if (edge(6)) this._padEdges.add('flare');                            // LT → light a flare
       if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop nav)
       if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop nav)
       if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
