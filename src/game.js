@@ -575,8 +575,10 @@ export class Game {
     this._snapshotReef(gate.x, gate.y + 50);
     this.zone = 'temple';
     this._generateTemple();
-    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: OPEN_BAND + 300 };
-    this._placeDiver(c.x, c.y, 0);
+    // Drop in at the top of the temple's central shaft, just inside the entrance
+    // gate — the exit is then right above you, so you descend to loot and climb
+    // back to leave, rather than spawning deep and having to find the way up.
+    this._placeDiver(this.templeExit.x, this.templeExit.y + 90, 0);
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
   }
@@ -808,8 +810,8 @@ export class Game {
     if (this.zone === 'belly') {
       this._text('🐋 Swallowed! Grab the trove — reach the glowing throat to escape.', W / 2, H - 30, 15, PAL.throat, 'center', 'middle');
     } else if (this.zone === 'temple') {
-      const msg = this.hasKey ? '🔑 Door unlocked — plunder the vault, then reach the gate to leave'
-        : '🏛 Find the KEY to unlock the door and its vault';
+      const msg = this.hasKey ? '🔑 Vault unlocked! Grab the loot, then follow ▲ EXIT up to the gate to leave'
+        : '🏛 Find the KEY for the vault — or follow ▲ EXIT up to the gate to leave now';
       this._text(msg, W / 2, H - 30, 15, this.hasKey ? PAL.key : PAL.gateGlow, 'center', 'middle');
     } else if (this.boat.contains(this.diver)) {
       if (this.carried > 0) {
@@ -837,6 +839,10 @@ export class Game {
         this._text('🏛 An ancient gate — swim in to enter the sunken temple', W / 2, H - 30, 14, PAL.gateGlow, 'center', 'middle');
       }
     }
+
+    // Point the way to the exit in the special zones (they're easy to lose).
+    if (this.zone === 'temple' && this.templeExit) this._exitLocator(this.templeExit.x, this.templeExit.y, 'EXIT');
+    else if (this.zone === 'belly' && this.whaleExit) this._exitLocator(this.whaleExit.x, this.whaleExit.y, 'ESCAPE');
 
     // 1-UP flourish.
     if (this.oneUpT > 0) {
@@ -897,6 +903,33 @@ export class Game {
     ctx.restore();
   }
 
+  // On-screen exit finder for the special zones: a pulsing marker over the exit
+  // when it's on screen, or an arrow pinned to the screen edge pointing toward
+  // it when it's off screen — so players never get lost looking for the way out.
+  _exitLocator(ex, ey, label) {
+    const ctx = this.ctx;
+    const sx = ex - this.camX, sy = ey - this.camY;
+    const pulse = 0.55 + 0.45 * Math.sin(this.t * 5);
+    const onScreen = sx > 24 && sx < W - 24 && sy > 24 && sy < H - 24;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    if (onScreen) {
+      this._text('▲ ' + label, sx, sy - 52, 15, PAL.gateGlow, 'center', 'bottom', true);
+    } else {
+      // Clamp toward the screen edge and point an arrow along the bearing.
+      const m = 40;
+      const px = Math.max(m, Math.min(W - m, sx));
+      const py = Math.max(m, Math.min(H - m, sy));
+      const ang = Math.atan2(sy - H / 2, sx - W / 2);
+      ctx.translate(px, py); ctx.rotate(ang);
+      ctx.fillStyle = PAL.gateGlow;
+      ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(-11, -12); ctx.lineTo(-11, 12); ctx.closePath(); ctx.fill();
+      ctx.rotate(-ang);
+      this._text(label, 0, py < H / 2 ? 30 : -26, 12, PAL.gateGlow, 'center', 'middle', true);
+    }
+    ctx.restore();
+  }
+
   // Fog-of-war minimap in the top-right corner.
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
@@ -916,6 +949,12 @@ export class Game {
         const rgx = Math.floor(this.relic.x / CELL), rgy = Math.floor(this.relic.y / CELL);
         if (C.seen[rgy * C.GW + rgx]) { ctx.fillStyle = PAL.key; ctx.beginPath(); ctx.arc(wx(this.relic.x), wy(this.relic.y), 2.6, 0, Math.PI * 2); ctx.fill(); }
       }
+    }
+    // exit marker in the special zones (fixed, known location — always shown)
+    const exit = this.zone === 'temple' ? this.templeExit : this.zone === 'belly' ? this.whaleExit : null;
+    if (exit) {
+      ctx.fillStyle = PAL.gateGlow;
+      ctx.beginPath(); ctx.arc(wx(exit.x), wy(exit.y), 2.6, 0, Math.PI * 2); ctx.fill();
     }
     // diver (blinking)
     ctx.fillStyle = Math.floor(this.t * 4) % 2 ? '#eaffff' : '#7ff3ff';
