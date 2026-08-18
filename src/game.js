@@ -1366,10 +1366,20 @@ export class Game {
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
     const mw = 116, mh = Math.round(mw * WH / WW), mx = W - mw - 16, my = 128;
+    // The map is translucent, and fades further when the diver swims behind it
+    // so it never hides the action. Eased for a smooth transition.
+    const dsx = this.diver.x - this.camX, dsy = this.diver.y - this.camY;
+    const under = dsx > mx - 10 && dsx < mx + mw + 10 && dsy > my - 10 && dsy < my + mh + 10;
+    const target = under ? 0.26 : 0.82;
+    this._mapAlpha = this._mapAlpha === undefined ? target : this._mapAlpha + (target - this._mapAlpha) * 0.2;
+
     ctx.save();
+    ctx.globalAlpha = this._mapAlpha;
     ctx.fillStyle = 'rgba(3,12,22,0.72)';
     ctx.beginPath(); ctx.roundRect(mx - 4, my - 4, mw + 8, mh + 8, 6); ctx.fill();
     ctx.strokeStyle = 'rgba(120,200,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    this._text('MAP', mx + mw - 2, my - 6, 9, 'rgba(150,200,230,0.7)', 'right', 'bottom');
+    ctx.save();
     ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(C.mini, mx, my, mw, mh);
@@ -1394,9 +1404,8 @@ export class Game {
     ctx.fillStyle = Math.floor(this.t * 4) % 2 ? '#eaffff' : '#7ff3ff';
     ctx.beginPath(); ctx.arc(wx(this.diver.x), wy(this.diver.y), 2.8, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#04121f'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.restore();
-    // label
-    this._text('MAP', mx + mw - 2, my - 6, 9, 'rgba(150,200,230,0.7)', 'right', 'bottom');
+    ctx.restore();   // end clip
+    ctx.restore();   // end alpha
   }
 
   _menu() {
