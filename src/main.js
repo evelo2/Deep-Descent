@@ -53,7 +53,7 @@ canvas.addEventListener('mousedown', () => {
 // Touch: tap-to-fire is detected inside Input; a tap on the menus starts the game.
 // (Paused is resumed via the on-screen ▶ button, so tap-anywhere is limited to
 // the menu/gameover screens — otherwise a tap on a HUD button would also resume.)
-canvas.addEventListener('touchstart', () => { audio.ensure(); audio.resume(); if (game.state === 'menu' || game.state === 'gameover') game.onAction(); }, { passive: true });
+canvas.addEventListener('touchstart', () => { audio.ensure(); audio.resume(); if ((game.state === 'menu' || game.state === 'gameover') && !input._btnTouch) game.onAction(); }, { passive: true });
 
 // Ambient bubbles drifting up on the menu, for atmosphere.
 let ambientT = 0;

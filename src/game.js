@@ -26,6 +26,40 @@ const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
 
+// How-to-play pages shown on the Help screen.
+const HELP_PAGES = [
+  { title: '🐟 CONTROLS', lines: [
+    'Swim — Arrows / WASD / drag / left stick',
+    'Fire — Space / F / tap / A   ·   HOLD fire to auto-aim the nearest threat',
+    'Swap weapon — Q / E   ·   gamepad Y / LB',
+    'Flare — G   (light up a dark cave)',
+    'Shop — B   at the boat or a dive bell',
+    'Pause — P / Esc     Mute — M',
+  ] },
+  { title: '🔫 WEAPONS', lines: [
+    '➤ Harpoon — limited ammo; a slow, hard-hitting kill shot. Buy or find more.',
+    '🕸 Net gun — unlimited; snares a creature so you can slip past it.',
+    '⋙ Speargun — a rapid three-shot burst.',
+    '💣 Depth charge — click to throw, click again to detonate. Huge blast that',
+    '     hurts you too — keep clear! Scarce and expensive to restock.',
+    '⚡ Shock rod — chain lightning; runs on a battery that recharges slowly.',
+  ] },
+  { title: '🫧 STAY ALIVE', lines: [
+    'Air drains constantly — faster the deeper you go, and more each new reef.',
+    'Refill at the boat (surface) or a 🔔 dive bell (deep); both bank your loot.',
+    'Swim through bubble vents and the bubbles shells puff out to top up air.',
+    'Dark caves are pitch black — light a Flare (G) to see. Rich loot hides there.',
+    'Run out of air, or take a hit with no lives left, and the dive is over.',
+  ] },
+  { title: '💰 GOLD & GEAR', lines: [
+    'Grab pearls, gems, treasure and relics; bank them for points AND gold.',
+    'Spend gold at the shop (boat/bell): unlock & upgrade weapons, air tanks,',
+    'targeting, ammo, capacity and flares. Upgrade prices double each level.',
+    '⚓ Bank the relic (or hit the points goal), then sail on to a harder reef.',
+    'Supply crates and floor pickups give free gear, harpoons and flares.',
+  ] },
+];
+
 // Cartoon pop-up name + colour flashed up when a power-up is collected.
 const PU_INFO = {
   tank:      { name: '+30 AIR!',         col: PAL.air },
@@ -332,6 +366,38 @@ export class Game {
     this._text(hint, W / 2, this._shopRow(items.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
   }
 
+  // ---- help / how-to-play ---------------------------------------------
+  _helpRects() {
+    return {
+      prev: { id: 'helpprev', x: 30, y: H / 2 - 34, w: 54, h: 68 },
+      next: { id: 'helpnext', x: W - 84, y: H / 2 - 34, w: 54, h: 68 },
+      close: { id: 'helpclose', x: W / 2 - 62, y: H - 64, w: 124, h: 40 },
+    };
+  }
+  _openHelp(from) { this.helpReturn = from; this.state = 'help'; this.helpPage = 0; this.audio.select(); }
+  _closeHelp() { this.state = this.helpReturn || 'menu'; }
+  _helpScreen() {
+    const ctx = this.ctx;
+    this._panel(0.85);
+    const p = HELP_PAGES[this.helpPage];
+    this._text('HOW TO PLAY', W / 2, 92, 30, PAL.glow, 'center', 'middle', true);
+    this._text(p.title, W / 2, 146, 24, PAL.gold, 'center', 'middle', true);
+    let y = 208;
+    for (const line of p.lines) { this._text(line, W / 2, y, 16, PAL.hudText, 'center', 'middle'); y += 33; }
+    // page dots
+    for (let i = 0; i < HELP_PAGES.length; i++) {
+      ctx.fillStyle = i === this.helpPage ? PAL.gold : 'rgba(200,220,240,0.35)';
+      ctx.beginPath(); ctx.arc(W / 2 - (HELP_PAGES.length - 1) * 9 + i * 18, 470, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    // nav arrows + close (touch-friendly, keyboard too)
+    const r = this._helpRects();
+    const box = (rc) => { ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.6)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(rc.x, rc.y, rc.w, rc.h, 8); ctx.fill(); ctx.stroke(); ctx.restore(); };
+    box(r.prev); this._text('‹', r.prev.x + r.prev.w / 2, r.prev.y + r.prev.h / 2, 24, PAL.hudText, 'center', 'middle', true);
+    box(r.next); this._text('›', r.next.x + r.next.w / 2, r.next.y + r.next.h / 2, 24, PAL.hudText, 'center', 'middle', true);
+    box(r.close); this._text('CLOSE  (H)', r.close.x + r.close.w / 2, r.close.y + r.close.h / 2, 14, PAL.hudText, 'center', 'middle', true);
+    this._text('← / → to page through', W / 2, 498, 12, '#9fc6e0', 'center', 'middle');
+  }
+
   // Unload carried loot at a station (boat or bell): full score points plus
   // gold (a fraction of the value) to spend on gear, and bank the relic.
   _bankLoot() {
@@ -563,6 +629,18 @@ export class Game {
     this._syncTouchButtons();   // on-screen buttons for touch play
     // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
     const startEdge = this.input.consumeStart();
+
+    // Help screen: page through, then close (returns to menu or pause).
+    if (this.state === 'help') {
+      const n = HELP_PAGES.length;
+      if (this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.consumeButton('helpnext') || this.input.consumeTapFire()) this.helpPage = (this.helpPage + 1) % n;
+      if (this.input.pressed('left') || this.input.pressed('weaponPrev') || this.input.consumeButton('helpprev')) this.helpPage = (this.helpPage - 1 + n) % n;
+      if (this.input.pressed('help') || this.input.pressed('pause') || startEdge || this.input.consumeButton('helpclose')) this._closeHelp();
+      this.input.endFrame(); return;
+    }
+    // Open help from the menu, pause or game-over screens (H or the ? button).
+    if (this.state !== 'playing' && (this.input.pressed('help') || this.input.consumeButton('help'))) { this._openHelp(this.state); this.input.endFrame(); return; }
+
     if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
 
@@ -999,7 +1077,7 @@ export class Game {
     this.bg.draw(ctx, cx, cy, this.t, depthT);
     this.boat.draw(ctx, cx, cy, this.t);
 
-    if (this.state !== 'menu') {
+    if (this.state !== 'menu' && this.cave) {
       for (const cur of this.currents) cur.draw(ctx, cx, cy, this.t);
       if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
       for (const col of this.columns) { ctx.save(); ctx.translate(col.x - cx, col.y - cy); drawColumn(ctx, this.t); ctx.restore(); }
@@ -1130,8 +1208,9 @@ export class Game {
 
     if (this.state === 'playing' || this.state === 'paused') this._hud();
     if (this.state === 'menu') this._menu();
-    if (this.state === 'paused') this._overlay('PAUSED', this.input.isTouch ? 'Press P or tap ▶ to resume' : 'Press P / click to resume');
+    if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
     if (this.state === 'shop') this._shopScreen();
+    if (this.state === 'help') this._helpScreen();
     if (this.state === 'gameover') this._gameOverScreen();
   }
 
@@ -1183,6 +1262,9 @@ export class Game {
         const items = this._shopItems();
         items.forEach((it, i) => { const r = this._shopRow(i); btns.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
       }
+      // Help: a "?" on the menus, and nav/close inside the help screen.
+      if (this.state === 'menu' || this.state === 'gameover' || this.state === 'paused') btns.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
+      if (this.state === 'help') { const r = this._helpRects(); btns.push(r.prev, r.next, r.close); }
     }
     this._touchBtns = btns;
     this.input.touchButtons = btns;
@@ -1211,6 +1293,8 @@ export class Game {
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     } else if (b.id === 'shop') {
       this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+    } else if (b.id === 'help') {
+      this._text('❔ HELP', cx, cy + 1, 14, PAL.hudText, 'center', 'middle', true);
     } else if (b.id === 'aim') {
       this._text('🎯', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
       this._text('HOLD', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
@@ -1498,6 +1582,11 @@ export class Game {
     this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap   ·   Hold fire: auto-aim   ·   Weapons: Q / E   ·   Shop: B', cx, 452, 13, '#9fc6e0', 'center', 'middle');
     this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
+    // Help button / prompt.
+    const ctx = this.ctx;
+    ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(cx - 66, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text('❔ HOW TO PLAY  (H)', cx, 533, 14, PAL.hudText, 'center', 'middle', true);
   }
 
   _gameOverScreen() {
@@ -1515,6 +1604,10 @@ export class Game {
     else this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
+    const ctx = this.ctx;
+    ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(cx - 66, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text('❔ HOW TO PLAY  (H)', cx, 533, 14, PAL.hudText, 'center', 'middle', true);
   }
 
   _overlay(title, sub) {
