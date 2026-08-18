@@ -29,6 +29,26 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v10 — mobile touch buttons
+
+- **On-screen touch buttons** (`input.js` `touchButtons`/`_hitButton`/
+  `consumeButton`, `game._syncTouchButtons`/`_touchBtn`): touch-only players
+  couldn't pause, mute or sail on (those were keyboard/gamepad-only). The game
+  hands Input a per-state list of logical-coord button rects each frame; taps
+  are hit-tested against them and consumed before the joystick/tap-fire logic,
+  so a button press never steers or fires. Buttons are **gated behind
+  `input.isTouch`** — desktop and gamepad play draw and behave exactly as before.
+  - **Pause / mute** cluster, top-centre, shown while playing or paused.
+  - **⛵ Sail On**, bottom-centre, shown only when docked with the reef
+    objective met — a tap calls `_setSail()`, replacing the hold-↑ gesture
+    that's awkward on a touchscreen.
+- **Paused-tap fix** (`main.js`): tap-anywhere-to-start now fires only on the
+  menu/gameover screens, so a tap on a HUD button while paused no longer also
+  resumes the game.
+- **Safe-area insets** (`style.css`): `#stage` padding uses
+  `max(8px, env(safe-area-inset-*))` so the canvas clears notches, rounded
+  corners and the home indicator on modern phones.
+
 ## v9 — objectives, power-ups, minimap, controllers, collision fix
 
 - **Per-reef relic objective** (hybrid) (`entities/relic.js`, `config.RELIC`):
