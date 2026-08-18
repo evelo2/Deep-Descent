@@ -137,6 +137,7 @@ to **bank** them into your score — before your **air** runs out.
 | --- | --- | --- | --- |
 | Swim | Arrow keys / **WASD** | Drag (virtual joystick) | Left stick / D-pad |
 | Fire weapon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
+| Hold to auto-aim | Hold **Space** / **F** | Hold 🎯 button | Hold fire |
 | Switch weapon | **Q** / **E** or **[** **]** | ⋯ SWAP button | **Y / LB** |
 | Open shop (at a station) | **B** | ⚙ SHOP button | **B** |
 | Start / confirm / buy | **Space** | Tap | **A / Start** |

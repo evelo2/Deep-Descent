@@ -29,6 +29,19 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v12 — hold-to-aim auto-targeting
+
+- **Hold-to-aim** (`config.AIM`, `game._nearestThreat`/`_angleToward`, unified
+  fire state in `input.js`): holding fire roots the diver in place, swings the
+  aim onto the **nearest live threat** and auto-fires once locked (red reticle +
+  dashed guide line). A quick tap/click still fires once in the facing
+  direction. Fire input is now polled by the game each frame
+  (`input.fireHeld()`/`firePress`) across keyboard, mouse, gamepad and a touch
+  AIM hold-button; `main.js` no longer fires on keydown/mousedown.
+- The **standard harpoon is deliberately slow** now (cooldown 0.28 → 0.52).
+- **Targeting System** shop upgrade (Lv1→3): each level speeds the aim swing
+  and cuts the fire cooldown (×0.78/level).
+
 ## v11 — gold economy, dive bells, weapons & the shop
 
 A roguelike-style gear loop, built in three phases.
