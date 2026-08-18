@@ -109,6 +109,8 @@ export class Input {
     if (edge(0) || edge(2) || edge(5) || edge(7)) this._tapFire = true;   // A/X/RB/RT → fire
     if (edge(9)) this._padEdges.add('pause');                            // Start → pause
     if (edge(8)) this._padEdges.add('mute');                             // Back → mute
+    if (edge(3)) this._padEdges.add('weaponNext');                       // Y → next weapon
+    if (edge(4)) this._padEdges.add('weaponPrev');                       // LB → prev weapon
     if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
     this._padPrev = {};
     for (let i = 0; i < gp.buttons.length; i++) this._padPrev[i] = gp.buttons[i].pressed;

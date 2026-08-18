@@ -92,6 +92,21 @@ export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 // score points plus gold (a fraction of the value) to spend on gear.
 export const GOLD = { rate: 0.5 };       // gold earned per point of loot banked
 
+// Weapons. The harpoon is always carried; the rest are unlocked/bought later.
+// Order here is the cycle order; each has a fire cooldown (s) and a HUD glyph.
+export const WEAPON_ORDER = ['harpoon', 'net', 'speargun', 'charge', 'shock'];
+export const WEAPON_INFO = {
+  harpoon:  { name: 'HARPOON',      cd: 0.28, glyph: '➤' },
+  net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸' },
+  speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙' },
+  charge:   { name: 'DEPTH CHARGE', cd: 1.15, glyph: '💣' },
+  shock:    { name: 'SHOCK PROD',   cd: 0.70, glyph: '⚡' },
+};
+export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
+export const CHARGE = { speed: 250, gravity: 240, up: 70, fuse: 1.5, blast: 115 };
+export const SHOCK = { radius: 125, stun: 3.5, knock: 150 };
+export const SPEARGUN = { shots: 3, interval: 0.07, spread: 0.06 };
+
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
 export const BELL = {
   count: 2,          // attempted bells per reef
@@ -219,4 +234,6 @@ export const KEYMAP = {
   right: ['ArrowRight', 'KeyD'],
   pause: ['KeyP', 'Escape'],
   mute:  ['KeyM'],
+  weaponNext: ['KeyE', 'BracketRight'],
+  weaponPrev: ['KeyQ', 'BracketLeft'],
 };

@@ -9,6 +9,7 @@ class Creature {
     this.x = x; this.y = y; this.baseY = y;
     this.facing = 1; this.t0 = Math.random() * Math.PI * 2;
     this.radius = 18; this.scale = 1;
+    this.snareT = 0;   // >0 while netted/stunned: frozen and harmless
   }
   get points() { return KILL_POINTS[this.constructor.name] ?? 100; }
   hits(diver) {
