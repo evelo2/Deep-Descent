@@ -21,6 +21,7 @@ import { KRAKEN, POWERUP, RELIC } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
+const HI_REEF_KEY = 'deepdescent.hireef';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
 
 // Cartoon pop-up name + colour flashed up when a power-up is collected.
@@ -41,6 +42,7 @@ export class Game {
     this.t = 0; this.shake = 0;
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
+    this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
@@ -63,7 +65,7 @@ export class Game {
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
-    this.puT = 0; this.puName = '';
+    this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
     this.diver.reset();
@@ -300,6 +302,7 @@ export class Game {
     this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
     this.oneUpT = Math.max(0, this.oneUpT - dt);
     this.puT = Math.max(0, this.puT - dt);
+    this.reentryT = Math.max(0, (this.reentryT || 0) - dt);
 
     this.input.poll();   // gamepad
     this._syncTouchButtons();   // on-screen buttons for touch play
@@ -398,8 +401,10 @@ export class Game {
     // Zone transitions & puzzles.
     const d = this.diver;
     if (this.zone === 'reef') {
-      for (const w of this.whales) { w.update(dt, this.t); if (w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
-      if (this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
+      // reentryT: brief grace after returning so we don't instantly re-enter the
+      // special zone we just left (the diver is dropped back near its entrance).
+      for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
+      if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
       if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
@@ -512,8 +517,11 @@ export class Game {
   _gameOver() {
     this.state = 'gameover';
     this.audio.gasp();
-    if (this.score > this.hi) { this.hi = this.score; localStorage.setItem(HI_KEY, String(this.hi)); this.newHi = true; }
-    else this.newHi = false;
+    if (this.score > this.hi) {
+      this.hi = this.score; this.hiReef = this.reef; this.newHi = true;
+      localStorage.setItem(HI_KEY, String(this.hi));
+      localStorage.setItem(HI_REEF_KEY, String(this.hiReef));
+    } else this.newHi = false;
   }
 
   _win() {
@@ -554,6 +562,7 @@ export class Game {
     this.whaleExit = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this._placeDiver(s.returnX, s.returnY, 0);
     this.savedReef = null; this.zoneFade = 1;
+    this.reentryT = 1.5;   // grace so we don't immediately re-enter what we just left
     this.audio.bank();
   }
 
@@ -582,7 +591,9 @@ export class Game {
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
   }
-  _exitTemple() { this._restoreReef(); }
+  // Leaving the temple consumes its gate — you've plundered it, so it won't
+  // re-trigger (and won't sit there re-swallowing you at the return point).
+  _exitTemple() { this._restoreReef(); this.templeGate = null; }
 
   _placeDiver(x, y, vx) {
     const d = this.diver;
@@ -977,7 +988,7 @@ export class Game {
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
     this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap / A   ·   Pause: P / Start', cx, 452, 13, '#9fc6e0', 'center', 'middle');
     this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
-    if (this.hi > 0) this._text(`BEST ${this.hi}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
+    if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
   }
 
   _gameOverScreen() {
@@ -991,8 +1002,8 @@ export class Game {
     }
     this._text(`SCORE ${this.score}`, cx, 290, 30, PAL.hudText, 'center', 'middle');
     this._text(`DEEPEST ${Math.round(this.depthReached / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
-    if (this.newHi) this._text('★ NEW BEST ★', cx, 360, 20, PAL.glow, 'center', 'middle', true);
-    else this._text(`BEST ${this.hi}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
+    if (this.newHi) this._text(`★ NEW BEST · REEF ${this.reef} ★`, cx, 360, 20, PAL.glow, 'center', 'middle', true);
+    else this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
   }
