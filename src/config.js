@@ -114,21 +114,33 @@ export const WEAPON_INFO = {
 };
 
 // Shop: spend gold at the boat or a dive bell.
+// Upgrade costs all double per level (see game._dblCost). The *Base fields are
+// the level-1 price; refills (harpoon/charge packs) are flat.
 export const SHOP = {
   maxWeaponLevel: 3,        // weapons upgrade 1→3, each level boosts its key stat
-  weaponUpgradeBase: 200,   // cost to reach level 2 (=base), level 3 (=base*2)
+  weaponUpgradeBase: 180,   // weapon level-up base cost (doubles per level)
   tankBonus: 25,            // +max air per tank upgrade
-  tankBaseCost: 180,        // first tank upgrade
-  tankCostGrowth: 140,      // added per subsequent tank level
+  tankBaseCost: 180,        // tank level-1 cost (doubles per level)
   tankMaxLevel: 6,
   harpoonPack: 10,          // harpoons per purchase
-  harpoonPackCost: 70,      // gold per pack
+  harpoonPackCost: 70,      // gold per pack (flat refill)
   harpoonCapStep: 10,       // +max harpoons per capacity upgrade
   harpoonCapMaxLevel: 3,
-  harpoonCapCost: [0, 200, 350, 520],   // gold for capacity levels 1..3
+  harpoonCapBase: 200,      // harpoon-capacity level-1 cost (doubles per level)
 };
 export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
-export const CHARGE = { speed: 250, gravity: 240, up: 70, fuse: 1.5, blast: 115 };
+// Depth charge: a scarce, hand-detonated mine. Click once to throw it (it sinks
+// and settles), click again to detonate. The blast reaches 10× the charge's
+// size and saps your own air if you're inside it.
+export const CHARGE = {
+  speed: 250, gravity: 240, up: 70,
+  size: 10,             // drawn radius; blast reaches 10× this
+  safetyFuse: 12,       // auto-detonates this long after landing if never triggered
+  startAmmo: 3, baseMax: 3, capMax: 10,
+  refillCost: 250,      // gold per charge (deliberately expensive)
+  capCostBase: 300,     // capacity upgrade base cost (doubles per level)
+  diverAirLoss: 0.5,    // fraction of current air lost if caught in your own blast
+};
 // Shock rod: fires a lightning bolt at the nearest creature that then arcs to
 // nearby ones (one extra target per upgrade level). Drains a battery that
 // recharges slowly, so it can't be spammed.
@@ -175,7 +187,7 @@ export const AIM = {
   lockTol: 0.17,          // radians within which it will fire
   range: 720,             // only auto-target threats within this range
   maxLevel: 3,
-  cost: [0, 250, 450, 700],  // gold for levels 1..3 (index = current level)
+  baseCost: 250,   // level 1 cost; doubles each subsequent level
 };
 
 // Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
