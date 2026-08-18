@@ -1085,6 +1085,7 @@ export class Game {
   // Swallowed! Snapshot the reef, generate the belly, drop the diver inside.
   _enterWhale(whale) {
     const m = whale.mouthZone();
+    this._enteredWhale = whale;
     this._snapshotReef(m.x + whale.facing * 34, m.y);
     this.zone = 'belly';
     this._generateBelly();
@@ -1093,7 +1094,13 @@ export class Game {
     this.shake = 10; this.zoneFade = 1;
     this.audio.gasp();
   }
-  _exitWhale() { this._restoreReef(); }
+  // Leaving the whale consumes it — like the temple, a plundered special zone's
+  // entrance is spent, so the whale that swallowed you is gone when you return.
+  _exitWhale() {
+    this._restoreReef();
+    this.whales = this.whales.filter((w) => w !== this._enteredWhale);
+    this._enteredWhale = null;
+  }
 
   // Enter the sunken temple through its gate.
   _enterTemple(gate) {

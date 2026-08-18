@@ -6,17 +6,12 @@ unordered within each group.
 
 ## Planned next (committed direction)
 
-1. **One-shot special zones.** Once a special zone (whale belly, sunken temple,
-   and any future entrance) has been entered *and* exited, its entrance should
-   **disappear** so it can't be re-entered or farmed. The temple already does
-   this (`_exitTemple` nulls the gate); extend the same rule to the whale and
-   every new special.
-2. **Cave-entrance minigames.** Some cave entrances open into a **different
+1. **Cave-entrance minigames.** Some cave entrances open into a **different
    minigame** rather than more reef. First target: a **classic 1980s platformer**
    stage (run/jump/hazards, its own tiny renderer + input mapping, reached via
    the zone-stack like the belly/temple). Each minigame returns loot/gold on
    completion. Frame it as an optional detour with its own win/lose.
-3. **Secure online scoring service.** A server-backed high-score / leaderboard.
+2. **Secure online scoring service.** A server-backed high-score / leaderboard.
    Design goals: submissions must be **verifiable and tamper-resistant** (don't
    trust the client's posted score) — e.g. sign runs, replay/validate a compact
    input log server-side, rate-limit, and authenticate. Needs a small backend
@@ -27,8 +22,10 @@ unordered within each group.
 
 Dark/torch vision → **dark caves + flares**. Balance pass and per-reef difficulty
 curve → done. Limited-ammo weapons, weapon economy/shop, hold-to-aim, help
-screen, dive bells → all shipped (see `DESIGN.md` v9–v15). Remaining ideas below
-are still open.
+screen, dive bells → all shipped (see `DESIGN.md` v9–v15). **One-shot special
+zones** → done: exiting the whale removes it (`_exitWhale` filters it from
+`whales`), matching the temple's spent gate — no more re-entering/farming a
+special. Remaining ideas below are still open.
 
 ## Power-ups (new pickups)
 
