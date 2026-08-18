@@ -38,6 +38,31 @@ export class Net {
   }
 }
 
+// A drifting supply crate: swim into it to be granted a new weapon, a weapon
+// upgrade, or a stash of gold (decided by the game when opened).
+export class SupplyCrate {
+  constructor(x, y) { this.x = x; this.baseY = y; this.y = y; this.r = 20; this.taken = false; this.phase = Math.random() * TAU; }
+  update(dt, t) { this.y = this.baseY + Math.sin(t * 1.4 + this.phase) * 4; }
+  reached(d) { return !this.taken && Math.hypot(d.x - this.x, d.y - this.y) < this.r + d.radius; }
+  draw(ctx, camX, camY, t) {
+    ctx.save();
+    ctx.translate(this.x - camX, this.y - camY);
+    const pulse = 0.5 + 0.3 * Math.sin(t * 3 + this.phase);
+    const gg = ctx.createRadialGradient(0, 0, 3, 0, 0, 34);
+    gg.addColorStop(0, `rgba(255,207,92,${0.22 * pulse})`); gg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+    // crate body
+    ctx.fillStyle = '#8a6a3c'; ctx.beginPath(); ctx.roundRect(-16, -16, 32, 32, 3); ctx.fill();
+    ctx.strokeStyle = '#5e4826'; ctx.lineWidth = 3;
+    ctx.strokeRect(-16, -16, 32, 32);
+    ctx.beginPath(); ctx.moveTo(-16, -16); ctx.lineTo(16, 16); ctx.moveTo(16, -16); ctx.lineTo(-16, 16); ctx.stroke();
+    // glowing "?"
+    ctx.fillStyle = PAL.bellLight; ctx.font = '900 18px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', 0, 1);
+    ctx.restore();
+  }
+}
+
 export class DepthCharge {
   constructor(x, y, dx, dy) {
     const m = Math.hypot(dx, dy) || 1;

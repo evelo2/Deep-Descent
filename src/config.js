@@ -95,12 +95,25 @@ export const GOLD = { rate: 0.5 };       // gold earned per point of loot banked
 // Weapons. The harpoon is always carried; the rest are unlocked/bought later.
 // Order here is the cycle order; each has a fire cooldown (s) and a HUD glyph.
 export const WEAPON_ORDER = ['harpoon', 'net', 'speargun', 'charge', 'shock'];
+// Each weapon: fire cooldown, HUD glyph, gold cost to unlock and the reef it
+// first appears in the shop (harpoon is owned from the start). Higher reefs
+// surface stronger (and pricier) gear.
 export const WEAPON_INFO = {
-  harpoon:  { name: 'HARPOON',      cd: 0.28, glyph: '➤' },
-  net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸' },
-  speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙' },
-  charge:   { name: 'DEPTH CHARGE', cd: 1.15, glyph: '💣' },
-  shock:    { name: 'SHOCK PROD',   cd: 0.70, glyph: '⚡' },
+  harpoon:  { name: 'HARPOON',      cd: 0.28, glyph: '➤', cost: 0,   minReef: 0 },
+  net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸', cost: 150, minReef: 1 },
+  shock:    { name: 'SHOCK PROD',   cd: 0.70, glyph: '⚡', cost: 300, minReef: 2 },
+  speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙', cost: 260, minReef: 2 },
+  charge:   { name: 'DEPTH CHARGE', cd: 1.15, glyph: '💣', cost: 520, minReef: 3 },
+};
+
+// Shop: spend gold at the boat or a dive bell.
+export const SHOP = {
+  maxWeaponLevel: 3,        // weapons upgrade 1→3, each level boosts its key stat
+  weaponUpgradeBase: 200,   // cost to reach level 2 (=base), level 3 (=base*2)
+  tankBonus: 25,            // +max air per tank upgrade
+  tankBaseCost: 180,        // first tank upgrade
+  tankCostGrowth: 140,      // added per subsequent tank level
+  tankMaxLevel: 6,
 };
 export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
 export const CHARGE = { speed: 250, gravity: 240, up: 70, fuse: 1.5, blast: 115 };
@@ -236,4 +249,5 @@ export const KEYMAP = {
   mute:  ['KeyM'],
   weaponNext: ['KeyE', 'BracketRight'],
   weaponPrev: ['KeyQ', 'BracketLeft'],
+  shop: ['KeyB'],
 };
