@@ -149,7 +149,7 @@ export const POWERUP = {
 // slow (the standard harpoon is a slow, deliberate weapon).
 export const AIM = {
   threshold: 0.14,        // seconds of hold before aim mode engages
-  baseRate: 3.0,          // rad/s the aim swings toward target at level 0 (slow)
+  baseRate: 1.5,          // rad/s the aim swings toward target at level 0 (deliberately slow)
   ratePerLevel: 2.4,      // extra rad/s per targeting level
   fireMultPerLevel: 0.78, // cooldown ×= this per targeting level (faster fire)
   lockTol: 0.17,          // radians within which it will fire

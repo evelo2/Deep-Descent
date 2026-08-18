@@ -77,6 +77,7 @@ export class Game {
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
     // Hold-to-aim state.
     this.aimLevel = 0; this.aiming = false; this.fireHeldT = 0; this.aimAngle = 0; this.aimTarget = null;
+    this._prevHolding = false; this._didAim = false;
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
@@ -528,9 +529,9 @@ export class Game {
     if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
     if (this.input.pressed('weaponPrev')) this._cycleWeapon(-1);
     this.weaponSwapT = Math.max(0, this.weaponSwapT - dt);
-    // Fire: a quick tap/click/press shoots once; holding fire engages aim mode.
-    const firePress = this.input.firePress, tapFire = this.input.consumeTapFire();
-    if (firePress || tapFire) this.fire();
+    // Touch tap-to-fire (a tap anywhere) shoots once. Keyboard/mouse/gamepad
+    // firing is resolved from the held state below (tap = release; hold = aim).
+    if (this.input.consumeTapFire()) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
     // Speargun burst: fire the queued shots out over a few frames.
     if (this.burst > 0) {
@@ -552,15 +553,19 @@ export class Game {
     // threat; the aim swings toward it (rate rises with the Targeting upgrade)
     // and auto-fires once lined up.
     const holding = this.input.fireHeld();
-    this.fireHeldT = holding ? this.fireHeldT + dt : 0;
+    const released = !holding && this._prevHolding;
+    const heldT = this.fireHeldT;                     // hold duration up to last frame
+    if (holding) this.fireHeldT += dt; else this.fireHeldT = 0;
     let intent = this.input.vector();
-    const threat = (holding && this.fireHeldT >= AIM.threshold) ? this._nearestThreat() : null;
+    const engaged = holding && this.fireHeldT >= AIM.threshold;   // past the brief pre-hold
+    const threat = engaged ? this._nearestThreat() : null;
     this.aiming = !!threat; this.aimTarget = threat;
-    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position
+    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; this._didAim = true; }   // hold position
 
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), this.speedT > 0 ? POWERUP.speedMult : 1);
 
     if (this.aiming) {
+      // Swing the aim onto the target; fire only once lined up (no pre-shot).
       const ta = Math.atan2(threat.y - this.diver.y, threat.x - this.diver.x);
       const rate = AIM.baseRate + AIM.ratePerLevel * this.aimLevel;
       this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
@@ -568,7 +573,12 @@ export class Game {
       if (Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol) this.fire();
     } else {
       this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);   // keep synced for a smooth engage
+      if (engaged) this.fire();   // holding with no threat in range → fire in the facing direction
     }
+    // A quick tap (pressed and released before aim engaged) fires one shot.
+    if (released && !this._didAim && heldT < AIM.threshold) this.fire();
+    if (released) this._didAim = false;
+    this._prevHolding = holding;
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
     this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
@@ -966,7 +976,7 @@ export class Game {
     }
 
     this.particles.draw(ctx, cx, cy);
-    if (this.state !== 'menu') this.diver.draw(ctx, cx, cy);
+    if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
     // Shield bubble (blinks as it runs out).
     if (this.shieldT > 0 && this.state !== 'menu') {
       const a = this.shieldT < 1.5 && Math.floor(this.shieldT * 8) % 2 ? 0.15 : 0.42;
@@ -1156,9 +1166,16 @@ export class Game {
     this._text(wInfo.name, harpIconX + 24, wy2, 12, this.weaponSwapT > 0 ? PAL.air : '#bcd3e6', 'left', 'middle', true);
     const nameW = this.ctx.measureText(wInfo.name).width;
     ctx.restore();
-    if (this.weapons.length > 1) this._text('◂ Q E ▸', harpIconX + 30 + nameW, wy2, 10, 'rgba(150,190,220,0.6)', 'left', 'middle');
+    // Weapon-swap key hint — clear keycaps so players see they can switch.
+    let swapW = 0;
+    if (this.weapons.length > 1) {
+      const kx = harpIconX + 32 + nameW;
+      this._keycap('Q', kx, wy2); this._keycap('E', kx + 19, wy2);
+      this._text('SWAP', kx + 39, wy2, 10, 'rgba(165,200,230,0.8)', 'left', 'middle', true);
+      swapW = 39 + this.ctx.measureText('SWAP').width + 8;
+    }
     // Active buff timers.
-    let buffX = harpIconX + 30 + nameW + 54;
+    let buffX = harpIconX + 32 + nameW + swapW + 10;
     const buff = (label, secs, col) => { this._text(`${label} ${Math.ceil(secs)}s`, buffX, by + bh + 22, 12, col, 'left', 'middle', true); buffX += this.ctx.measureText(`${label} ${Math.ceil(secs)}s`).width + 14; };
     if (this.multiFireT > 0) buff('✸×3', this.multiFireT, PAL.harpoonTip);
     if (this.shieldT > 0) buff('🛡', this.shieldT, PAL.gateGlow);
@@ -1394,6 +1411,16 @@ export class Game {
     const ctx = this.ctx;
     ctx.fillStyle = `rgba(3,15,30,${alpha})`;
     ctx.fillRect(0, 0, W, H);
+  }
+
+  // Small keycap box with a letter, for control hints.
+  _keycap(label, x, y) {
+    const ctx = this.ctx, w = 15, h = 15;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,44,66,0.9)'; ctx.strokeStyle = 'rgba(150,200,240,0.6)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x, y - h / 2, w, h, 3); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    this._text(label, x + w / 2, y + 0.5, 9, PAL.hudText, 'center', 'middle', true);
   }
 
   _text(str, x, y, size, color, align = 'left', base = 'alphabetic', bold = false) {
