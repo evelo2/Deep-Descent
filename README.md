@@ -138,12 +138,18 @@ to **bank** them into your score — before your **air** runs out.
 | Swim | Arrow keys / **WASD** | Drag (virtual joystick) | Left stick / D-pad |
 | Fire harpoon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
 | Start / confirm | **Space** | Tap | **A / Start** |
-| Pause | **P** / **Esc** | — | **Start** |
-| Mute | **M** | — | **Back / Select** |
+| Pause | **P** / **Esc** | ⏸ button (top) | **Start** |
+| Mute | **M** | 🔊 button (top) | **Back / Select** |
+| Sail to a new reef | Hold **↑** at the boat | ⛵ **Sail On** button | Hold **↑** at the boat |
 
 **🎮 Controllers work out of the box** — Steam Deck, ROG Ally / Ally X, and any
 pad the browser exposes via the Gamepad API. Open the game in the device's
 browser and press a button.
+
+**📱 Touch-friendly** — on phones and tablets, drag anywhere to swim and tap to
+fire. On-screen **pause**, **mute** and **⛵ Sail On** buttons appear so a
+touch-only player can pause, mute and progress between reefs; the canvas clears
+notches and home indicators via safe-area insets.
 
 ### The loop
 
