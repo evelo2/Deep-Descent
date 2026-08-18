@@ -10,7 +10,7 @@ const TAU = Math.PI * 2;
 
 const COLORS = {
   tank: PAL.air, multifire: PAL.harpoonTip, shield: PAL.gateGlow,
-  speed: PAL.air, magnet: PAL.gold, life: PAL.diver, ammo: PAL.harpoon,
+  speed: PAL.air, magnet: PAL.gold, life: PAL.diver, ammo: PAL.harpoon, flare: '#ff7a3c',
 };
 
 export class PowerUp {
@@ -42,9 +42,16 @@ export class PowerUp {
     ctx.globalAlpha = 1;
     // Icon, breathing slightly with the flash.
     const s = 1 + 0.09 * f; ctx.scale(s, s);
-    ({ tank, multifire: multi, shield, speed, magnet, life, ammo })[this.type](ctx);
+    ({ tank, multifire: multi, shield, speed, magnet, life, ammo, flare })[this.type](ctx);
     ctx.restore();
   }
+}
+
+// A flare (light source for dark caves).
+function flare(ctx) {
+  ctx.fillStyle = '#c9cdd2'; ctx.beginPath(); ctx.roundRect(-3, -10, 6, 20, 2); ctx.fill();   // stick
+  ctx.fillStyle = '#ff7a3c'; ctx.beginPath(); ctx.arc(0, -11, 5, 0, TAU); ctx.fill();          // burning tip
+  ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.arc(-1, -12, 2.4, 0, TAU); ctx.fill();
 }
 
 // A bundle of harpoons (spare ammo).
