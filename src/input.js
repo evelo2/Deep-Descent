@@ -21,6 +21,13 @@ export class Input {
     this.touchButtons = [];       // [{id, x, y, w, h}] in logical (900×600) units
     this._btnHits = new Set();    // one-shot: buttons tapped this frame
     this._btnTouch = false;       // the active touch landed on a button
+    this._aimTouch = false;       // the active touch is holding the AIM button
+    // Unified fire state (keyboard / mouse / gamepad / touch AIM hold). fireDown
+    // = held this frame; firePress = rising edge; recomputed each poll().
+    this._mouseDown = false; this._padFire = false; this._aimBtnActive = false;
+    this._firePrev = false; this.fireDown = false; this.firePress = false;
+    addEventListener('mousedown', (e) => { if (e.target === canvas) this._mouseDown = true; });
+    addEventListener('mouseup', () => { this._mouseDown = false; });
 
     addEventListener('keydown', (e) => {
       if (this._isGameKey(e.code)) e.preventDefault();
@@ -37,6 +44,7 @@ export class Input {
     const onStart = (e) => {
       const t = e.changedTouches[0];
       const hit = this._hitButton(t.clientX, t.clientY);
+      if (hit === 'aim') { this._aimBtnActive = true; this._btnTouch = true; this._aimTouch = true; e.preventDefault(); return; }   // hold to aim
       if (hit) { this._btnHits.add(hit); this._btnTouch = true; e.preventDefault(); return; }
       origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
       this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
@@ -53,7 +61,7 @@ export class Input {
       e.preventDefault();
     };
     const onEnd = (e) => {
-      if (this._btnTouch) { this._btnTouch = false; e.preventDefault(); return; }
+      if (this._btnTouch) { if (this._aimTouch) { this._aimBtnActive = false; this._aimTouch = false; } this._btnTouch = false; e.preventDefault(); return; }
       if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260) this._tapFire = true;
       this.touch.active = false; this.touch.x = 0; this.touch.y = 0; e.preventDefault();
     };
@@ -97,27 +105,39 @@ export class Input {
     const pads = navigator.getGamepads ? navigator.getGamepads() : null;
     let gp = null;
     if (pads) for (const p of pads) if (p && p.connected) { gp = p; break; }
-    if (!gp) { this.pad.x = 0; this.pad.y = 0; this._padPrev = {}; return; }
-    const dead = 0.28;
-    let x = gp.axes[0] || 0, y = gp.axes[1] || 0;
-    x = Math.abs(x) > dead ? x : 0; y = Math.abs(y) > dead ? y : 0;
-    const B = (i) => gp.buttons[i] && gp.buttons[i].pressed;
-    if (B(14)) x = -1; else if (B(15)) x = 1;
-    if (B(12)) y = -1; else if (B(13)) y = 1;
-    this.pad.x = x; this.pad.y = y;
-    const edge = (i) => B(i) && !this._padPrev[i];
-    if (edge(0) || edge(2) || edge(5) || edge(7)) this._tapFire = true;   // A/X/RB/RT → fire
-    if (edge(9)) this._padEdges.add('pause');                            // Start → pause
-    if (edge(8)) this._padEdges.add('mute');                             // Back → mute
-    if (edge(3)) this._padEdges.add('weaponNext');                       // Y → next weapon
-    if (edge(4)) this._padEdges.add('weaponPrev');                       // LB → prev weapon
-    if (edge(1)) this._padEdges.add('shop');                             // B → open shop (at a station)
-    if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop nav)
-    if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop nav)
-    if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
-    this._padPrev = {};
-    for (let i = 0; i < gp.buttons.length; i++) this._padPrev[i] = gp.buttons[i].pressed;
+    if (!gp) { this.pad.x = 0; this.pad.y = 0; this._padPrev = {}; this._padFire = false; }
+    else {
+      const dead = 0.28;
+      let x = gp.axes[0] || 0, y = gp.axes[1] || 0;
+      x = Math.abs(x) > dead ? x : 0; y = Math.abs(y) > dead ? y : 0;
+      const B = (i) => gp.buttons[i] && gp.buttons[i].pressed;
+      if (B(14)) x = -1; else if (B(15)) x = 1;
+      if (B(12)) y = -1; else if (B(13)) y = 1;
+      this.pad.x = x; this.pad.y = y;
+      this._padFire = B(0) || B(2) || B(5) || B(7);                       // fire held (for aim mode)
+      const edge = (i) => B(i) && !this._padPrev[i];
+      if (edge(0) || edge(2) || edge(5) || edge(7)) this._tapFire = true;   // A/X/RB/RT → fire
+      if (edge(9)) this._padEdges.add('pause');                            // Start → pause
+      if (edge(8)) this._padEdges.add('mute');                             // Back → mute
+      if (edge(3)) this._padEdges.add('weaponNext');                       // Y → next weapon
+      if (edge(4)) this._padEdges.add('weaponPrev');                       // LB → prev weapon
+      if (edge(1)) this._padEdges.add('shop');                             // B → open shop (at a station)
+      if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop nav)
+      if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop nav)
+      if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
+      this._padPrev = {};
+      for (let i = 0; i < gp.buttons.length; i++) this._padPrev[i] = gp.buttons[i].pressed;
+    }
+    // Unified fire state across keyboard / mouse / gamepad (+ touch AIM hold).
+    const kb = this.keys.has('Space') || this.keys.has('KeyF') || this.keys.has('Enter');
+    const primary = kb || this._mouseDown || this._padFire;              // sources that also quick-fire on press
+    this.firePress = primary && !this._firePrev;
+    this._firePrev = primary;
+    this.fireDown = primary || this._aimBtnActive;                       // any hold engages aim
   }
+
+  // True while a fire control is held (engages hold-to-aim).
+  fireHeld() { return this.fireDown; }
 
   // Edge-triggered action: true once per press (keyboard or gamepad).
   pressed(action) {

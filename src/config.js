@@ -99,7 +99,7 @@ export const WEAPON_ORDER = ['harpoon', 'net', 'speargun', 'charge', 'shock'];
 // first appears in the shop (harpoon is owned from the start). Higher reefs
 // surface stronger (and pricier) gear.
 export const WEAPON_INFO = {
-  harpoon:  { name: 'HARPOON',      cd: 0.28, glyph: '➤', cost: 0,   minReef: 0 },
+  harpoon:  { name: 'HARPOON',      cd: 0.52, glyph: '➤', cost: 0,   minReef: 0 },
   net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸', cost: 150, minReef: 1 },
   shock:    { name: 'SHOCK PROD',   cd: 0.70, glyph: '⚡', cost: 300, minReef: 2 },
   speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙', cost: 260, minReef: 2 },
@@ -141,6 +141,21 @@ export const POWERUP = {
   magnetPull: 560,       // pull acceleration toward the diver (px/s^2)
   // Spawn weights by type.
   weights: { tank: 3, multifire: 3, shield: 2, speed: 2, magnet: 2, life: 1 },
+};
+
+// Hold-to-aim: holding fire roots the diver in place, swings the aim onto the
+// nearest threat, and auto-fires once locked. The "Targeting System" shop
+// upgrade speeds the swing and the fire rate; at level 0 it is deliberately
+// slow (the standard harpoon is a slow, deliberate weapon).
+export const AIM = {
+  threshold: 0.14,        // seconds of hold before aim mode engages
+  baseRate: 3.0,          // rad/s the aim swings toward target at level 0 (slow)
+  ratePerLevel: 2.4,      // extra rad/s per targeting level
+  fireMultPerLevel: 0.78, // cooldown ×= this per targeting level (faster fire)
+  lockTol: 0.17,          // radians within which it will fire
+  range: 720,             // only auto-target threats within this range
+  maxLevel: 3,
+  cost: [0, 250, 450, 700],  // gold for levels 1..3 (index = current level)
 };
 
 // Shared open/close envelope for all shells (clams, chests, vents). Maps a cycle
