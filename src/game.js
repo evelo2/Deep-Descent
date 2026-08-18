@@ -23,6 +23,16 @@ import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDo
 const HI_KEY = 'deepdescent.hi';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
 
+// Cartoon pop-up name + colour flashed up when a power-up is collected.
+const PU_INFO = {
+  tank:      { name: '+30 AIR!',         col: PAL.air },
+  multifire: { name: 'TRIPLE SHOT!',     col: PAL.harpoonTip },
+  shield:    { name: 'SHIELD UP!',       col: PAL.gateGlow },
+  speed:     { name: 'SPEED FINS!',      col: PAL.air },
+  magnet:    { name: 'TREASURE MAGNET!', col: PAL.gold },
+  life:      { name: 'EXTRA LIFE!',      col: PAL.diver },
+};
+
 export class Game {
   constructor(ctx, input, audio, particles, background) {
     this.ctx = ctx; this.input = input; this.audio = audio;
@@ -41,6 +51,7 @@ export class Game {
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0;
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
+    this.puT = 0; this.puName = ''; this.puCol = '#fff';   // power-up name flourish
     this.diver.reset();
   }
 
@@ -52,6 +63,7 @@ export class Game {
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
+    this.puT = 0; this.puName = '';
     this.won = false; this.newHi = false;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
     this.diver.reset();
@@ -175,8 +187,12 @@ export class Game {
       case 'shield': this.shieldT += POWERUP.shieldDuration; this.particles.sparkle(d.x, d.y, PAL.gateGlow, 24); this.audio.pickup(); break;
       case 'speed': this.speedT += POWERUP.speedDuration; this.particles.sparkle(d.x, d.y, PAL.air, 24); this.audio.pickup(); break;
       case 'magnet': this.magnetT += POWERUP.magnetDuration; this.particles.sparkle(d.x, d.y, PAL.gold, 24); this.audio.pickup(); break;
-      case 'life': this.lives += 1; this.oneUpT = 2.2; this.particles.sparkle(d.x, d.y, PAL.diver, 28); this.audio.bank(); break;
+      case 'life': this.lives += 1; this.particles.sparkle(d.x, d.y, PAL.diver, 28); this.audio.bank(); break;
     }
+    // Flash up the cartoon power-up name (its own pop, distinct from the
+    // score-milestone 1-UP flourish).
+    const info = PU_INFO[type];
+    if (info) { this.puName = info.name; this.puCol = info.col; this.puT = 1.7; }
   }
 
   // The sunken temple — a stone biome with a key-and-door puzzle guarding a
@@ -283,6 +299,7 @@ export class Game {
     this.bankPulse = Math.max(0, this.bankPulse - dt * 2);
     this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
     this.oneUpT = Math.max(0, this.oneUpT - dt);
+    this.puT = Math.max(0, this.puT - dt);
 
     this.input.poll();   // gamepad
     this._syncTouchButtons();   // on-screen buttons for touch play
@@ -828,6 +845,8 @@ export class Game {
       this._text('★ EXTRA LIFE ★', W / 2, 150 - (2.2 - this.oneUpT) * 20, 26, PAL.diver, 'center', 'middle', true);
       ctx.globalAlpha = 1;
     }
+    // Power-up name pop-up.
+    if (this.puT > 0) this._puFlourish();
 
     // Boss health bar when a kraken is on-screen.
     const boss = this.krakens.find((k) => k.hp > 0 && k.x > this.camX - 140 && k.x < this.camX + W + 140 && k.y > this.camY - 140 && k.y < this.camY + H + 140);
@@ -840,6 +859,43 @@ export class Game {
 
     this._minimap();
     if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
+    ctx.restore();
+  }
+
+  // A cartoon power-up name that pops in, overshoots, wobbles and fades out —
+  // set by _applyPowerUp, ticked down by puT.
+  _puFlourish() {
+    const ctx = this.ctx;
+    const total = 1.7, age = total - this.puT;          // 0 → 1.7 as it plays
+    // Pop-in with a little overshoot, then settle; fade over the last 0.5s.
+    const scale = age < 0.16 ? 0.3 + (age / 0.16) * 0.85
+      : age < 0.30 ? 1.15 - (age - 0.16) / 0.14 * 0.15
+      : 1.0;
+    const alpha = this.puT < 0.5 ? this.puT / 0.5 : 1;
+    const wob = Math.sin(age * 20) * 4 * Math.max(0, 1 - age * 1.4);   // early jiggle
+    const TAU = Math.PI * 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(W / 2, 208 + wob);
+    ctx.scale(scale, scale);
+    // Comic starburst behind the words.
+    ctx.beginPath();
+    const pts = 14, ro = 132, ri = 104;
+    for (let i = 0; i < pts * 2; i++) {
+      const ang = (i / (pts * 2)) * TAU - Math.PI / 2;
+      const rr = i % 2 ? ri : ro;
+      const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr * 0.44;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(3,14,26,0.42)'; ctx.fill();
+    ctx.strokeStyle = this.puCol; ctx.globalAlpha = alpha * 0.5; ctx.lineWidth = 2; ctx.stroke();
+    ctx.globalAlpha = alpha;
+    // The name — dark outline + bright fill for a sticker/cartoon look.
+    ctx.font = '900 34px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(4,14,26,0.92)'; ctx.strokeText(this.puName, 0, 0);
+    ctx.fillStyle = this.puCol; ctx.fillText(this.puName, 0, 0);
     ctx.restore();
   }
 
