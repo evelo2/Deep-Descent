@@ -18,8 +18,8 @@ import { Current } from './entities/current.js';
 import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
-import { Net, DepthCharge } from './entities/weapons.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN } from './config.js';
+import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -52,7 +52,7 @@ export class Game {
     this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
-    this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = [];
+    this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.puT = 0; this.puName = ''; this.puCol = '#fff';   // power-up name flourish
@@ -67,9 +67,14 @@ export class Game {
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
-    // Weapons: harpoon always; the rest all unlocked for now (shop gates them
-    // in a later phase). weaponIdx cycles this list.
-    this.weapons = [...WEAPON_ORDER]; this.weaponIdx = 0; this.weaponSwapT = 0;
+    // Weapons: harpoon owned from the start; the rest are bought at the shop.
+    // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
+    // it. weaponLevel tracks per-weapon upgrade tier (1..maxWeaponLevel).
+    this.owned = new Set(['harpoon']);
+    this.weapons = WEAPON_ORDER.filter((w) => this.owned.has(w));
+    this.weaponIdx = 0; this.weaponSwapT = 0;
+    this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
+    this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
@@ -85,7 +90,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
-    this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = [];
+    this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing.
@@ -117,6 +122,9 @@ export class Game {
     let bellSpots = spread(C.chambers(WH * BELL.minDepthFrac), BELL.count, 900);
     if (!bellSpots.length) { const c = C.randomOpen(WH * 0.5); if (c) bellSpots = [c]; }
     for (const s of bellSpots) this.bells.push(new DiveBell(s.x, s.y));
+
+    // A supply crate sometimes drifts in the reef — free gear when you reach it.
+    if (Math.random() < 0.5) { const c = C.randomOpen(OPEN_BAND + 300); if (c) this.crates.push(new SupplyCrate(c.x, c.y)); }
 
     // Flora rooted on cave floors — lots of it, for atmosphere.
     this.flora = new Flora(spread(C.floors(), 110, 70));
@@ -192,6 +200,97 @@ export class Game {
     }
   }
 
+  // Open a supply crate: unlock a reef-available weapon you don't own, else
+  // upgrade a weapon that isn't maxed, else a stash of gold.
+  _openCrate() {
+    const d = this.diver;
+    const lockable = WEAPON_ORDER.filter((w) => WEAPON_INFO[w].cost > 0 && !this.owned.has(w) && this.reef >= WEAPON_INFO[w].minReef);
+    if (lockable.length) {
+      const w = lockable[(Math.random() * lockable.length) | 0];
+      this.owned.add(w); this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
+      this.puName = `${WEAPON_INFO[w].name}!`; this.puCol = PAL.gold; this.puT = 1.7;
+    } else {
+      const upg = WEAPON_ORDER.filter((w) => this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
+      if (upg.length) {
+        const w = upg[(Math.random() * upg.length) | 0]; this.weaponLevel[w] += 1;
+        this.puName = `${WEAPON_INFO[w].name} Lv${this.weaponLevel[w]}`; this.puCol = PAL.air; this.puT = 1.7;
+      } else {
+        this.gold += 200; this.puName = '+200 GOLD!'; this.puCol = PAL.gold; this.puT = 1.7;
+      }
+    }
+    this.particles.sparkle(d.x, d.y, PAL.gold, 26); this.audio.bank();
+  }
+
+  // ---- shop (spend gold at the boat or a dive bell) --------------------
+  _rebuildWeapons() {
+    const cur = this.weapons[this.weaponIdx];
+    this.weapons = WEAPON_ORDER.filter((w) => this.owned.has(w));
+    this.weaponIdx = Math.max(0, this.weapons.indexOf(cur));
+  }
+
+  // The items on offer, given reef (gates unlocks), ownership and levels.
+  _shopItems() {
+    const items = [];
+    for (const w of WEAPON_ORDER) {
+      const info = WEAPON_INFO[w];
+      if (info.cost > 0 && !this.owned.has(w) && this.reef >= info.minReef)
+        items.push({ kind: 'weapon', id: w, label: `${info.glyph} Unlock ${info.name}`, cost: info.cost });
+    }
+    for (const w of WEAPON_ORDER) {
+      if (this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel)
+        items.push({ kind: 'upgrade', id: w, label: `${WEAPON_INFO[w].glyph} Upgrade ${WEAPON_INFO[w].name} → Lv${this.weaponLevel[w] + 1}`, cost: SHOP.weaponUpgradeBase * this.weaponLevel[w] });
+    }
+    if (this.tankLevel < SHOP.tankMaxLevel)
+      items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: SHOP.tankBaseCost + this.tankLevel * SHOP.tankCostGrowth });
+    items.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
+    return items;
+  }
+
+  _shopRow(i) { const w = 470, x = (W - w) / 2, y = 178 + i * 46; return { x, y, w, h: 40 }; }
+
+  _openShop(where) { this.state = 'shop'; this.shopWhere = where; this.shopSel = 0; this.shopDeny = 0; this.audio.select(); }
+  _closeShop() { this.state = 'playing'; }
+  _shopMove(dir) { const n = this._shopItems().length; this.shopSel = (this.shopSel + dir + n) % n; this.audio.pickup(); }
+
+  _shopBuy() {
+    const items = this._shopItems();
+    const it = items[this.shopSel]; if (!it) return;
+    if (it.kind === 'close') { this._closeShop(); return; }
+    if (this.gold < it.cost) { this.shopDeny = 0.6; this.audio.gasp(); return; }
+    this.gold -= it.cost;
+    if (it.kind === 'weapon') {
+      this.owned.add(it.id); this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(it.id);
+      this.puName = `${WEAPON_INFO[it.id].name}!`; this.puCol = PAL.gold; this.puT = 1.6;
+    } else if (it.kind === 'upgrade') {
+      this.weaponLevel[it.id] += 1;
+      this.puName = `${WEAPON_INFO[it.id].name} Lv${this.weaponLevel[it.id]}`; this.puCol = PAL.air; this.puT = 1.6;
+    } else if (it.kind === 'tank') {
+      this.tankLevel += 1; this.airMax += SHOP.tankBonus; this.air = this.airMax;
+      this.puName = 'BIGGER TANK!'; this.puCol = PAL.air; this.puT = 1.6;
+    }
+    this.audio.bank();
+    if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
+  }
+
+  _shopScreen() {
+    const ctx = this.ctx;
+    this._panel(0.74);
+    this._text('⚙ DIVE SHOP', W / 2, 118, 34, PAL.gold, 'center', 'middle', true);
+    this._text(`💰 ${this.gold} gold`, W / 2, 152, 16, this.shopDeny > 0 ? PAL.danger : PAL.hudText, 'center', 'middle', true);
+    const items = this._shopItems();
+    if (this.shopSel >= items.length) this.shopSel = items.length - 1;
+    items.forEach((it, i) => {
+      const r = this._shopRow(i), sel = i === this.shopSel, afford = this.gold >= it.cost || it.kind === 'close';
+      ctx.fillStyle = sel ? 'rgba(30,84,124,0.92)' : 'rgba(8,26,44,0.82)';
+      ctx.strokeStyle = sel ? PAL.gold : 'rgba(120,200,255,0.22)'; ctx.lineWidth = sel ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill(); ctx.stroke();
+      this._text(it.label, r.x + 16, r.y + r.h / 2, 15, afford ? PAL.hudText : 'rgba(210,130,130,0.85)', 'left', 'middle', sel);
+      if (it.kind !== 'close') this._text(`${it.cost}g`, r.x + r.w - 16, r.y + r.h / 2, 14, afford ? PAL.gold : '#c88', 'right', 'middle', true);
+    });
+    const hint = this.input.isTouch ? 'Tap an item to buy · tap Close to leave' : '↑ / ↓ select   ·   Space / A buy   ·   P / Esc close';
+    this._text(hint, W / 2, this._shopRow(items.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
+  }
+
   // Unload carried loot at a station (boat or bell): full score points plus
   // gold (a fraction of the value) to spend on gear, and bank the relic.
   _bankLoot() {
@@ -224,7 +323,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = [];
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = [];
     const value = (y) => 400 + Math.round((y / WH) * 500);
 
     // Scattered loot + a couple of air vents + light hazards.
@@ -273,7 +372,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.templeGate = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = [];
+    this.templeGate = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
@@ -296,6 +395,7 @@ export class Game {
     if (this.state === 'menu' || this.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(); }
     else if (this.state === 'paused') this.state = 'playing';
     else if (this.state === 'playing') this.state = 'paused';
+    else if (this.state === 'shop') this._shopBuy();
   }
 
   get weapon() { return this.weapons[this.weaponIdx]; }
@@ -307,17 +407,18 @@ export class Game {
     this.audio.select();
   }
 
-  // Fire the current weapon (respecting its cooldown).
+  // Fire the current weapon (respecting its cooldown). Upgrade level boosts the
+  // key stat per weapon and shaves a little off every cooldown.
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
-    const id = this.weapon;
-    this.fireCd = WEAPON_INFO[id].cd;
+    const id = this.weapon, lvl = this.weaponLevel[id];
+    this.fireCd = WEAPON_INFO[id].cd * (1 - 0.08 * (lvl - 1));
     switch (id) {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
-      case 'speargun': this.burst = SPEARGUN.shots; this.burstT = 0; break;   // fired out over update()
-      case 'charge':   this._fireCharge(); break;
-      case 'shock':    this._fireShock(); break;
+      case 'speargun': this.burst = SPEARGUN.shots + (lvl - 1); this.burstT = 0; break;   // +1 shot per level
+      case 'charge':   this._fireCharge(lvl); break;
+      case 'shock':    this._fireShock(lvl); break;
     }
   }
 
@@ -335,18 +436,21 @@ export class Game {
     this.nets.push(new Net(d.x, d.y, d.aimX, d.aimY));
     this.audio.fire();
   }
-  _fireCharge() {
+  _fireCharge(lvl = 1) {
     const d = this.diver;
-    this.charges.push(new DepthCharge(d.x, d.y, d.aimX, d.aimY));
+    const ch = new DepthCharge(d.x, d.y, d.aimX, d.aimY);
+    ch.blast = CHARGE.blast * (1 + 0.3 * (lvl - 1));   // bigger blast when upgraded
+    this.charges.push(ch);
     this.audio.fire();
   }
-  _fireShock() {
-    const d = this.diver, R = SHOCK.radius;
+  _fireShock(lvl = 1) {
+    const d = this.diver, R = SHOCK.radius * (1 + 0.2 * (lvl - 1));
+    this.shockR = R;
     for (const cr of this.creatures) {
       if (cr.dead) continue;
       const dist = Math.hypot(cr.x - d.x, cr.y - d.y);
       if (dist < R) {
-        cr.snareT = Math.max(cr.snareT || 0, SHOCK.stun);
+        cr.snareT = Math.max(cr.snareT || 0, SHOCK.stun * (1 + 0.3 * (lvl - 1)));
         const a = Math.atan2(cr.y - d.y, cr.x - d.x);          // knock outward
         if (cr.vx !== undefined) { cr.vx += Math.cos(a) * SHOCK.knock; cr.vy += Math.sin(a) * SHOCK.knock; }
         this.particles.sparkle(cr.x, cr.y, PAL.gateGlow, 8);
@@ -371,9 +475,21 @@ export class Game {
     this.input.poll();   // gamepad
     this._syncTouchButtons();   // on-screen buttons for touch play
     // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
-    if (this.input.consumeStart() && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
-    if (this.input.pressed('pause') || this.input.consumeButton('pause')) this.onAction();
+    const startEdge = this.input.consumeStart();
+    if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
+
+    // Shop: a frozen overlay while docked — navigate, buy, then close.
+    if (this.state === 'shop') {
+      if (startEdge) this._shopBuy();
+      if (this.input.pressed('up')) this._shopMove(-1);
+      if (this.input.pressed('down')) this._shopMove(1);
+      const items = this._shopItems();
+      for (let i = 0; i < items.length; i++) if (this.input.consumeButton('shop' + i)) { this.shopSel = i; this._shopBuy(); break; }
+      this.shopDeny = Math.max(0, this.shopDeny - dt);
+      this.input.endFrame(); return;
+    }
+    if (startEdge && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
 
     // Sailing to a new reef: brief transition, then a fresh cave.
     if (this.state === 'sailing') {
@@ -445,6 +561,8 @@ export class Game {
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
     }
+    // Open the shop while docked (loot banked) — spend gold on gear.
+    if (atStation && this.carried === 0 && (this.input.pressed('shop') || this.input.consumeButton('shop'))) this._openShop(atBoat ? 'boat' : 'bell');
 
     // Entities.
     const emitBig = (x, y) => this.bigBubbles.push(new BigBubble(x, y));
@@ -461,6 +579,7 @@ export class Game {
     for (const ch of this.charges) { ch.update(dt, this.cave); if (ch.exploded) this._explode(ch); }
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
+    for (const cr of this.crates) { cr.update(dt, this.t); if (this.zone === 'reef' && cr.reached(this.diver)) { cr.taken = true; this._openCrate(); } }
     // Relic objective — pick it up, carry it back to the boat to bank it.
     if (this.relic && !this.relic.taken) {
       this.relic.update(dt, this.t);
@@ -518,6 +637,7 @@ export class Game {
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
     this.krakens = this.krakens.filter((k) => !k.dead);
     this.powerups = this.powerups.filter((p) => !p.taken);
+    this.crates = this.crates.filter((c) => !c.taken);
 
     // Extra life every 5000 points banked.
     while (this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += 5000; this.oneUpT = 2.2; this.audio.bank(); }
@@ -587,7 +707,7 @@ export class Game {
       if (n.dead) continue;
       for (const cr of this.creatures) {
         if (!cr.dead && cr.snareT <= 0 && n.hits(cr)) {
-          cr.snareT = NET.snare; n.dead = true;
+          cr.snareT = NET.snare + (this.weaponLevel.net - 1) * 1.5; n.dead = true;
           if (cr.vx !== undefined) { cr.vx = 0; cr.vy = 0; }
           this.particles.sparkle(cr.x, cr.y, '#dbe9f2', 12); this.audio.pickup();
           break;
@@ -670,14 +790,14 @@ export class Game {
   get canSail() { return this.relicBanked || this.reefBanked >= this.reefGoal; }
 
   _snapshotReef(returnX, returnY) {
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates'];
     const snap = { returnX, returnY };
     for (const k of keys) snap[k] = this[k];
     this.savedReef = snap;
   }
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
     this.whaleExit = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
@@ -757,6 +877,7 @@ export class Game {
       for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
       for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
       for (const pu of this.powerups) pu.draw(ctx, cx, cy, this.t);
+      for (const cr of this.crates) if (!cr.taken) cr.draw(ctx, cx, cy, this.t);
       for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
       for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
       // Snared (netted/stunned) creatures wear a shimmering mesh so you can tell
@@ -816,9 +937,10 @@ export class Game {
       ctx.globalAlpha = Math.min(1, this.shockT / 0.28);
       ctx.strokeStyle = PAL.gateGlow; ctx.lineWidth = 2;
       ctx.beginPath();
+      const shockR = this.shockR || SHOCK.radius;
       for (let i = 0; i <= 24; i++) {
         const a = (i / 24) * Math.PI * 2;
-        const rr = SHOCK.radius * (0.9 + 0.14 * Math.sin(a * 6 + this.t * 40));
+        const rr = shockR * (0.9 + 0.14 * Math.sin(a * 6 + this.t * 40));
         const px = sx + Math.cos(a) * rr, py = sy + Math.sin(a) * rr;
         i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
@@ -847,6 +969,7 @@ export class Game {
     if (this.state === 'playing' || this.state === 'paused') this._hud();
     if (this.state === 'menu') this._menu();
     if (this.state === 'paused') this._overlay('PAUSED', this.input.isTouch ? 'Press P or tap ▶ to resume' : 'Press P / click to resume');
+    if (this.state === 'shop') this._shopScreen();
     if (this.state === 'gameover') this._gameOverScreen();
   }
 
@@ -888,6 +1011,15 @@ export class Game {
       if (this.state === 'playing' && this.weapons.length > 1) {
         btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
       }
+      // At a station with loot banked: a SHOP button.
+      const atStation = this.state === 'playing' && this.zone === 'reef' && this.carried === 0 &&
+        (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)));
+      if (atStation) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
+      // In the shop: one tappable button per item row.
+      if (this.state === 'shop') {
+        const items = this._shopItems();
+        items.forEach((it, i) => { const r = this._shopRow(i); btns.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
+      }
     }
     this._touchBtns = btns;
     this.input.touchButtons = btns;
@@ -914,6 +1046,8 @@ export class Game {
     } else if (b.id === 'weapon') {
       this._text(WEAPON_INFO[this.weapon].glyph, cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
+    } else if (b.id === 'shop') {
+      this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
     }
   }
 
@@ -1016,6 +1150,10 @@ export class Game {
       if (!hinted && this.templeGate && Math.hypot(this.diver.x - this.templeGate.x, this.diver.y - this.templeGate.y) < 320) {
         this._text('🏛 An ancient gate — swim in to enter the sunken temple', W / 2, H - 30, 14, PAL.gateGlow, 'center', 'middle');
       }
+    }
+    // Shop hint at any station once loot is banked.
+    if (this.zone === 'reef' && this.carried === 0 && (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)))) {
+      this._text(this.input.isTouch ? 'Tap ⚙ SHOP to spend gold on gear' : 'Press B to open the ⚙ SHOP', W / 2, H - 52, 13, PAL.gold, 'center', 'middle');
     }
 
     // Point the way to the exit in the special zones (they're easy to lose).
