@@ -302,4 +302,6 @@ export const KEYMAP = {
   weaponNext: ['KeyE', 'BracketRight'],
   weaponPrev: ['KeyQ', 'BracketLeft'],
   shop: ['KeyB'],
+  help: ['KeyH'],
+  flare: ['KeyG'],
 };
