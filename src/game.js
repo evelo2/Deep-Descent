@@ -862,39 +862,37 @@ export class Game {
     ctx.restore();
   }
 
-  // A cartoon power-up name that pops in, overshoots, wobbles and fades out —
-  // set by _applyPowerUp, ticked down by puT.
+  // A big cartoon power-up name that pops into the middle of the screen and
+  // pulses while it holds, then fades — set by _applyPowerUp, ticked by puT.
   _puFlourish() {
     const ctx = this.ctx;
     const total = 1.7, age = total - this.puT;          // 0 → 1.7 as it plays
-    // Pop-in with a little overshoot, then settle; fade over the last 0.5s.
-    const scale = age < 0.16 ? 0.3 + (age / 0.16) * 0.85
-      : age < 0.30 ? 1.15 - (age - 0.16) / 0.14 * 0.15
-      : 1.0;
-    const alpha = this.puT < 0.5 ? this.puT / 0.5 : 1;
-    const wob = Math.sin(age * 20) * 4 * Math.max(0, 1 - age * 1.4);   // early jiggle
+    const popIn = Math.min(1, age / 0.16);              // quick pop to full size
+    const pulse = 1 + 0.12 * Math.sin(age * 9);         // continuous breathing pulse
+    const scale = popIn * pulse;
+    const alpha = this.puT < 0.45 ? this.puT / 0.45 : 1;   // fade over the last 0.45s
     const TAU = Math.PI * 2;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(W / 2, 208 + wob);
+    ctx.translate(W / 2, H / 2);
     ctx.scale(scale, scale);
     // Comic starburst behind the words.
     ctx.beginPath();
-    const pts = 14, ro = 132, ri = 104;
+    const pts = 16, ro = 220, ri = 176;
     for (let i = 0; i < pts * 2; i++) {
       const ang = (i / (pts * 2)) * TAU - Math.PI / 2;
       const rr = i % 2 ? ri : ro;
-      const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr * 0.44;
+      const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr * 0.42;
       i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(3,14,26,0.42)'; ctx.fill();
-    ctx.strokeStyle = this.puCol; ctx.globalAlpha = alpha * 0.5; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(3,14,26,0.5)'; ctx.fill();
+    ctx.strokeStyle = this.puCol; ctx.globalAlpha = alpha * 0.55; ctx.lineWidth = 3; ctx.stroke();
     ctx.globalAlpha = alpha;
-    // The name — dark outline + bright fill for a sticker/cartoon look.
-    ctx.font = '900 34px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    // The name — big, dark outline + bright fill for a sticker/cartoon look.
+    ctx.font = '900 58px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(4,14,26,0.92)'; ctx.strokeText(this.puName, 0, 0);
+    ctx.lineWidth = 13; ctx.strokeStyle = 'rgba(4,14,26,0.92)'; ctx.strokeText(this.puName, 0, 0);
     ctx.fillStyle = this.puCol; ctx.fillText(this.puName, 0, 0);
     ctx.restore();
   }
