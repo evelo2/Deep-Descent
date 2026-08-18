@@ -10,7 +10,7 @@ const TAU = Math.PI * 2;
 
 const COLORS = {
   tank: PAL.air, multifire: PAL.harpoonTip, shield: PAL.gateGlow,
-  speed: PAL.air, magnet: PAL.gold, life: PAL.diver,
+  speed: PAL.air, magnet: PAL.gold, life: PAL.diver, ammo: PAL.harpoon,
 };
 
 export class PowerUp {
@@ -42,9 +42,21 @@ export class PowerUp {
     ctx.globalAlpha = 1;
     // Icon, breathing slightly with the flash.
     const s = 1 + 0.09 * f; ctx.scale(s, s);
-    ({ tank, multifire: multi, shield, speed, magnet, life })[this.type](ctx);
+    ({ tank, multifire: multi, shield, speed, magnet, life, ammo })[this.type](ctx);
     ctx.restore();
   }
+}
+
+// A bundle of harpoons (spare ammo).
+function ammo(ctx) {
+  for (const dx of [-5, 0, 5]) {
+    ctx.strokeStyle = PAL.harpoon; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(dx, 9); ctx.lineTo(dx, -8); ctx.stroke();
+    ctx.fillStyle = PAL.harpoonTip;
+    ctx.beginPath(); ctx.moveTo(dx, -12); ctx.lineTo(dx - 4, -6); ctx.lineTo(dx + 4, -6); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = '#8a6a3c'; ctx.lineWidth = 2;   // binding
+  ctx.beginPath(); ctx.moveTo(-8, 2); ctx.lineTo(8, 2); ctx.stroke();
 }
 
 function tank(ctx) {

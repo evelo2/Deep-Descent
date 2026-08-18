@@ -121,6 +121,11 @@ export const SHOP = {
   tankBaseCost: 180,        // first tank upgrade
   tankCostGrowth: 140,      // added per subsequent tank level
   tankMaxLevel: 6,
+  harpoonPack: 10,          // harpoons per purchase
+  harpoonPackCost: 70,      // gold per pack
+  harpoonCapStep: 10,       // +max harpoons per capacity upgrade
+  harpoonCapMaxLevel: 3,
+  harpoonCapCost: [0, 200, 350, 520],   // gold for capacity levels 1..3
 };
 export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
 export const CHARGE = { speed: 250, gravity: 240, up: 70, fuse: 1.5, blast: 115 };
@@ -192,6 +197,11 @@ export const HARPOON = {
   life: 0.85,      // seconds before it fizzles
   cooldown: 0.5,
   length: 28,
+  // Harpoons are a consumable: the net gun is your unlimited fallback, the
+  // harpoon a limited kill-shot. Start with a partial stock, buy/find more.
+  startAmmo: 10,
+  baseMax: 20,
+  findMin: 1, findMax: 5,   // ground pickups grant this many
 };
 
 // Points awarded for spearing each creature type.

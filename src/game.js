@@ -70,9 +70,12 @@ export class Game {
     // Weapons: harpoon owned from the start; the rest are bought at the shop.
     // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
     // it. weaponLevel tracks per-weapon upgrade tier (1..maxWeaponLevel).
-    this.owned = new Set(['harpoon']);
+    // Net gun is the free, unlimited default; the harpoon is a limited-ammo
+    // kill-shot you buy/find more of. Both owned from the start.
+    this.owned = new Set(['harpoon', 'net']);
     this.weapons = WEAPON_ORDER.filter((w) => this.owned.has(w));
     this.weaponIdx = 0; this.weaponSwapT = 0;
+    this.harpoonAmmo = HARPOON.startAmmo; this.harpoonMax = HARPOON.baseMax; this.harpoonCapLevel = 0;
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
     // Hold-to-aim state.
@@ -190,6 +193,9 @@ export class Game {
     // A power-up or two floating in the reef.
     this._makePowerups(1 + (Math.random() < 0.5 ? 1 : 0));
 
+    // Spare harpoons resting on cave floors — replenish your ammo.
+    for (const f of spread(C.floors(), 3 + (Math.random() * 2 | 0), 240)) this.powerups.push(new PowerUp(f.x, f.y - 10, 'ammo'));
+
     // The reef's relic objective + this reef's high points fallback.
     this.reefBanked = 0; this.relicBanked = false; this.carryingRelic = false;
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
@@ -246,6 +252,10 @@ export class Game {
       if (this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel)
         items.push({ kind: 'upgrade', id: w, label: `${WEAPON_INFO[w].glyph} Upgrade ${WEAPON_INFO[w].name} → Lv${this.weaponLevel[w] + 1}`, cost: SHOP.weaponUpgradeBase * this.weaponLevel[w] });
     }
+    if (this.harpoonAmmo < this.harpoonMax)
+      items.push({ kind: 'harpoons', id: 'harpoons', label: `➤ Harpoons ×${SHOP.harpoonPack}  (${this.harpoonAmmo}/${this.harpoonMax})`, cost: SHOP.harpoonPackCost });
+    if (this.harpoonCapLevel < SHOP.harpoonCapMaxLevel)
+      items.push({ kind: 'harpooncap', id: 'harpooncap', label: `➤ Harpoon Capacity +${SHOP.harpoonCapStep} (Lv${this.harpoonCapLevel + 1})`, cost: SHOP.harpoonCapCost[this.harpoonCapLevel + 1] });
     if (this.aimLevel < AIM.maxLevel)
       items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: AIM.cost[this.aimLevel + 1] });
     if (this.tankLevel < SHOP.tankMaxLevel)
@@ -278,6 +288,11 @@ export class Game {
     } else if (it.kind === 'aim') {
       this.aimLevel += 1;
       this.puName = `TARGETING Lv${this.aimLevel}`; this.puCol = PAL.gateGlow; this.puT = 1.6;
+    } else if (it.kind === 'harpoons') {
+      this.harpoonAmmo = Math.min(this.harpoonMax, this.harpoonAmmo + SHOP.harpoonPack);
+    } else if (it.kind === 'harpooncap') {
+      this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
+      this.puName = `HARPOON CAP ${this.harpoonMax}`; this.puCol = PAL.harpoon; this.puT = 1.6;
     }
     this.audio.bank();
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
@@ -320,6 +335,12 @@ export class Game {
       case 'speed': this.speedT += POWERUP.speedDuration; this.particles.sparkle(d.x, d.y, PAL.air, 24); this.audio.pickup(); break;
       case 'magnet': this.magnetT += POWERUP.magnetDuration; this.particles.sparkle(d.x, d.y, PAL.gold, 24); this.audio.pickup(); break;
       case 'life': this.lives += 1; this.particles.sparkle(d.x, d.y, PAL.diver, 28); this.audio.bank(); break;
+      case 'ammo': {
+        const got = HARPOON.findMin + Math.floor(Math.random() * (HARPOON.findMax - HARPOON.findMin + 1));
+        this.harpoonAmmo = Math.min(this.harpoonMax, this.harpoonAmmo + got);
+        this.puName = `+${got} HARPOONS`; this.puCol = PAL.harpoon; this.puT = 1.4;
+        this.particles.sparkle(d.x, d.y, PAL.harpoon, 18); this.audio.pickup(); break;
+      }
     }
     // Flash up the cartoon power-up name (its own pop, distinct from the
     // score-milestone 1-UP flourish).
@@ -423,6 +444,7 @@ export class Game {
   fire() {
     if (this.state !== 'playing' || this.fireCd > 0) return;
     const id = this.weapon, lvl = this.weaponLevel[id], info = WEAPON_INFO[id];
+    if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }        // out of harpoons
     if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
     this.fireCd = Math.max(info.minCd || 0, info.cd * (1 - 0.08 * (lvl - 1)) * fireMult);
@@ -459,8 +481,11 @@ export class Game {
     this.audio.fire();
   }
   _fireHarpoon() {
-    if (this.multiFireT > 0) for (const a of [-POWERUP.spread, 0, POWERUP.spread]) this._spear(a);
-    else this._spear(0);
+    // Consumes one harpoon per spear (multifire fires up to 3, ammo permitting).
+    const angles = this.multiFireT > 0 ? [-POWERUP.spread, 0, POWERUP.spread] : [0];
+    const n = Math.min(angles.length, this.harpoonAmmo);
+    for (let i = 0; i < n; i++) this._spear(angles[i]);
+    this.harpoonAmmo -= n;
   }
   _fireNet() {
     const d = this.diver;
@@ -1204,8 +1229,11 @@ export class Game {
     if (this.speedT > 0) buff('»»', this.speedT, PAL.air);
     if (this.magnetT > 0) buff('🧲', this.magnetT, PAL.gold);
 
-    // Gold purse (spendable currency, earned when you bank loot).
+    // Gold purse + harpoon ammo (a resource — the net gun is your unlimited fallback).
     this._text(`💰 ${this.gold}`, bx + 8, by + bh + 46, 15, PAL.gold, 'left', 'middle', true);
+    const lowAmmo = this.harpoonAmmo <= 3;
+    this._text(`➤ ${this.harpoonAmmo}/${this.harpoonMax}`, bx + 104, by + bh + 46, 14,
+      lowAmmo && Math.floor(this.t * 5) % 2 === 0 ? PAL.danger : (lowAmmo ? '#ff9a6b' : '#cfe0ee'), 'left', 'middle', true);
 
     // Shock-rod battery gauge (when owned) — drains on use, recharges slowly.
     if (this.owned.has('shock')) {
