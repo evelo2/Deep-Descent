@@ -139,8 +139,10 @@ to **bank** them into your score — before your **air** runs out.
 | Fire weapon | **Space** / **F** | Quick tap | **A / X / RB / RT** |
 | Hold to auto-aim | Hold **Space** / **F** | Hold 🎯 button | Hold fire |
 | Switch weapon | **Q** / **E** or **[** **]** | ⋯ SWAP button | **Y / LB** |
+| Light a flare (dark caves) | **G** | 🔥 button | **LT** |
 | Open shop (at a station) | **B** | ⚙ SHOP button | **B** |
 | Start / confirm / buy | **Space** | Tap | **A / Start** |
+| How to play (help) | **H** | ❔ button | — |
 | Pause | **P** / **Esc** | ⏸ button (top) | **Start** |
 | Mute | **M** | 🔊 button (top) | **Back / Select** |
 | Sail to a new reef | Hold **↑** at the boat | ⛵ **Sail On** button | Hold **↑** at the boat |
@@ -229,16 +231,26 @@ notches and home indicators via safe-area insets.
 - 🌊 **Currents** that sweep you through tunnels.
 - 🦑 **Kraken boss** guarding a hoard in the deep — harpoon it down.
 - 🏛 **Sunken temple** with a key-and-door puzzle and a treasure vault.
-- 🔫 **Five weapons** — harpoon, **net gun** (snare), **speargun** (burst),
-  **depth charge** (area blast) and **shock prod** (stun ring); switch on the fly.
+- 🔫 **Five weapons** — the **harpoon** (a scarce, limited-ammo kill-shot), the
+  **net gun** (unlimited; snares creatures so you can slip past), the **speargun**
+  (rapid burst), the **depth charge** (a hand-thrown mine — click to throw, click
+  to detonate; the blast hurts you too), and the **shock rod** (battery-powered
+  chain lightning). Switch on the fly.
+- 🎯 **Hold-to-aim** — hold fire to root in place and auto-lock the nearest threat,
+  then fire when lined up. Upgrade the **Targeting System** for faster aim & fire.
+- 🕯️ **Dark caves & flares** — pitch-black chambers hide rich loot; light a
+  **flare** (G) to see. Buy flares at the shop or find them in the world.
 - 🔔 **Dive bells** — deep checkpoints that bank loot and refill air without surfacing.
 - 💰 **Gold economy & shop** — banked loot pays out **points + gold**; spend gold
-  at the boat or a bell to unlock/upgrade weapons and buy bigger air tanks
-  (reef-gated). **Supply crates** drop free gear out in the reef.
+  at the boat or a bell to unlock/upgrade weapons, buy ammo, flares, air tanks
+  and capacity (reef-gated; **upgrade prices double each level**). **Supply
+  crates** and floor pickups drop free gear.
 - ⚡ **Power-ups** — air tank, multifire, shield, speed fins, treasure magnet, 1-UP.
-- ❤ **Extra life every 5,000 points**, with a difficulty curve that scales by reef.
+- ❤ **Extra life every 5,000 points**; each new reef is tougher (denser, bigger
+  creatures and ~10% less air per reef).
 - ⚓ **Per-reef relic objective** — find & bank the relic (or grind the points goal) to sail on.
-- 🗺 **Fog-of-war minimap** that reveals the caves as you explore.
+- 🗺 **Fog-of-war minimap** that reveals the caves as you explore (and fades when you swim behind it).
+- ❔ **In-game help** — a paged HOW TO PLAY screen (press **H**).
 - 🎮 **Full controller support** (Steam Deck, ROG Ally, and more) alongside keyboard + touch.
 - 🌿 **Atmosphere** — swaying kelp, coral and anemones, god-rays, caustics,
   parallax particulate, screen shake and a darkening, vignetting deep.
@@ -250,8 +262,9 @@ notches and home indicators via safe-area insets.
 
 ## Roadmap
 
-Ideas and possible future features (shields, speed fins, treasure magnet, extra
-lives, enterable wrecks, a balance pass, and more) are parked in
+Planned next: **one-shot special zones** (entrances vanish once used),
+**cave-entrance minigames** (first up, a classic 1980s platformer stage), and a
+**secure online scoring service**. These plus a longer backlog of ideas live in
 **[docs/ROADMAP.md](docs/ROADMAP.md)** — suggestions welcome.
 
 ## Under the hood
@@ -279,10 +292,12 @@ src/
   input.js                     keyboard + touch + gamepad → intent vector
   audio.js                     procedural Web Audio ambient + SFX
   game.js                      state machine, world/zone gen, collisions, HUD,
-                               camera, objectives, power-ups, minimap
+                               camera, objectives, weapons/ammo, shop, help,
+                               dark caves, minimap
   entities/                    diver, boat, shell (clam/chest), bigbubble,
                                treasure, creatures, harpoon, airvent, wreck,
-                               whale, kraken, current, powerup, relic
+                               whale, kraken, current, powerup, relic,
+                               divebell, weapons (net/depth-charge/supply-crate)
   systems/
     cave.js                    2D cave gen + distance-field collision/render +
                                fog-of-war minimap buffer
