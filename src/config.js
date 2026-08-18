@@ -21,8 +21,8 @@ export const DIVER = {
 
 export const AIR = {
   max: 100,
-  drainPerSec: 3.2,     // baseline air use
-  drainDepthFactor: 0.0009, // extra drain the deeper you are
+  drainPerSec: 2.6,     // baseline air use (eased for a little more breathing room)
+  drainDepthFactor: 0.00072, // extra drain the deeper you are
   refillPerSec: 55,     // refill rate while docked at boat
   ventRefillPerSec: 34, // refill rate while inside a vent's bubble stream
 };

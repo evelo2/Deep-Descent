@@ -19,17 +19,29 @@ export class PowerUp {
     this.type = type; this.phase = Math.random() * TAU;
     this.taken = false; this.radius = 16;
   }
-  update(dt, t) { this.y = this.baseY + Math.sin(t * 1.5 + this.phase) * 5; }
+  update(dt, t) {
+    this.y = this.baseY + Math.sin(t * 1.5 + this.phase) * 5;
+    this.flash = 0.5 + 0.5 * Math.sin(t * 6 + this.phase);   // 0..1 fast blink so it grabs the eye
+  }
   reached(d) { return Math.hypot(d.x - this.x, d.y - this.y) < this.radius + d.radius; }
 
   draw(ctx, camX, camY, t) {
     ctx.save();
     ctx.translate(this.x - camX, this.y - camY);
     const col = COLORS[this.type] || PAL.air;
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 26);
+    const f = this.flash !== undefined ? this.flash : 0.5;
+    // Pulsing glow halo.
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
     g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalAlpha = 0.5 + Math.sin(t * 3 + this.phase) * 0.18; ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, 26, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.32 + 0.42 * f; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 26 + 6 * f, 0, TAU); ctx.fill();
+    // Flashing ring around it.
+    ctx.globalAlpha = 0.35 + 0.6 * f;
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 19 + 3 * f, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Icon, breathing slightly with the flash.
+    const s = 1 + 0.09 * f; ctx.scale(s, s);
     ({ tank, multifire: multi, shield, speed, magnet, life })[this.type](ctx);
     ctx.restore();
   }
