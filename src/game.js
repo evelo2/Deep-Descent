@@ -64,7 +64,7 @@ export class Game {
     this.nextLifeScore = 5000; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
     this.puT = 0; this.puName = '';
-    this.won = false; this.newHi = false;
+    this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
@@ -498,12 +498,12 @@ export class Game {
   _hit() {
     this.diver.hit(); this.flash = 1; this.shake = 12;
     this.audio.hit();
-    this._loseLife();
+    this._loseLife('killed');
   }
 
-  _loseLife() {
+  _loseLife(cause = 'air') {
     this.lives -= GAME.hitCost;
-    if (this.lives <= 0) { this._gameOver(); return; }
+    if (this.lives <= 0) { this.deathCause = cause; this._gameOver(); return; }
     this.air = Math.max(this.air, 35);
     this.diver.invuln = GAME.invulnAfterHit;
     this.diver.y = Math.max(WORLD.SURFACE + 40, this.diver.y - 70);
@@ -983,8 +983,12 @@ export class Game {
   _gameOverScreen() {
     const cx = W / 2;
     this._panel();
-    const title = this.won ? 'HAUL SECURED!' : 'OUT OF AIR';
+    const title = this.won ? 'HAUL SECURED!' : this.deathCause === 'killed' ? 'YOU DIED' : 'OUT OF AIR';
     this._text(title, cx, 220, 48, this.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
+    if (!this.won) {
+      const sub = this.deathCause === 'killed' ? 'The wildlife got you' : 'You ran out of air';
+      this._text(sub, cx, 256, 15, '#ff9a6b', 'center', 'middle');
+    }
     this._text(`SCORE ${this.score}`, cx, 290, 30, PAL.hudText, 'center', 'middle');
     this._text(`DEEPEST ${Math.round(this.depthReached / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
     if (this.newHi) this._text('★ NEW BEST ★', cx, 360, 20, PAL.glow, 'center', 'middle', true);
