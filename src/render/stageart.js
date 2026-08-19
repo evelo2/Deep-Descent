@@ -313,3 +313,141 @@ export function drawLadderTile(ctx, x, y, capTop, palette, theme) {
   }
   ctx.restore();
 }
+
+// ---------------------------------------------------------------------------
+// Live ambient layers — stateless, driven purely by `t` (no dt, no stored
+// state, no Math.random). Every particle's position is a pure function of
+// its fixed index `i` and the clock `t`, exactly like Background's motes
+// (see render/background.js) — just computed inline instead of cached in an
+// array, since these pools are small and cheap to recompute each frame.
+// Composited by StageScene.composite(): drawShoal between the baked image
+// and the actors, drawForeground after the diver (see stagescene.js).
+
+const AMBIENT_W = 900, AMBIENT_H = 600;
+
+// Cheap deterministic pseudo-random in [0,1) from an integer seed — no
+// Math.random, fully reproducible per index.
+function hash01(i) {
+  const x = Math.sin(i * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+const SHOAL_COUNT = 12;
+// Dim background fish shoal drifting on a mid parallax plane, tinted toward
+// palette.bg2 so it reads as distant/behind the play. Drawn between the
+// baked backdrop+structure and the live actors.
+export function drawShoal(ctx, palette, t, roomIndex) {
+  ctx.save();
+  const tint = palette.bg2 || '#0a0a0a';
+  ctx.fillStyle = tint;
+  const roomShift = (roomIndex * 173) % AMBIENT_W;
+  for (let i = 0; i < SHOAL_COUNT; i++) {
+    const band = 60 + hash01(i * 3 + 1) * 340; // vertical band, upper 2/3 of the room
+    const speed = 8 + hash01(i * 5 + 2) * 14;  // px/sec, varies by index
+    const dir = i % 2 === 0 ? 1 : -1;
+    const startX = hash01(i * 7 + 3) * AMBIENT_W;
+    let x = (startX + roomShift + dir * speed * t) % (AMBIENT_W + 40);
+    if (x < 0) x += AMBIENT_W + 40;
+    x -= 20;
+    const y = band + Math.sin(t * 0.6 + i) * 6;
+    const size = 5 + hash01(i * 11 + 4) * 4;
+    const alpha = 0.25 + hash01(i * 13 + 5) * 0.15; // ~0.25-0.4
+    ctx.globalAlpha = alpha;
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir < 0) ctx.scale(-1, 1);
+    // body
+    ctx.beginPath(); ctx.ellipse(0, 0, size, size * 0.42, 0, 0, TAU); ctx.fill();
+    // tail
+    ctx.beginPath();
+    ctx.moveTo(-size, 0);
+    ctx.lineTo(-size - size * 0.8, -size * 0.5);
+    ctx.lineTo(-size - size * 0.8, size * 0.5);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+const SILT_COUNT = 40;
+const BUBBLE_COUNT = 16;
+const KELP_COUNT = 4;
+
+// Front-most live layer: drifting silt motes, rising bubbles, a few hanging
+// kelp strands near the edges, and a soft vignette. Drawn after the diver so
+// it reads as nearest-camera atmosphere; kept low-alpha/edge-hugging so it
+// never obscures play.
+export function drawForeground(ctx, palette, t, roomIndex) {
+  ctx.save();
+  const W = AMBIENT_W, H = AMBIENT_H;
+  const seedShift = (roomIndex * 91) % W;
+
+  // 1. Silt motes — slow drift, low alpha.
+  const siltColor = palette.silt || '#d8e6ee';
+  ctx.fillStyle = siltColor;
+  for (let i = 0; i < SILT_COUNT; i++) {
+    const baseX = hash01(i * 4 + 11) * W;
+    const baseY = hash01(i * 6 + 13) * H;
+    const speed = 3 + hash01(i * 8 + 17) * 5; // slow px/sec
+    let x = (baseX + seedShift + speed * t) % W;
+    if (x < 0) x += W;
+    let y = (baseY + speed * 0.4 * t) % H;
+    if (y < 0) y += H;
+    const r = 0.7 + hash01(i * 9 + 19) * 1.3;
+    ctx.globalAlpha = 0.12;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+
+  // 2. Rising bubbles — y decreases with t, wrapped; slight x wobble.
+  ctx.strokeStyle = 'rgba(220,245,255,0.9)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < BUBBLE_COUNT; i++) {
+    const baseX = hash01(i * 5 + 23) * W;
+    const baseY = hash01(i * 7 + 29) * H;
+    const rise = 12 + hash01(i * 10 + 31) * 18; // px/sec upward
+    let y = (baseY - rise * t) % H;
+    if (y < 0) y += H;
+    const wobble = Math.sin(t * 2 + i * 1.7) * 5;
+    const x = baseX + wobble;
+    const r = 1.2 + hash01(i * 12 + 37) * 2.2;
+    ctx.globalAlpha = 0.15 + hash01(i * 14 + 41) * 0.1; // ~0.15-0.25
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  }
+
+  // 3. Hanging kelp near the top edges (left/right), swaying — kept away
+  // from the center play area so it frames rather than blocks.
+  ctx.strokeStyle = palette.kelp || '#3fae6a';
+  ctx.lineCap = 'round';
+  for (let i = 0; i < KELP_COUNT; i++) {
+    const leftSide = i % 2 === 0;
+    const rootX = leftSide
+      ? 24 + hash01(i * 15 + 43) * 48
+      : W - 24 - hash01(i * 15 + 43) * 48;
+    const len = 60 + hash01(i * 17 + 47) * 50;
+    const segs = 5;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    let x = rootX, y = 0;
+    ctx.moveTo(x, y);
+    for (let s = 1; s <= segs; s++) {
+      const sway = Math.sin(t + i + s * 0.5) * (4 + s);
+      x = rootX + sway;
+      y = (s / segs) * len;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+
+  // 4. Soft vignette — subtle edge darkening, center stays bright.
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.restore();
+}
