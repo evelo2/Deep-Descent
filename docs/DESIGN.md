@@ -29,6 +29,27 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v18 — cavern-entry fix + selectable control legend
+
+- **Cavern spawn-exit fix** (`stage/stage.js`, `stage/themes.js`,
+  `config.js`): entering a platformer stage could instantly retreat you — the
+  lair rooms spawned the diver one tile from the `<` retreat door, so a held
+  leftward input at the transition bounced you straight back to the reef
+  (~0.07s). Fix: a `STAGE.doorGrace` window (0.6s) after every spawn during
+  which door tiles are ignored, plus wall-anchoring the lair retreat doors with
+  a spawn buffer so the wall pins the diver on the door (no overshoot) and a
+  casual nudge isn't a deliberate retreat. Regression-tested in
+  `tests/stage/entrygrace.test.mjs`.
+- **Selectable control legend** (`controls.js`, wired through `game.js`): the
+  player picks how on-screen prompts read — **Keyboard**, **Steam Deck**, or
+  **ROG Ally**. Steam Deck and ROG share the Xbox ABXY prompt vocabulary
+  (device name aside); Keyboard has its own. `controls.js` holds the two
+  vocabularies and builds the Help CONTROLS page, the always-visible HTML hint
+  strip, and the in-stage strip. Selector lives on the menu and Help page
+  (cycle with C, the menu's ← / →, or a tap), persists to localStorage, and
+  auto-switches to pad prompts when a gamepad is detected until the player picks
+  manually. Covered by `tests/game/controls.test.mjs`.
+
 ## v17 — weapon/vision balance pass
 
 A playtest-driven balance + bugfix batch (`config.js`, `game.js`, `input.js`):
