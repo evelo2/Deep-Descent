@@ -39,9 +39,13 @@ export const GAME = {
   startLives: 3,
   invulnAfterHit: 1.6,  // seconds of mercy invulnerability
   hitCost: 1,           // lives lost per hit
-  // Each new reef bites a little harder: air drains this much faster per reef
-  // (10% each), capped, on top of the creature-count/size scaling.
-  oxygenPenaltyPerReef: 0.10,
+  hitLootPenalty: 0.3,  // fraction of un-banked carried loot lost on a hit (stakes)
+  maxLives: 5,          // extra lives can't bank past this — no snowball
+  firstLifeScore: 8000, // score for the first extra life (was a flat 5000)
+  lifeScoreStep: 6000,  // additional score required per subsequent extra life
+  // Each new reef bites harder: air drains this much faster per reef (15% each),
+  // capped, on top of the creature-count/size scaling.
+  oxygenPenaltyPerReef: 0.15,
   oxygenPenaltyCap: 8,
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
 };
@@ -65,8 +69,8 @@ export const KRAKEN = { hp: 8, radius: 54, arms: 7, hitPoints: 120, killBonus: 2
 // Per-reef objective: bank the relic OR bank the points goal to sail on.
 export const RELIC = {
   value: 2000,          // score for banking the relic (the primary way to sail on)
-  goalBase: 8000,       // high points fallback for reef 1 (grind-heavy alternative)
-  goalPerReef: 1500,    // added per reef
+  goalBase: 12000,      // high points fallback for reef 1 (grind-heavy alternative)
+  goalPerReef: 2500,    // added per reef
   types: ['anchor', 'statue', 'map', 'idol'],
 };
 
@@ -95,7 +99,7 @@ export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 
 // Gold economy: banking carried loot at the boat or a dive bell yields full
 // score points plus gold (a fraction of the value) to spend on gear.
-export const GOLD = { rate: 0.5 };       // gold earned per point of loot banked
+export const GOLD = { rate: 0.2 };       // gold earned per point of loot banked
 
 // Dark caves: pitch-black chambers that only light up around a burning flare.
 // They hide rich loot, so a flare is the price of admission.
@@ -188,7 +192,7 @@ export const SPEARGUN = {
 
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
 export const BELL = {
-  count: 2,          // attempted bells per reef
+  count: 1,          // attempted bells per reef (scarcer refuel — air matters more)
   minDepthFrac: 0.42, // only place below this fraction of the world height
   radius: 46,        // interaction radius (swim in to dock)
   refillPerSec: 90,  // fast air refill while inside (tops you up quickly)
