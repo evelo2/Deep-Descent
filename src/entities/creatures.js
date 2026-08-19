@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -130,6 +130,33 @@ export class Stonefish extends Creature {
     ctx.save(); ctx.globalAlpha = this.revealed ? 1 : CREATURES.stonefish.hiddenAlpha;
     blit(ctx, this, camX, camY, drawStonefish, t); ctx.restore();
   }
+}
+
+// Barracuda — charger: patrols horizontally; when the diver lines up (in
+// sightRange + vertically within alignBand) it winds up (a visible tell,
+// rearing back), then dashes straight at them, then recovers. A snare
+// cancels a windup/dash — a stunned barracuda can't charge.
+export class Barracuda extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.barracuda.radius; this.dir = Math.random() < 0.5 ? 1 : -1; this.state = 'patrol'; this.timer = 0; this.dashY = y; }
+  update(dt, t, diver) {
+    const P = CREATURES.barracuda;
+    if (this.snareT > 0) { this.state = 'patrol'; return; }   // stunned: no dash
+    this.timer -= dt;
+    if (this.state === 'patrol') {
+      this.x += P.patrolSpeed * this.dir * dt; this.y = this.baseY + Math.sin(t * 1.3 + this.t0) * 16; this.facing = this.dir; this._edgeBounce();
+      const dx = diver.x - this.x, dy = diver.y - this.y;
+      if (Math.abs(dx) < P.sightRange && Math.abs(dy) < P.alignBand) { this.state = 'windup'; this.timer = P.windupTime; this.dir = dx >= 0 ? 1 : -1; this.facing = this.dir; this.dashY = diver.y; }
+    } else if (this.state === 'windup') {
+      this.x -= P.patrolSpeed * 0.4 * this.dir * dt;                       // rear back (tell)
+      if (this.timer <= 0) { this.state = 'dash'; this.timer = P.dashTime; }
+    } else if (this.state === 'dash') {
+      this.x += P.dashSpeed * this.dir * dt;
+      this.y += Math.sign(this.dashY - this.y) * Math.min(Math.abs(this.dashY - this.y), P.dashSpeed * 0.4 * dt);
+      this.facing = this.dir; this._edgeBounce();
+      if (this.timer <= 0) { this.state = 'recover'; this.timer = P.recover; }
+    } else { this.x += P.patrolSpeed * 0.5 * this.dir * dt; if (this.timer <= 0) this.state = 'patrol'; }
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawBarracuda, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {
