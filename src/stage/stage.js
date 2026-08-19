@@ -203,7 +203,11 @@ export class Stage {
     const cx = Math.floor((b.x + b.w / 2) / T);
     const cyTop = Math.floor(b.y / T);
     const cyBot = Math.floor((b.y + b.h - 1) / T);
-    const onLadderTile = ladderAt(this.room, cx, cyTop) || ladderAt(this.room, cx, cyBot);
+    // Pressing DOWN while stood on a ladder's top edge (feet resting on the tile
+    // above the ladder — e.g. a ladder that tops out flush with a deck) grabs the
+    // ladder just below, so you can step onto it and descend.
+    const grabDown = cmd.climbY > 0 && ladderAt(this.room, cx, Math.floor((b.y + b.h) / T));
+    const onLadderTile = ladderAt(this.room, cx, cyTop) || ladderAt(this.room, cx, cyBot) || grabDown;
     if (onLadderTile && (cmd.climbY !== 0 || b.onLadder)) {
       b.onLadder = true;
       let vy = cmd.climbY * STAGE.climb;
@@ -233,6 +237,25 @@ export class Stage {
     b.onGround = false;
     b.y += b.vy * dt;
     this._collideAxis('y');
+
+    // Ladder tops are walkable. Where a ladder passes through a deck it leaves a
+    // rung-gap in the floor; walking across it (no up/down input) used to drop
+    // you straight through. Treat the ladder tile as a one-way platform: land on
+    // its top edge when descending onto it without holding down. Pressing down
+    // (climbY>0) grabs the ladder above, so you can still choose to descend.
+    if (!b.onGround && !b.onLadder && cmd.climbY === 0 && b.vy >= 0) {
+      const feetPrev = (b.y + b.h) - b.vy * dt;
+      const footRow = Math.floor((b.y + b.h) / T);
+      const rng = tileRange(b.x, b.y, b.w, b.h);
+      for (let c = rng.c0; c <= rng.c1; c++) {
+        if (!ladderAt(this.room, c, footRow)) continue;
+        const top = footRow * T;
+        if (feetPrev <= top + 0.5 && b.y + b.h >= top) {
+          b.y = top - b.h; b.vy = 0; b.onGround = true;
+          break;
+        }
+      }
+    }
 
     // Pose (renderer hint). Use walk intent (not just resultant vx) so pressing
     // into a wall still reads as "walking" rather than snapping to "stand" the

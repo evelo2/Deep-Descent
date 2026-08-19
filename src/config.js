@@ -193,7 +193,8 @@ export const SPEARGUN = {
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
 export const BELL = {
   count: 1,          // attempted bells per reef (scarcer refuel — air matters more)
-  minDepthFrac: 0.42, // only place below this fraction of the world height
+  minDepthFrac: 0.67, // always at least two-thirds down — a deep-water safe haven
+                      // (also keeps the depth-scaled bank discount meaningful)
   radius: 46,        // interaction radius (swim in to dock)
   refillPerSec: 90,  // fast air refill while inside (tops you up quickly)
   // Banking at a bell is an opt-in convenience that costs a depth-scaled cut of
