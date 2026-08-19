@@ -324,6 +324,46 @@ export function drawPiranha(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Stonefish — lumpy, rock-mottled bottom-dweller with venomous dorsal spines.
+// Drab greens/browns so it reads as camouflage against the seabed; the caller
+// (Stonefish.draw) sets globalAlpha to fade it in/out of hiding.
+export function drawStonefish(ctx, t, hurt) {
+  ctx.save();
+  // lumpy, warty body — an irregular blob rather than a clean ellipse
+  ctx.fillStyle = hurt ? PAL.danger : '#5a5238';
+  ctx.beginPath();
+  ctx.moveTo(-17, 2);
+  ctx.quadraticCurveTo(-14, -10, -2, -11);
+  ctx.quadraticCurveTo(8, -13, 15, -4);
+  ctx.quadraticCurveTo(19, 2, 13, 7);
+  ctx.quadraticCurveTo(6, 12, -4, 10);
+  ctx.quadraticCurveTo(-14, 10, -17, 2);
+  ctx.closePath(); ctx.fill();
+  // mottled rock-like patches
+  ctx.fillStyle = hurt ? PAL.danger : '#3f4a30';
+  ctx.beginPath(); ctx.ellipse(-8, -3, 4.5, 3, 0.3, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 4, 4, 2.6, -0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(9, -5, 3.5, 2.4, 0.5, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : '#7a7050';
+  ctx.beginPath(); ctx.ellipse(-3, -6, 3, 2, -0.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(11, 2, 2.6, 1.8, 0.1, 0, TAU); ctx.fill();
+  // venomous dorsal spines
+  ctx.strokeStyle = hurt ? PAL.danger : '#8a7f5a'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    const bx = -10 + i * 4.6, by = -10 - Math.abs(Math.sin(i * 1.3)) * 1.5;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 1, by - 7); ctx.stroke();
+  }
+  // small, well-camouflaged eye
+  ctx.fillStyle = '#c9c19a'; ctx.beginPath(); ctx.arc(12, -3, 2, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#141208'; ctx.beginPath(); ctx.arc(12.4, -3, 1, 0, TAU); ctx.fill();
+  // frilly, ragged pectoral fin
+  ctx.strokeStyle = hurt ? PAL.danger : '#4a4630'; ctx.lineWidth = 1.4;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath(); ctx.moveTo(-2, 8); ctx.lineTo(-2 + i * 3, 14 + Math.sin(t * 1.5 + i) * 1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();

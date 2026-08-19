@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -113,6 +113,23 @@ export class Piranha extends Creature {
     this.facing = dx >= 0 ? 1 : -1;
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawPiranha, t); }
+}
+
+// Stonefish — camouflaged bottom-dweller: near-invisible until lit (flare/
+// torch, passed in via `lit`) or the diver strays within revealRange; barely
+// moves. Contact always damages regardless of `revealed` — camouflage only
+// hides it, it doesn't make it safe to bump into.
+export class Stonefish extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.stonefish.radius; this.revealed = false; }
+  update(dt, t, diver, lit) {
+    const d = Math.hypot(diver.x - this.x, diver.y - this.y);
+    this.revealed = !!lit || d < CREATURES.stonefish.revealRange;
+    this.y = this.baseY + Math.sin(t * 0.5 + this.t0) * 2;   // barely moves
+  }
+  draw(ctx, camX, camY, t) {
+    ctx.save(); ctx.globalAlpha = this.revealed ? 1 : CREATURES.stonefish.hiddenAlpha;
+    blit(ctx, this, camX, camY, drawStonefish, t); ctx.restore();
+  }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {
