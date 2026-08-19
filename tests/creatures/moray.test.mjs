@@ -73,6 +73,21 @@ const dt = 1 / 60;
   assert('snared moray head stays at the anchor', m.x === m.ax && m.y === m.ay);
 }
 
+// Only the extended head is a hazard: a HIDDEN moray never bites, even with the
+// diver sitting right on its anchor (the anchor is in open water, not a wall).
+{
+  const m = new Moray(0, 0);
+  const onAnchor = { x: 0, y: 0, radius: 15 };
+  assert('hidden moray does NOT bite the diver on its anchor', m.hits(onAnchor) === false);
+  // Drive it into a strike, then the extended head IS a hazard where it reaches.
+  const diver = { x: 40, y: 0, radius: 15 };
+  let t = 0, guard = 0;
+  while (m.state !== 'strike' && guard++ < 300) { t += dt; m.update(dt, t, diver); }
+  assert('moray entered a strike', m.state === 'strike');
+  const atHead = { x: m.x, y: m.y, radius: 15 };
+  assert('striking moray bites at its extended head', m.hits(atHead) === true);
+}
+
 // Config + points wiring.
 assert('CREATURES.moray is configured', !!CREATURES.moray);
 assert('KILL_POINTS.Moray === 240', KILL_POINTS.Moray === 240);
