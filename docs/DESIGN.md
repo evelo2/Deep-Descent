@@ -29,6 +29,38 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v17 — weapon/vision balance pass
+
+A playtest-driven balance + bugfix batch (`config.js`, `game.js`, `input.js`):
+
+- **Depth charge — 2nd-click detonation fixed.** Throwing set the ~1.15s
+  throw cooldown and `fire()` bailed on any cooldown, silently eating the
+  detonation click (the charge only ever blew on its safety fuse). Detonation
+  now runs ahead of the cooldown guard, gated by a `_chargeLock` that needs a
+  *fresh* trigger (set on throw, cleared on release) so a continuous hold can't
+  throw-then-instantly-detonate at the diver.
+- **Shock rod now kills.** It only ever stunned; now it tracks cumulative hits
+  per creature — first zap stuns/knocks, the second (`SHOCK.hitsToKill`) kills
+  and awards points like a harpoon.
+- **Speargun is limited, shop-only ammo.** Its own pool (`SPEARGUN` ammo:
+  start 20 on acquisition, cap 100, pricey packs of 20 at the shop); `fire()`
+  gates on it and caps the burst by what's left, one spear per shot. HUD shows
+  the count.
+- **Darker caves, longer flares.** Unlit dark-zone view shrinks (74→52px), the
+  black goes near-opaque and closes in faster (`DARKZONE` alpha/falloff), and
+  flares burn ~16s (was 9) to compensate.
+- **Torch** (`TORCH`): a standalone shop item (350g, reef 2+) that shares the
+  shock-rod battery. Toggle with **T** (touch button / gamepad R3) for a
+  sustained ~250px cool light in dark caves, draining the battery ~8/s;
+  off, it recharges. Auto-cuts out when flat; flares stay independent. Trades
+  zaps for light. The shared battery gauge is shown for the torch too, and the
+  dark-cave hint is torch-aware.
+- **Shop fit.** Row spacing now adapts to the item count so a long list — and
+  its Close row — stays inside the 600px playfield.
+- **Tests:** `tests/game/*.test.mjs` drive the real `fire()`/`_fireShock` and
+  the battery model headlessly (charge detonation, shock kill, speargun ammo,
+  torch economics).
+
 ## v16 — platformer stages (cave-entrance minigames)
 
 - **Stage subsystem** (`stage/stage.js`, `stage/themes.js`, `render/stage.js`,
