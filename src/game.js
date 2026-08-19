@@ -132,7 +132,7 @@ export class Game {
     this.score = 0; this.carried = 0; this.gold = 0; this.lives = GAME.startLives; this.atBell = null;
     this.airMax = AIR.max; this.air = this.airMax; this.multiFireT = 0;
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
-    this.nextLifeScore = 5000; this.oneUpT = 0;
+    this.nextLifeScore = GAME.firstLifeScore; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
     // Weapons: harpoon owned from the start; the rest are bought at the shop.
     // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
@@ -215,8 +215,8 @@ export class Game {
     const darkSpots = spread(C.chambers(WH * DARKZONE.minDepthFrac), DARKZONE.count, 800);
     for (const s of darkSpots) {
       this.darkZones.push({ x: s.x, y: s.y, r: DARKZONE.radius });
-      // Reward the dark: extra gems, a flare or two, and a supply crate.
-      for (let k = 0; k < 5; k++) {
+      // Reward the dark: a few gems, a flare or two, and a supply crate.
+      for (let k = 0; k < 3; k++) {
         const gx = s.x + (Math.random() - 0.5) * 260, gy = s.y + (Math.random() - 0.5) * 200;
         if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, 'gem'));
       }
@@ -234,8 +234,8 @@ export class Game {
 
     // Creatures change with depth; density and shark size rise with the reef
     // number so later reefs stay tense even as lives accumulate.
-    const nCreatures = 32 + Math.min(this.reef - 1, 12) * 2;   // 32 → 56 by reef 13
-    const sizeUp = Math.min((this.reef - 1) * 0.05, 0.4);      // bigger sharks deeper into a run
+    const nCreatures = 28 + this.reef * 3;                      // 31 → 67 by reef 13 — threat keeps pace
+    const sizeUp = Math.min((this.reef - 1) * 0.06, 0.5);      // bigger sharks deeper into a run
     for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
       const deep = c.y / WH, r = Math.random();
@@ -1018,8 +1018,8 @@ export class Game {
     this.powerups = this.powerups.filter((p) => !p.taken);
     this.crates = this.crates.filter((c) => !c.taken);
 
-    // Extra life every 5000 points banked.
-    while (this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += 5000; this.oneUpT = 2.2; this.audio.bank(); }
+    // Extra lives at escalating score thresholds, capped so they can't snowball.
+    while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
 
@@ -1132,6 +1132,11 @@ export class Game {
   _hit() {
     this.diver.hit(); this.flash = 1; this.shake = 12;
     this.audio.hit();
+    // A hit spills some of your un-banked haul — deep, loaded runs are now risky.
+    if (this.carried > 0 && GAME.hitLootPenalty > 0) {
+      const lost = Math.round(this.carried * GAME.hitLootPenalty);
+      if (lost > 0) { this.carried -= lost; this.puName = `−${lost} LOOT!`; this.puCol = PAL.danger; this.puT = 1.6; }
+    }
     this._loseLife('killed');
   }
 
