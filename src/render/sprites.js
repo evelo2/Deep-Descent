@@ -364,6 +364,50 @@ export function drawBarracuda(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Moray — ambusher: a gaping eel head lunging out of a wall/wreck crevice.
+// The neck fades into shadow behind it (it stays anchored in the dark even
+// mid-strike); only the head — wide jaw, needle teeth, small eye — reads
+// solid. Reference drawEel's palette family, darker/moodier for a wall-dweller.
+export function drawMoray(ctx, t, hurt) {
+  ctx.save();
+  // neck receding into the crevice's shadow
+  const neck = ctx.createLinearGradient(-42, 0, 4, 0);
+  neck.addColorStop(0, 'rgba(8,8,6,0)');
+  neck.addColorStop(1, hurt ? PAL.danger : '#4a3d2e');
+  ctx.fillStyle = neck;
+  ctx.beginPath();
+  ctx.moveTo(-42, -3);
+  ctx.quadraticCurveTo(-18, -9, 4, -8);
+  ctx.lineTo(4, 8);
+  ctx.quadraticCurveTo(-18, 9, -42, 3);
+  ctx.closePath(); ctx.fill();
+  // wide flattened head
+  ctx.fillStyle = hurt ? PAL.danger : '#4a3d2e';
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.quadraticCurveTo(16, -11, 27, -3);
+  ctx.quadraticCurveTo(30, 0, 27, 3);
+  ctx.quadraticCurveTo(16, 11, 0, 9);
+  ctx.quadraticCurveTo(6, 0, 0, -9);
+  ctx.fill();
+  // gaping lower jaw, hinged wide open
+  ctx.fillStyle = hurt ? PAL.danger : '#6b5a44';
+  ctx.beginPath();
+  ctx.moveTo(4, 5); ctx.quadraticCurveTo(18, 15, 29, 8); ctx.quadraticCurveTo(19, 8, 6, 9);
+  ctx.closePath(); ctx.fill();
+  // needle teeth, upper and lower
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 4; i++) {
+    const tx = 8 + i * 5;
+    ctx.beginPath(); ctx.moveTo(tx, -6); ctx.lineTo(tx + 1.4, -1); ctx.lineTo(tx + 2.8, -6); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tx, 8); ctx.lineTo(tx + 1.4, 3); ctx.lineTo(tx + 2.8, 8); ctx.fill();
+  }
+  // small eye, set back on the skull
+  ctx.fillStyle = '#0a0f16'; ctx.beginPath(); ctx.arc(6, -4, 1.8, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#e8d98a'; ctx.beginPath(); ctx.arc(5.6, -4.4, 0.7, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 export function drawStonefish(ctx, t, hurt) {
   ctx.save();
   // lumpy, warty body — an irregular blob rather than a clean ellipse
