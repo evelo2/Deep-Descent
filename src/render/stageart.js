@@ -661,6 +661,273 @@ export function drawChest(ctx, x, y, palette, t) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// Room decor — small, non-colliding set-dressing props placed per-room via
+// the theme's `decor` array (src/stage/themes.js) and drawn from
+// StageScene (src/render/stagescene.js). Parser/physics never read decor —
+// it lives entirely beside `rooms`, purely visual. STATIC kinds are baked
+// once into the room's offscreen layer (t is unused, called with t=0);
+// ANIMATED kinds are redrawn live every frame in the foreground layer,
+// after the diver. Every helper save()/restore()s and leaves no ctx-state
+// leak; positions vary only by the item's own cell (c, r) and the clock
+// `t` — no Math.random, matching the rest of this file's ambient layers.
+
+const ANIMATED_DECOR = new Set(['chain', 'lantern']);
+export function isAnimatedDecor(k) { return ANIMATED_DECOR.has(k); }
+
+// Brass-ringed porthole; `cracked` swaps the glass sheen for a crack + a
+// thin shaft of light leaking through, per theme via palette.glow.
+function drawPorthole(ctx, cx, cy, palette, cracked) {
+  const brass = palette.brass || palette.solidEdge;
+  const glass = palette.bg2 || '#0a0a0a';
+  const glow = palette.glow || palette.door;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = brass;
+  ctx.beginPath(); ctx.arc(0, 0, 10, 0, TAU); ctx.fill();
+  ctx.fillStyle = glass;
+  ctx.beginPath(); ctx.arc(0, 0, 7.4, 0, TAU); ctx.fill();
+  ctx.fillStyle = brass;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU;
+    ctx.beginPath(); ctx.arc(Math.cos(a) * 9, Math.sin(a) * 9, 1, 0, TAU); ctx.fill();
+  }
+  if (cracked) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-2, -6); ctx.lineTo(1, -1); ctx.lineTo(-3, 3); ctx.lineTo(2, 6);
+    ctx.stroke();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = glow; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(3, 14); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = glow; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(-2, -2, 3.5, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+// Ship's wheel — 8 spokes around a rimmed hub.
+function drawWheel(ctx, cx, cy, palette) {
+  const wood = palette.plank || palette.solid;
+  const brass = palette.brass || palette.solidEdge;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = wood; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.stroke();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+    ctx.lineTo(Math.cos(a) * 16, Math.sin(a) * 16);
+    ctx.stroke();
+    ctx.fillStyle = brass;
+    ctx.beginPath(); ctx.arc(Math.cos(a) * 16, Math.sin(a) * 16, 1.4, 0, TAU); ctx.fill();
+  }
+  ctx.fillStyle = brass;
+  ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Cannon: iron barrel on a wooden two-wheel carriage, anchored at the
+// cell's top-left so its footprint sits within ~1x1 tile.
+function drawCannon(ctx, x, y, palette) {
+  const iron = palette.rivet || palette.solidEdge || '#2c1d10';
+  const wood = palette.plank || palette.solid;
+  const brass = palette.brass || palette.solidEdge;
+  ctx.save();
+  ctx.translate(x + 15, y + 22);
+  ctx.fillStyle = wood;
+  ctx.beginPath(); ctx.arc(-9, 4, 5, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(9, 4, 5, 0, TAU); ctx.fill();
+  ctx.fillStyle = brass;
+  ctx.beginPath(); ctx.arc(-9, 4, 1.6, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(9, 4, 1.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = wood;
+  ctx.fillRect(-11, -2, 22, 6);
+  ctx.fillStyle = iron;
+  ctx.beginPath();
+  ctx.moveTo(-6, -4); ctx.lineTo(16, -6); ctx.lineTo(16, 0); ctx.lineTo(-6, 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = brass;
+  ctx.beginPath(); ctx.arc(16, -3, 2.4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Wooden crate with an X cross-brace, anchored at the cell's top-left.
+function drawCrate(ctx, x, y, palette) {
+  const wood = palette.plank || palette.solid;
+  const woodHi = palette.plankHi || wood;
+  const iron = palette.rivet || palette.solidEdge;
+  ctx.save();
+  ctx.translate(x + 4, y + 6);
+  const w = 22, h = 22;
+  ctx.fillStyle = wood;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = woodHi; ctx.lineWidth = 1;
+  ctx.strokeRect(1, 1, w - 2, h - 2);
+  ctx.strokeStyle = iron; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(w, h);
+  ctx.moveTo(w, 0); ctx.lineTo(0, h);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Broken mast stub jutting up from the cell, splintered at the top.
+function drawMast(ctx, cx, baseY, palette) {
+  const wood = palette.plank || palette.solid;
+  const iron = palette.rivet || palette.solidEdge;
+  ctx.save();
+  ctx.translate(cx, baseY);
+  ctx.strokeStyle = wood; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(4, -30); ctx.stroke();
+  ctx.strokeStyle = iron; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-2, -26); ctx.lineTo(2, -34);
+  ctx.moveTo(4, -28); ctx.lineTo(9, -36);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Compass rose inlaid in a cabin floor — flattened to read as lying flat.
+function drawCompass(ctx, cx, cy, palette) {
+  const brass = palette.brass || palette.solidEdge;
+  const glow = palette.glow || brass;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, 0.55);
+  ctx.strokeStyle = brass; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.stroke();
+  ctx.fillStyle = glow;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU;
+    ctx.save();
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(0, -13); ctx.lineTo(2.5, 0); ctx.lineTo(0, 3); ctx.lineTo(-2.5, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = brass;
+  ctx.beginPath(); ctx.arc(0, 0, 2, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Broken wreck beam, tilted with splintered ends.
+function drawTimber(ctx, x, y, palette) {
+  const wood = palette.plank || palette.solid;
+  const woodHi = palette.plankHi || wood;
+  ctx.save();
+  ctx.translate(x + 15, y + 15);
+  ctx.rotate(-0.3);
+  ctx.fillStyle = wood;
+  ctx.fillRect(-16, -4, 32, 8);
+  ctx.strokeStyle = woodHi; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-16, -1); ctx.lineTo(16, -1); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(16, -4); ctx.lineTo(22, -7);
+  ctx.moveTo(16, 0); ctx.lineTo(23, 1);
+  ctx.moveTo(16, 4); ctx.lineTo(21, 8);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Riveted steel conduit (LAIR) with a thin neon seam, anchored at the
+// cell's top-left, running horizontally across the tile.
+function drawConduit(ctx, x, y, palette) {
+  const steel = palette.rivet || palette.solidEdge;
+  const steelHi = palette.plankHi || steel;
+  const neon = palette.neon || palette.ladder;
+  ctx.save();
+  ctx.translate(x, y + 10);
+  ctx.fillStyle = steel;
+  ctx.fillRect(0, 0, 30, 10);
+  ctx.strokeStyle = steelHi; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(30, 2); ctx.stroke();
+  ctx.fillStyle = steelHi;
+  for (let k = 3; k < 30; k += 8) { ctx.beginPath(); ctx.arc(k, 5, 1.2, 0, TAU); ctx.fill(); }
+  ctx.strokeStyle = neon; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+  ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(30, 8); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Hanging chain (hammock rigging) — a few oval links swaying with t.
+function drawChain(ctx, item, palette, t) {
+  const iron = palette.rivet || palette.solidEdge || '#333';
+  const x = item.c * T + 15, y = item.r * T;
+  const sway = Math.sin(t + item.c);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(sway * 0.08);
+  ctx.strokeStyle = iron; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  let cy = 0;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath(); ctx.ellipse(0, cy + 5, 3, 5, 0, 0, TAU); ctx.stroke();
+    cy += 9;
+  }
+  ctx.restore();
+}
+
+// Hanging lantern — swinging chain + a soft flickering glow halo.
+function drawLantern(ctx, item, palette, t) {
+  const iron = palette.rivet || palette.solidEdge || '#333';
+  const glass = palette.glow || palette.door || '#ffdf9e';
+  const x = item.c * T + 15, y = item.r * T;
+  const sway = Math.sin(t + item.c);
+  const flicker = 0.7 + 0.3 * Math.sin(t * 3 + item.c * 1.7);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(sway * 0.12);
+  ctx.strokeStyle = iron; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 8); ctx.stroke();
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = flicker * 0.55;
+  const g = ctx.createRadialGradient(0, 14, 0, 0, 14, 18);
+  g.addColorStop(0, glass);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 14, 18, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = iron;
+  ctx.beginPath(); ctx.roundRect(-5, 8, 10, 12, 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-5, 8); ctx.lineTo(0, 4); ctx.lineTo(5, 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = glass;
+  ctx.globalAlpha = flicker;
+  ctx.fillRect(-3, 10, 6, 8);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Dispatch a single decor item by its `k` kind, anchored to its tile cell
+// (item.c, item.r). `t` is only consumed by ANIMATED_DECOR kinds.
+export function drawDecor(ctx, item, palette, t) {
+  const x = item.c * T, y = item.r * T;
+  const cx = x + 15, cy = y + 15;
+  switch (item.k) {
+    case 'porthole': drawPorthole(ctx, cx, cy, palette, !!item.cracked); break;
+    case 'wheel': drawWheel(ctx, cx, cy, palette); break;
+    case 'cannon': drawCannon(ctx, x, y, palette); break;
+    case 'crate': drawCrate(ctx, x, y, palette); break;
+    case 'mast': drawMast(ctx, cx, y + 26, palette); break;
+    case 'compass': drawCompass(ctx, cx, cy, palette); break;
+    case 'timber': drawTimber(ctx, x, y, palette); break;
+    case 'conduit': drawConduit(ctx, x, y, palette); break;
+    case 'chain': drawChain(ctx, item, palette, t); break;
+    case 'lantern': drawLantern(ctx, item, palette, t); break;
+    default: break;
+  }
+}
+
 // Door at tile (x, y). kind === '<' is a framed wooden hatch (retreat);
 // kind === '>' is a lit doorway/portal (advance/exit). Both keep the
 // original pulse timing (0.5 + 0.3*sin(t*4)) on their glowing part, and

@@ -3,7 +3,7 @@
 // cache, movers, diver) are drawn live every frame on top of the baked image.
 import { STAGE } from '../config.js';
 import { drawDiverFoot } from './sprites.js';
-import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck, drawShoal, drawForeground, drawHazard, drawCoin, drawGem, drawChest, drawHatch } from './stageart.js';
+import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck, drawShoal, drawForeground, drawHazard, drawCoin, drawGem, drawChest, drawHatch, drawDecor, isAnimatedDecor } from './stageart.js';
 
 const T = STAGE.tile;
 const { W, H } = { W: 900, H: 600 };
@@ -46,6 +46,11 @@ export class StageScene {
         }
       }
     }
+
+    // static room decor (portholes, wheel, cannons, crates, ...) bakes in
+    // after the structure so it sits on top of the tiles beneath it.
+    const decor = stage.theme.decor?.[stage.roomIndex] || [];
+    for (const it of decor) if (!isAnimatedDecor(it.k)) drawDecor(ctx, it, p, 0);
   }
 
   composite(ctx, stage, t) {
@@ -94,6 +99,10 @@ export class StageScene {
     if (b.invuln > 0 && Math.floor(b.invuln * 12) % 2 === 0) ctx.globalAlpha = 0.4;
     drawDiverFoot(ctx, b.pose, stage.animT);
     ctx.restore();
+
+    // animated room decor (chains, lanterns) — live, drawn above the diver
+    const decor = stage.theme.decor?.[stage.roomIndex] || [];
+    for (const it of decor) if (isAnimatedDecor(it.k)) drawDecor(ctx, it, p, t);
 
     // frontmost live ambient: silt, bubbles, edge kelp, vignette
     drawForeground(ctx, p, t, stage.roomIndex);
