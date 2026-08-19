@@ -196,7 +196,23 @@ export const BELL = {
   minDepthFrac: 0.42, // only place below this fraction of the world height
   radius: 46,        // interaction radius (swim in to dock)
   refillPerSec: 90,  // fast air refill while inside (tops you up quickly)
+  // Banking at a bell is an opt-in convenience that costs a depth-scaled cut of
+  // the deposit's value (both score and gold); the boat always banks at full.
+  // The deeper the bell, the bigger the cut — so the richest deep hauls are the
+  // most tempting to carry up to the boat instead. See bellBankRate + _bankLoot.
+  bankDiscountMin: 0.10,  // cut at the shallowest bell (at minDepthFrac)
+  bankDiscountMax: 0.35,  // cut at a bell right at the world floor
 };
+
+// Depth-scaled dive-bell banking multiplier: 1.0 = full value (the boat). A bell
+// pays 1 − discount, where the discount ramps from bankDiscountMin (shallow) to
+// bankDiscountMax (deep) across the reachable bell depth range.
+export function bellBankRate(bellY) {
+  const f = Math.max(0, Math.min(1, bellY / WORLD.WH));
+  const span = Math.max(1e-6, 1 - BELL.minDepthFrac);
+  const t = Math.max(0, Math.min(1, (f - BELL.minDepthFrac) / span));
+  return 1 - (BELL.bankDiscountMin + (BELL.bankDiscountMax - BELL.bankDiscountMin) * t);
+}
 
 // Power-ups.
 export const POWERUP = {

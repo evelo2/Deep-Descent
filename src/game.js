@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -541,9 +541,13 @@ export class Game {
 
   // Unload carried loot at a station (boat or bell): full score points plus
   // gold (a fraction of the value) to spend on gear, and bank the relic.
-  _bankLoot() {
-    const g = Math.round(this.carried * GOLD.rate);
-    this.reefBanked += this.carried; this.score += this.carried; this.gold += g;
+  // Bank the carried haul. `rate` is the value multiplier: the boat banks at 1.0
+  // (full), a dive bell at its depth-scaled bellBankRate (a cut of both score and
+  // gold). The relic still completes the objective at any rate.
+  _bankLoot(rate = 1) {
+    const value = Math.round(this.carried * rate);
+    const g = Math.round(value * GOLD.rate);
+    this.reefBanked += value; this.score += value; this.gold += g;
     this.carried = 0; this.bankPulse = 1; this.audio.bank();
     if (this.carryingRelic) { this.relicBanked = true; this.carryingRelic = false; }
   }
@@ -999,7 +1003,10 @@ export class Game {
     if (atStation) {
       const rate = atBell ? BELL.refillPerSec : AIR.refillPerSec;
       if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + rate * dt); if (Math.random() < 0.3) this.audio.refill(); }
-      if (this.carried > 0) this._bankLoot();
+      // The boat is home — it auto-banks the haul at full value. A dive bell only
+      // banks on demand (below), at a depth-scaled discount, so you can top up air
+      // there and still carry a rich haul up to the boat for full value.
+      if (atBoat && this.carried > 0) this._bankLoot();
       // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
       if (atBoat && this.carried === 0 && this.canSail && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
       else this.dockHold = 0;
@@ -1013,8 +1020,13 @@ export class Game {
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
     }
-    // Open the shop while docked (loot banked) — spend gold on gear.
-    if (atStation && this.carried === 0 && (this.input.pressed('shop') || this.input.consumeButton('shop'))) this._openShop(atBoat ? 'boat' : 'bell');
+    // Shop / bell-bank control. At a dive bell with a haul, the first press banks
+    // it (opt-in, depth-discounted); once empty, the press opens the shop. The
+    // boat has already auto-banked, so its press opens the shop directly.
+    if (atStation && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
+      if (atBell && this.carried > 0) this._bankLoot(bellBankRate(atBell.y));
+      else if (this.carried === 0) this._openShop(atBoat ? 'boat' : 'bell');
+    }
 
     // Entities.
     const emitBig = (x, y) => this.bigBubbles.push(new BigBubble(x, y));
@@ -1637,10 +1649,13 @@ export class Game {
       if (this.state === 'playing' && this.zone === 'stage') {
         btns.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
       }
-      // At a station with loot banked: a SHOP button.
-      const atStation = this.state === 'playing' && this.zone === 'reef' && this.carried === 0 &&
+      // At a station with loot banked: a SHOP button. At a dive bell while still
+      // carrying: the same button banks the haul (opt-in, depth-discounted).
+      const onReef = this.state === 'playing' && this.zone === 'reef';
+      const atStation = onReef && this.carried === 0 &&
         (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)));
-      if (atStation) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
+      const bellLoaded = onReef && this.carried > 0 && this.bells.some((b) => b.contains(this.diver));
+      if (atStation || bellLoaded) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
       // In the shop: one tappable button per item row.
       if (this.state === 'shop') {
         const items = this._shopItems();
@@ -1684,7 +1699,13 @@ export class Game {
       this._text(WEAPON_INFO[this.weapon].glyph, cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     } else if (b.id === 'shop') {
-      this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+      // At a dive bell with a haul, this button banks (shows the depth rate);
+      // otherwise it opens the shop.
+      if (this.carried > 0 && this.atBell) {
+        this._text(`🔔 BANK ${Math.round(bellBankRate(this.atBell.y) * 100)}%`, cx, cy + 1, 14, PAL.bellLight, 'center', 'middle', true);
+      } else {
+        this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
+      }
     } else if (b.id === 'help') {
       this._text('❔ HELP', cx, cy + 1, 14, PAL.hudText, 'center', 'middle', true);
     } else if (b.id === 'aim') {
@@ -1815,8 +1836,13 @@ export class Game {
         this._text(`◆ DOCKED — find the ⚓ relic (or bank ${this.reefGoal - this.reefBanked} more pts) to sail on`, W / 2, H - 30, 14, PAL.key, 'center', 'middle');
       }
     } else if (this.atBell) {
-      const msg = this.carried > 0 ? '🔔 DIVE BELL — banking loot & refilling air' : '🔔 DIVE BELL — air topped up. A safe haven in the deep';
-      this._text(msg, W / 2, H - 30, 15, PAL.bellLight, 'center', 'middle');
+      if (this.carried > 0) {
+        const pct = Math.round(bellBankRate(this.atBell.y) * 100);
+        const how = this.input.isTouch ? 'Tap 🔔 BANK' : `Press ${this._key('shop')}`;
+        this._text(`🔔 DIVE BELL — air topped up.  ${how} to bank here (${pct}%)  ·  or carry up to the boat for full value`, W / 2, H - 30, 13.5, PAL.bellLight, 'center', 'middle');
+      } else {
+        this._text('🔔 DIVE BELL — air topped up. A safe haven in the deep', W / 2, H - 30, 15, PAL.bellLight, 'center', 'middle');
+      }
     } else {
       // Near an open whale mouth or the temple gate?
       let hinted = false;
