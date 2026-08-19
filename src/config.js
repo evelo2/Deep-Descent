@@ -232,6 +232,24 @@ export const HARPOON = {
   findMin: 1, findMax: 5,   // ground pickups grant this many
 };
 
+// Cave-entrance platformer stages. A themed, few-room platform minigame reached
+// through a reef entrance (see src/stage/). Fixed 30×20 tile screen at 30px.
+export const STAGE = {
+  tile: 30, cols: 30, rows: 20,
+  gravity: 1500,      // px/s^2 downward
+  maxFall: 640,       // terminal fall speed
+  walk: 210,          // horizontal walk speed
+  jump: 560,          // jump impulse (upward velocity on press when grounded)
+  climb: 150,         // ladder climb speed
+  bodyW: 20, bodyH: 28,   // diver-on-foot AABB (fits inside a 30px tile)
+  moverSpeed: 72,     // patroller / sliding-hazard speed
+  respawnInvuln: 1.1, // brief mercy window after respawning at a room start
+  cacheValue: 1200,   // final loot cache payout (richer than a normal reef find)
+  coinValue: 60, gemValue: 140,   // per 'o' pickup (alternating by theme accent)
+  substep: 1 / 120,   // physics sub-step cap so fast falls never tunnel tiles
+  entranceR: 42,      // reef-side entrance proximity radius for contains()
+};
+
 // Points awarded for spearing each creature type.
 export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400 };
 
