@@ -445,6 +445,50 @@ export function drawStonefish(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Electric Ray — ranged drifter: a flat diamond body with a long whip-thin
+// tail and faint electric arcs crackling off its wingtips. The expanding
+// pulse ring (drawn separately by ElectricRay.draw, centred on the ray, once
+// it has a live `pulseR`) is a cyan ring — this function only draws the body.
+export function drawElectricRay(ctx, t, hurt) {
+  ctx.save();
+  const flap = Math.sin(t * 2.2) * 3;
+  // long whip tail
+  ctx.strokeStyle = hurt ? PAL.danger : '#3a4a52';
+  ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-8, 0);
+  ctx.quadraticCurveTo(-30, 4 + flap * 0.5, -46, -2 + flap);
+  ctx.stroke();
+  // flat diamond body
+  ctx.fillStyle = hurt ? PAL.danger : '#4a6068';
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.quadraticCurveTo(6, -18 - flap, -14, 0);
+  ctx.quadraticCurveTo(6, 18 + flap, 24, 0);
+  ctx.closePath(); ctx.fill();
+  // pale belly stripe
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  ctx.beginPath();
+  ctx.moveTo(16, 0); ctx.quadraticCurveTo(2, -6, -8, 0); ctx.quadraticCurveTo(2, 6, 16, 0); ctx.fill();
+  // small eyes atop the head
+  ctx.fillStyle = '#0a0f16';
+  ctx.beginPath(); ctx.arc(12, -3, 1.6, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(12, 3, 1.6, 0, TAU); ctx.fill();
+  // faint electric arcs off the wingtips
+  ctx.strokeStyle = `rgba(140,240,255,${0.35 + Math.sin(t * 9) * 0.2})`;
+  ctx.lineWidth = 1;
+  for (const s of [-1, 1]) {
+    const bx = 4, by = s * (16 + flap * s);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx + 5, by + s * 4);
+    ctx.lineTo(bx + 2, by + s * 7);
+    ctx.lineTo(bx + 8, by + s * 10);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
