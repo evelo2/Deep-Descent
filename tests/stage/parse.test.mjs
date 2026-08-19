@@ -67,4 +67,57 @@ assert('parse: side walls solid OOB', solidAt(room, -1, 5) === true && solidAt(r
 assert('parse: pit below bottom not solid', solidAt(room, 5, 20) === false);
 assert('parse: ladder lookup', ladderAt(room, 5, 4) === true);
 assert('parse: doors', doorKindAt(room, 0, 8) === '<' && doorKindAt(room, 28, 8) === '>');
+
+// --- Reachability gate: every room must be completable. Flood-fill (4-connected)
+// directly over the RAW ascii rows from a room's S cell, treating every
+// non-'#' character as passable (parseRoom clears dynamic glyphs S/o/$/x/E to
+// '.', so scanning the raw strings is the only way to locate them by position;
+// '#' is the only glyph that blocks movement). Assert the fill reaches every
+// '>' door, and — for each theme's final room — the '$' cache. This is a
+// necessary (not sufficient) connectivity check: it can't prove a jump/ladder
+// path is *comfortable*, but it guarantees the goal isn't sealed behind solid
+// rock, which is exactly the class of bug this guards against.
+function floodReachable(rawRows) {
+  const R = rawRows.length, C = rawRows[0].length;
+  let sr = -1, sc = -1;
+  for (let r = 0; r < R; r++) {
+    const c = rawRows[r].indexOf('S');
+    if (c !== -1) { sr = r; sc = c; break; }
+  }
+  const seen = Array.from({ length: R }, () => Array(C).fill(false));
+  if (sr === -1) return seen;   // no S found — caller's assertions will fail elsewhere
+  const stack = [[sr, sc]];
+  seen[sr][sc] = true;
+  while (stack.length) {
+    const [r, c] = stack.pop();
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= R || nc < 0 || nc >= C) continue;
+      if (seen[nr][nc]) continue;
+      if (rawRows[nr][nc] === '#') continue;   // only solid rock blocks
+      seen[nr][nc] = true;
+      stack.push([nr, nc]);
+    }
+  }
+  return seen;
+}
+
+for (const th of THEMES) {
+  for (let i = 0; i < th.rooms.length; i++) {
+    const raw = th.rooms[i];
+    const seen = floodReachable(raw);
+    const isFinal = i === th.rooms.length - 1;
+    for (let r = 0; r < raw.length; r++) {
+      for (let c = 0; c < raw[r].length; c++) {
+        const ch = raw[r][c];
+        if (ch === '>') {
+          assert(`${th.key} room ${i}: S can reach exit > at (${r},${c})`, seen[r][c]);
+        } else if (ch === '$' && isFinal) {
+          assert(`${th.key} room ${i}: S can reach cache $ at (${r},${c})`, seen[r][c]);
+        }
+      }
+    }
+  }
+}
+
 done();
