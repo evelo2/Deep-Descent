@@ -142,6 +142,7 @@ export class Game {
     // Hold-to-aim state.
     this.aimLevel = 0; this.aiming = false; this.fireHeldT = 0; this.aimAngle = 0; this.aimTarget = null;
     this._prevHolding = false; this._didAim = false;
+    this._chargeLock = false;   // a live charge detonates on a *fresh* trigger, not the same hold
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.shockBattery = SHOCK.batteryMax; this.shockBolts = [];
     this.puT = 0; this.puName = ''; this.reentryT = 0;
@@ -611,11 +612,23 @@ export class Game {
   // Fire the current weapon (respecting its cooldown). Upgrade level boosts the
   // key stat per weapon and shaves a little off every cooldown.
   fire() {
-    if (this.state !== 'playing' || this.fireCd > 0) return;
+    if (this.state !== 'playing') return;
     const id = this.weapon, lvl = this.weaponLevel[id], info = WEAPON_INFO[id];
     const armed = this.armedCharge && !this.armedCharge.dead;
-    if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }        // out of harpoons
-    if (id === 'charge' && !armed && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; } // out of charges
+    // Detonating a live charge is a *different* action from throwing one, so it
+    // must bypass the throw cooldown — otherwise the 2nd click lands inside the
+    // ~1.15s throw cd (line below) and is silently dropped, which is the "second
+    // click never detonates" bug. `_chargeLock` requires a fresh trigger: it's
+    // set when a charge is thrown and cleared once the fire control is released,
+    // so a continuous hold can't throw-then-instantly-detonate at the diver.
+    if (id === 'charge' && armed) {
+      if (this._chargeLock) return;
+      this.armedCharge.detonate(); this.armedCharge = null; this.audio.fire();
+      return;
+    }
+    if (this.fireCd > 0) return;
+    if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }   // out of harpoons
+    if (id === 'charge' && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }     // out of charges
     if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
     this.fireCd = Math.max(info.minCd || 0, info.cd * (1 - 0.08 * (lvl - 1)) * fireMult);
@@ -623,10 +636,7 @@ export class Game {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
       case 'speargun': this.burst = SPEARGUN.shots + (lvl - 1); this.burstT = 0; break;   // +1 shot per level
-      case 'charge':   // first click throws, second click detonates
-        if (armed) { this.armedCharge.detonate(); this.armedCharge = null; }
-        else { this._fireCharge(); this.chargeAmmo -= 1; }
-        break;
+      case 'charge':   this._fireCharge(); this.chargeAmmo -= 1; this._chargeLock = true; break;   // throw; 2nd trigger detonates
       case 'shock':    this._fireShock(lvl); break;
     }
   }
@@ -767,6 +777,9 @@ export class Game {
     const graced = this._fireGrace > 0;
     // Touch tap-to-fire (a tap anywhere) shoots once. Keyboard/mouse/gamepad
     // firing is resolved from the held state below (tap = release; hold = aim).
+    // A charge detonates only on a *fresh* trigger: drop the lock the moment the
+    // fire control is no longer held (covers both touch taps and key/mouse holds).
+    if (!this.input.fireHeld()) this._chargeLock = false;
     const tapped = this.input.consumeTapFire();
     if (!graced && tapped) this.fire();
     this.fireCd = Math.max(0, this.fireCd - dt);
