@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper, drawUrchin } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -233,6 +233,17 @@ export class Grouper extends Creature {
     this.facing = dx >= 0 ? 1 : -1;
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawGrouper, t); }
+}
+
+// Sea Urchin — static/slow-drift spiky contact hazard: net-immune (there's
+// nothing for the net to snare — no body to wrap, just spines), but takes no
+// special handling from harpoon/spear/charge — it dies like any creature via
+// the default `dead = true` hit paths. Barely moves: a small vertical sway
+// plus an optional slow horizontal drift.
+export class Urchin extends Creature {
+  constructor(x, y, drift = 0) { super(x, y); this.radius = CREATURES.urchin.radius; this.driftX = drift; this.netImmune = true; }
+  update(dt, t) { this.x += this.driftX * dt; this.y = this.baseY + Math.sin(t * 0.4 + this.t0) * 3; }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawUrchin, t, false); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

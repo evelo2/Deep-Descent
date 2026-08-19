@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -307,6 +307,11 @@ export const CREATURES = {
   // anchor; once they leave, disengages and drifts back toward the anchor
   // (at a slower speed) instead of chasing.
   grouper: { territory: 260, guardSpeed: 70, radius: 22 },
+  // Sea Urchin — static/slow-drift spiky contact hazard: net-immune (nothing
+  // for the net to grab onto), but dies like any creature to harpoon/spear/
+  // charge. driftSpeed is 0 by default — most placements barely move,
+  // threading currents/dark rooms into obstacle courses.
+  urchin: { driftSpeed: 0, radius: 15 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
