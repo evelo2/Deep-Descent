@@ -3,6 +3,7 @@
 // cache, movers, diver) are drawn live every frame on top of the baked image.
 import { STAGE } from '../config.js';
 import { drawDiverFoot } from './sprites.js';
+import { neighborMask, drawStructureTile, drawLadderTile } from './stageart.js';
 
 const T = STAGE.tile;
 const { W, H } = { W: 900, H: 600 };
@@ -36,12 +37,9 @@ export class StageScene {
         const gch = room.grid[r][c];
         const x = c * T, y = r * T;
         if (gch === '#') {
-          ctx.fillStyle = p.solid; ctx.fillRect(x, y, T, T);
-          ctx.strokeStyle = p.solidEdge; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
+          drawStructureTile(ctx, x, y, neighborMask(room, c, r), p, stage.theme);
         } else if (gch === 'H') {
-          ctx.strokeStyle = p.ladder; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.moveTo(x + 7, y); ctx.lineTo(x + 7, y + T); ctx.moveTo(x + T - 7, y); ctx.lineTo(x + T - 7, y + T); ctx.stroke();
-          for (let k = 6; k < T; k += 10) { ctx.beginPath(); ctx.moveTo(x + 7, y + k); ctx.lineTo(x + T - 7, y + k); ctx.stroke(); }
+          drawLadderTile(ctx, x, y, room.grid[r - 1]?.[c] !== 'H', p, stage.theme);
         } else if (gch === '^') {
           ctx.fillStyle = p.hazard;
           ctx.beginPath(); ctx.moveTo(x + 2, y + T); ctx.lineTo(x + T / 2, y + 6); ctx.lineTo(x + T - 2, y + T); ctx.closePath(); ctx.fill();

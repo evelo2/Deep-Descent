@@ -13,6 +13,8 @@ const SHIP = {
     bg1: '#3a2a1c', bg2: '#1c1109', solid: '#6b4a2b', solidEdge: '#3a2716',
     ladder: '#caa15a', hazard: '#c8662b', door: '#8fe6ff', loot: '#ffcf5c',
     cache: '#ffe9a6', accent: 'gem',
+    plank: '#7a5230', plankHi: '#a5744a', brass: '#c8963a', rivet: '#2c1d10',
+    neon: '#8fe6ff', glow: '#ffdf9e', silt: '#b79a6a',
   },
   rooms: [
     [ // 1/5 Main Deck — breach; climb down the rigging to the hull floor, walk to the hatch.
@@ -73,6 +75,8 @@ const LAIR = {
     bg1: '#0e1622', bg2: '#05080d', solid: '#2a3947', solidEdge: '#12202b',
     ladder: '#5fe0c8', hazard: '#7ff3ff', door: '#8fe6ff', loot: '#61dcff',
     cache: '#eafcff', accent: 'gem',
+    plank: '#334654', plankHi: '#4a6274', brass: '#7f93a2', rivet: '#9fb4c2',
+    neon: '#5fe0c8', glow: '#8ff0ff', silt: '#5b7180',
   },
   rooms: [
     [ // 1/3 Cave Mouth — a wreck spilled into a flooded cavern; climb down to the exit.
