@@ -13,7 +13,8 @@ assert('two themes ship+lair', THEMES.length === 2 && THEMES[0].key === 'ship' &
 assert('getTheme returns lair', getTheme('lair').name === 'THE LAIR');
 assert('getTheme falls back', getTheme('nope') === THEMES[0]);
 for (const th of THEMES) {
-  assert(`${th.key} has 3 rooms`, th.rooms.length === 3);
+  const EXPECT_ROOMS = { ship: 5, lair: 3 };
+  assert(`${th.key} has ${EXPECT_ROOMS[th.key]} rooms`, th.rooms.length === EXPECT_ROOMS[th.key]);
   for (let i = 0; i < th.rooms.length; i++) {
     const room = th.rooms[i];
     assert(`${th.key} room ${i} has ${STAGE.rows} rows`, room.length === STAGE.rows);

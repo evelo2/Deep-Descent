@@ -29,6 +29,44 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v20 — stage wreck overhaul
+
+The v16 platformer stages (`stage/stage.js`, `stage/themes.js`, `render/`)
+grew a real ladder-traversal contract, more rooms, and a fully layered baked
+renderer, replacing the original flat/placeholder look. Spec + plan under
+`.superpowers/sdd/2026-08-19-stage-wreck-overhaul/`.
+
+- **Ladder traversal contract + all-rooms physics test** — the old rooms
+  could silently place a ladder a player couldn't actually reach, stranding
+  progress. Every room is now proven traversable by driving the real `Stage`
+  physics (gravity, AABB collision, ladder climb/rest/jump-off) through
+  waypoints for every room, in a single regression test
+  (`tests/stage/traversal.test.mjs`). **Ship** grew from a single room to a
+  **5-room descent**; **Lair** was redrawn to **3 rooms**; every room now has
+  a `<` retreat door.
+- **Layered baked renderer** (`render/stagescene.js` `StageScene`): each room
+  is baked once per entry into an offscreen canvas — depth-gradient backdrop
+  with godrays/caustics, parallax wreck silhouettes, and the autotiled
+  plank/rock structure with rope/riveted ladders (`render/stageart.js`
+  `neighborMask`/`drawStructureTile`/`drawLadderTile`/`drawBackdrop`/
+  `drawFarWreck`). `StageScene.composite(ctx, stage, t)` layers the bake with
+  live per-frame elements: a background fish shoal, themed actors (kegs/arcs
+  hazards, gems/coins, an open treasure chest, hatch/portal doors), and a
+  foreground pass of drifting silt, rising bubbles, swaying kelp and a
+  vignette.
+- **Per-room decor data** — a `decor` array per room (`stage/themes.js`)
+  places small, non-colliding set-dressing (portholes, a ship's wheel,
+  cannons, crates, chains, a swinging lantern, broken timbers, riveted
+  conduits) drawn by `render/stageart.js` `drawDecor`; static kinds bake into
+  the room image, animated kinds (`chain`, `lantern`) redraw live. Parser and
+  physics never read `decor` — it's purely visual, so it can't affect
+  traversal.
+- **Themed HUD + perf hoist** (`render/stage.js`, `render/stageart.js`): the
+  HUD's carried-loot accent and air-bar tint now pull from
+  `stage.theme.palette` so Ship and Lair read as distinct, while score stays
+  high-contrast; the foreground vignette gradient (invariant across frames)
+  is now built once and reused instead of reallocated every draw.
+
 ## v19 — creature diversity (zone-aware, reef-gated ecosystem)
 
 The hazard roster grew from 6 near-identical patrollers to a diverse ecosystem
