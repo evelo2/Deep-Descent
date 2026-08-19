@@ -520,15 +520,33 @@ export class Game {
   }
 
   // Scatter current zones on open cells, flowing along the cave.
+  // Sideways currents can sit anywhere, but a *downdraft* must be anchored in a
+  // roomy chamber (a fully-open 3×3 neighbourhood) — never over a narrow neck —
+  // and flows slightly off-vertical so there's always a lateral escape lane. A
+  // pure down-current in a thin tunnel used to trap the diver: wall friction ate
+  // the small net upward velocity while the current kept pushing down.
   _makeCurrents(count) {
     const C = this.cave;
+    const roomy = C.chambers(OPEN_BAND + 200);   // clearance spots for downdrafts
     for (let i = 0; i < count; i++) {
-      const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
-      const horizontal = Math.random() < 0.7;
+      // 30% of currents want to be vertical, but only where there's real room;
+      // otherwise fall back to a (safe) horizontal sweep.
+      let horizontal = Math.random() < 0.7;
+      let c;
+      if (!horizontal) {
+        if (roomy.length) c = roomy[(Math.random() * roomy.length) | 0];
+        else { horizontal = true; c = C.randomOpen(OPEN_BAND + 200); }
+      } else {
+        c = C.randomOpen(OPEN_BAND + 200);
+      }
+      if (!c) continue;
       const dir = Math.random() < 0.5 ? -1 : 1;
       const w = horizontal ? 360 + Math.random() * 240 : 200 + Math.random() * 120;
-      const h = horizontal ? 170 + Math.random() * 90 : 300 + Math.random() * 200;
-      const fx = horizontal ? dir : 0, fy = horizontal ? 0 : 1;   // vertical currents pull down
+      const h = horizontal ? 170 + Math.random() * 90 : 240 + Math.random() * 140;   // shorter columns reach into fewer necks
+      // Downdrafts flow slightly off-vertical (Current normalises the vector), so
+      // held-up thrust always nets upward and there's a sideways way out.
+      const escape = Math.random() < 0.5 ? -1 : 1;
+      const fx = horizontal ? dir : 0.34 * escape, fy = horizontal ? 0 : 1;
       this.currents.push(new Current(c.x - w / 2, c.y - h / 2, w, h, fx, fy));
     }
   }
