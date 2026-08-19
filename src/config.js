@@ -266,6 +266,9 @@ export const STAGE = {
   coinValue: 60, gemValue: 140,   // per 'o' pickup (alternating by theme accent)
   substep: 1 / 120,   // physics sub-step cap so fast falls never tunnel tiles
   entranceR: 42,      // reef-side entrance proximity radius for contains()
+  doorGrace: 0.6,     // after entering a room, ignore door tiles this long so a
+                      // residual/held input at the transition can't bounce you
+                      // straight back out through the adjacent retreat door
 };
 
 // Points awarded for spearing each creature type.
