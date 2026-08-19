@@ -80,6 +80,7 @@ export class Stage {
     this.result = null;         // set to 'retreat' | 'complete' when leaving
     this.bannerT = 2.2;         // seconds the room banner shows
     this.animT = 0;             // walk/climb animation clock
+    this.doorGrace = STAGE.doorGrace;   // don't trigger doors right after spawning
     const st = this.rooms[0].start;
     this.body = {
       x: st.x, y: st.y, w: STAGE.bodyW, h: STAGE.bodyH,
@@ -94,6 +95,7 @@ export class Stage {
   // skips a tile. Returns per-frame events for the Game to apply.
   update(dt, cmd) {
     this.bannerT = Math.max(0, this.bannerT - dt);
+    this.doorGrace = Math.max(0, this.doorGrace - dt);
     this.animT += dt * (Math.abs(this.body.vx) > 10 || this.body.onLadder ? 1 : 0);
     if (this.body.invuln > 0) this.body.invuln -= dt;
     const ev = { loot: 0, died: false, exited: null };
@@ -125,6 +127,7 @@ export class Stage {
   // Resolve door overlaps: '<' retreats; '>' advances a room, or completes if
   // this is the final room. Returns 'retreat' | 'complete' | null.
   _checkDoors() {
+    if (this.doorGrace > 0) return null;   // just spawned — don't bounce on an adjacent door
     const b = this.body, room = this.room;
     const cx = Math.floor((b.x + b.w / 2) / T);
     const cy = Math.floor((b.y + b.h / 2) / T);
@@ -136,6 +139,7 @@ export class Stage {
       const st = this.room.start;
       b.x = st.x; b.y = st.y; b.vx = 0; b.vy = 0; b.onGround = false; b.onLadder = false;
       this.bannerT = 2.2;
+      this.doorGrace = STAGE.doorGrace;   // fresh grace on entering the next room
       return null;
     }
     return null;
