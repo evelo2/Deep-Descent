@@ -60,7 +60,7 @@ const HELP_PAGES = [
   { title: '🔫 WEAPONS', lines: [
     '➤ Harpoon — limited ammo; a slow, hard-hitting kill shot. Buy or find more.',
     '🕸 Net gun — unlimited; snares a creature so you can slip past it.',
-    '⋙ Speargun — a rapid three-shot burst.',
+    '⋙ Speargun — a rapid three-shot burst; limited spears, restock at the shop.',
     '💣 Depth charge — click to throw, click again to detonate. Huge blast that',
     '     hurts you too — keep clear! Scarce and expensive to restock.',
     '⚡ Shock rod — chain lightning; first zap stuns, a second kills. Battery-fed.',
@@ -133,6 +133,7 @@ export class Game {
     this.weapons = WEAPON_ORDER.filter((w) => this.owned.has(w));
     this.weaponIdx = 0; this.weaponSwapT = 0;
     this.harpoonAmmo = HARPOON.startAmmo; this.harpoonMax = HARPOON.baseMax; this.harpoonCapLevel = 0;
+    this.speargunAmmo = 0;   // no speargun at start; granted on first acquiring it
     this.chargeAmmo = CHARGE.startAmmo; this.chargeMax = CHARGE.baseMax; this.chargeCapLevel = 0;
     this.armedCharge = null; this.explosions = [];
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
@@ -315,7 +316,8 @@ export class Game {
     const lockable = WEAPON_ORDER.filter((w) => WEAPON_INFO[w].cost > 0 && !this.owned.has(w) && this.reef >= WEAPON_INFO[w].minReef);
     if (lockable.length) {
       const w = lockable[(Math.random() * lockable.length) | 0];
-      this.owned.add(w); this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
+      this.owned.add(w); if (w === 'speargun') this.speargunAmmo = SPEARGUN.startAmmo;
+      this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
       this.puName = `${WEAPON_INFO[w].name}!`; this.puCol = PAL.gold; this.puT = 1.7;
     } else {
       const upg = WEAPON_ORDER.filter((w) => w !== 'charge' && this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
@@ -354,6 +356,8 @@ export class Game {
       items.push({ kind: 'harpoons', id: 'harpoons', label: `➤ Harpoons ×${SHOP.harpoonPack}  (${this.harpoonAmmo}/${this.harpoonMax})`, cost: SHOP.harpoonPackCost });
     if (this.harpoonCapLevel < SHOP.harpoonCapMaxLevel)
       items.push({ kind: 'harpooncap', id: 'harpooncap', label: `➤ Harpoon Capacity +${SHOP.harpoonCapStep} (Lv${this.harpoonCapLevel + 1})`, cost: this._dblCost(SHOP.harpoonCapBase, this.harpoonCapLevel) });
+    if (this.owned.has('speargun') && this.speargunAmmo < SPEARGUN.ammoMax)
+      items.push({ kind: 'spears', id: 'spears', label: `⋙ Spears ×${SPEARGUN.ammoPack}  (${this.speargunAmmo}/${SPEARGUN.ammoMax})`, cost: SPEARGUN.packCost });
     if (this.owned.has('charge') && this.chargeAmmo < this.chargeMax)
       items.push({ kind: 'charges', id: 'charges', label: `💣 Depth Charge ×1  (${this.chargeAmmo}/${this.chargeMax})`, cost: CHARGE.refillCost });
     if (this.owned.has('charge') && this.chargeMax < CHARGE.capMax)
@@ -382,7 +386,8 @@ export class Game {
     if (this.gold < it.cost) { this.shopDeny = 0.6; this.audio.gasp(); return; }
     this.gold -= it.cost;
     if (it.kind === 'weapon') {
-      this.owned.add(it.id); this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(it.id);
+      this.owned.add(it.id); if (it.id === 'speargun') this.speargunAmmo = SPEARGUN.startAmmo;
+      this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(it.id);
       this.puName = `${WEAPON_INFO[it.id].name}!`; this.puCol = PAL.gold; this.puT = 1.6;
     } else if (it.kind === 'upgrade') {
       this.weaponLevel[it.id] += 1;
@@ -395,6 +400,8 @@ export class Game {
       this.puName = `TARGETING Lv${this.aimLevel}`; this.puCol = PAL.gateGlow; this.puT = 1.6;
     } else if (it.kind === 'harpoons') {
       this.harpoonAmmo = Math.min(this.harpoonMax, this.harpoonAmmo + SHOP.harpoonPack);
+    } else if (it.kind === 'spears') {
+      this.speargunAmmo = Math.min(SPEARGUN.ammoMax, this.speargunAmmo + SPEARGUN.ammoPack);
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
       this.puName = `HARPOON CAP ${this.harpoonMax}`; this.puCol = PAL.harpoon; this.puT = 1.6;
@@ -628,6 +635,7 @@ export class Game {
     }
     if (this.fireCd > 0) return;
     if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }   // out of harpoons
+    if (id === 'speargun' && this.speargunAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; } // out of spears
     if (id === 'charge' && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }     // out of charges
     if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
@@ -635,7 +643,7 @@ export class Game {
     switch (id) {
       case 'harpoon':  this._fireHarpoon(); break;
       case 'net':      this._fireNet(); break;
-      case 'speargun': this.burst = SPEARGUN.shots + (lvl - 1); this.burstT = 0; break;   // +1 shot per level
+      case 'speargun': this.burst = Math.min(this.speargunAmmo, SPEARGUN.shots + (lvl - 1)); this.burstT = 0; break;   // +1 shot/level, capped by ammo
       case 'charge':   this._fireCharge(); this.chargeAmmo -= 1; this._chargeLock = true; break;   // throw; 2nd trigger detonates
       case 'shock':    this._fireShock(lvl); break;
     }
@@ -797,6 +805,7 @@ export class Game {
       if (this.burstT <= 0) {
         const j = (SPEARGUN.shots - this.burst) - (SPEARGUN.shots - 1) / 2;
         this._spear(j * SPEARGUN.spread);
+        this.speargunAmmo = Math.max(0, this.speargunAmmo - 1);   // one spear per shot
         this.burst -= 1; this.burstT = SPEARGUN.interval;
       }
     }
@@ -1595,6 +1604,8 @@ export class Game {
     if (this.owned.has('charge'))
       this._text(`💣 ${this.chargeAmmo}/${this.chargeMax}`, bx + 184, by + bh + 46, 14, this.chargeAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
     this._text(`🔥 ${this.flares}`, bx + 264, by + bh + 46, 14, this.flares <= 0 ? '#ff9a6b' : '#ffb27a', 'left', 'middle', true);
+    if (this.owned.has('speargun'))
+      this._text(`⋙ ${this.speargunAmmo}/${SPEARGUN.ammoMax}`, bx + 344, by + bh + 46, 14, this.speargunAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
 
     // Shock-rod battery gauge (when owned) — drains on use, recharges slowly.
     if (this.owned.has('shock')) {

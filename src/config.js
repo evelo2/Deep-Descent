@@ -167,7 +167,13 @@ export const SHOCK = {
   hitsToKill: 2,       // first zap stuns; the second (cumulative) kills the creature
   batteryMax: 100, cost: 40, recharge: 11,   // ~2-3 zaps on a full battery, ~9s to refill
 };
-export const SPEARGUN = { shots: 3, interval: 0.07, spread: 0.06 };
+export const SPEARGUN = {
+  shots: 3, interval: 0.07, spread: 0.06,
+  startAmmo: 20,     // spears granted on first acquiring the speargun
+  ammoMax: 100,      // capacity ceiling (buy in packs up to here)
+  ammoPack: 20,      // spears per shop purchase
+  packCost: 450,     // deliberately expensive — the rapid 3-shot burst is strong
+};
 
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
 export const BELL = {
