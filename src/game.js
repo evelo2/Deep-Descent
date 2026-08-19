@@ -6,7 +6,7 @@ import { Boat } from './entities/boat.js';
 import { Clam, Chest } from './entities/shell.js';
 import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
-import { Shark, Octopus, Jelly, Puffer, Eel, Angler } from './entities/creatures.js';
+import { spawnCreature, pickFauna } from './entities/spawn.js';
 import { Cave } from './systems/cave.js';
 import { Flora } from './render/flora.js';
 import { Harpoon } from './entities/harpoon.js';
@@ -238,17 +238,11 @@ export class Game {
     const sizeUp = Math.min((this.reef - 1) * 0.06, 0.5);      // bigger sharks deeper into a run
     for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
-      const deep = c.y / WH, r = Math.random();
-      let cr;
-      if (deep < 0.30) {                       // shallow reef
-        cr = r < 0.42 ? new Jelly(c.x, c.y) : r < 0.72 ? new Puffer(c.x, c.y) : new Shark(c.x, c.y, 0.7 + sizeUp + Math.random() * 0.35);
-      } else if (deep < 0.62) {                // mid water
-        cr = r < 0.34 ? new Octopus(c.x, c.y) : r < 0.62 ? new Shark(c.x, c.y, 1.0 + sizeUp + Math.random() * 0.4)
-          : r < 0.82 ? new Puffer(c.x, c.y) : new Jelly(c.x, c.y);
-      } else {                                 // the deep
-        cr = r < 0.34 ? new Shark(c.x, c.y, 1.3 + sizeUp + Math.random() * 0.4) : r < 0.64 ? new Eel(c.x, c.y) : new Angler(c.x, c.y);
-      }
-      this.creatures.push(cr);
+      const deep = c.y / WH;
+      const band = deep < 0.30 ? 'shallow' : deep < 0.62 ? 'mid' : 'deep';
+      const entry = pickFauna(band, this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef, { sizeUp });
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
     }
 
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
@@ -549,7 +543,12 @@ export class Game {
     for (const f of spread(C.floors(), 10, 200)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
     for (let i = 0; i < 26; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.4 ? 'gem' : 'coin')); }
     for (const w of spread(C.walls(), 5, 380)) this.vents.push(new AirVent(w.x, w.y, w.side));
-    for (let i = 0; i < 6; i++) { const c = C.randomOpen(OPEN_BAND + 300); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Puffer(c.x, c.y)); }
+    for (let i = 0; i < 6; i++) {
+      const c = C.randomOpen(OPEN_BAND + 300); if (!c) continue;
+      const entry = pickFauna('temple', this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
     // Columns for temple flavour.
     for (const f of spread(C.floors(), 18, 200)) this.columns.push({ x: f.x, y: f.y });
 
@@ -620,7 +619,12 @@ export class Game {
     for (let i = 0; i < 60; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.5 ? 'gem' : 'coin')); }
     // A couple of blowhole vents so it's survivable, plus swallowed hazards.
     for (const w of spread(C.walls(), 6, 400)) this.vents.push(new AirVent(w.x, w.y, w.side));
-    for (let i = 0; i < 8; i++) { const c = C.randomOpen(OPEN_BAND + 200); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Jelly(c.x, c.y)); }
+    for (let i = 0; i < 8; i++) {
+      const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
+      const entry = pickFauna('belly', this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
     this.flora = new Flora([]);
     this._makeCurrents(3);   // churning guts
     this._makePowerups(1);
