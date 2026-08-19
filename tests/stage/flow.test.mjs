@@ -26,7 +26,10 @@ for (let i = 0; i < 200; i++) gained += s.update(1 / 60, { moveX: 1, jump: false
 assert('grabbing loot yields gem value', gained === STAGE.gemValue);
 assert('loot marked taken', s.room.loot[0].taken === true);
 
-// Retreat door: overlapping '<' reports exited='retreat'.
+// Retreat door: holding left onto a wall-anchored '<' reports exited='retreat'.
+// The '<' sits against the left wall (col0) with a buffer to start, matching the
+// themes — the wall pins the diver on the door so the door-grace can't let it
+// overshoot into an empty cell and miss the trigger.
 const retreatRoom = [
   '..............................','..............................','..............................',
   '..............................','..............................','..............................',
@@ -34,14 +37,20 @@ const retreatRoom = [
   '..............................','..............................','..............................',
   '..............................','..............................','..............................',
   '..............................','..............................',
-  '.<S...........................', // retreat door immediately left of start
+  '<..S..........................', // retreat door at the left wall, a buffer from start
   '#######.......................',
   '##############################',
 ];
 s = mk([retreatRoom]);
 let exited = null;
 for (let i = 0; i < 120 && !exited; i++) exited = s.update(1 / 60, { moveX: -1, jump: false, climbY: 0 }).exited;
-assert('overlapping < retreats', exited === 'retreat');
+assert('holding left onto wall-anchored < retreats', exited === 'retreat');
+// ...but not instantly: the door-grace must protect the entry frames.
+s = mk([retreatRoom]);
+let earlyExit = null;
+const graceFrames = Math.round((STAGE.doorGrace - 0.05) * 60);
+for (let i = 0; i < graceFrames && !earlyExit; i++) earlyExit = s.update(1 / 60, { moveX: -1, jump: false, climbY: 0 }).exited;
+assert('retreat does not fire during the door-grace', earlyExit === null);
 
 // Exit door advances rooms, then completes in the final room.
 const roomA = [
