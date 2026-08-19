@@ -316,6 +316,29 @@ export class Game {
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
     const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
+    this._clearCreaturesNearPortals();
+  }
+
+  // Keep hazards clear of "portals" — zone entrances/exits and dive stations — so
+  // you never arrive at (or get dropped back beside) one straight into an enemy.
+  // Call at the end of a generator, once every portal for the zone exists (some
+  // reef specials are placed after the creature loop, so this is a cleanup pass).
+  _clearCreaturesNearPortals() {
+    const portals = [];
+    if (this.zone === 'reef') {
+      for (const b of this.bells) portals.push({ x: b.x, y: b.y, r: BELL.radius });
+      if (this.templeGate) portals.push({ x: this.templeGate.x, y: this.templeGate.y, r: this.templeGate.r });
+      for (const w of this.whales) { const m = w.mouthZone(); portals.push({ x: m.x, y: m.y, r: 70 }); }
+      for (const e of this.stageEntrances) portals.push({ x: e.x, y: e.y, r: STAGE.entranceR });
+    } else if (this.zone === 'belly' && this.whaleExit) {
+      portals.push({ x: this.whaleExit.x, y: this.whaleExit.y, r: this.whaleExit.r });
+    } else if (this.zone === 'temple' && this.templeExit) {
+      portals.push({ x: this.templeExit.x, y: this.templeExit.y, r: this.templeExit.r });
+    }
+    if (!portals.length) return;
+    const clear = 90;   // gap kept beyond the portal's own interaction radius
+    this.creatures = this.creatures.filter((cr) =>
+      !portals.some((p) => Math.hypot(cr.x - p.x, cr.y - p.y) < p.r + clear + (cr.radius || 14)));
   }
 
   // Roll a wacky, theme-flavoured name for the upcoming reef.
@@ -592,6 +615,7 @@ export class Game {
     this._makeCurrents(2);
     this._makePowerups(1);
     this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._clearCreaturesNearPortals();
   }
 
   // Scatter current zones on open cells, flowing along the cave.
@@ -655,6 +679,7 @@ export class Game {
     this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
     this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._clearCreaturesNearPortals();
   }
 
   // ---- input events (from main) ---------------------------------------
