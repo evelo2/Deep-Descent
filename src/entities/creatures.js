@@ -1,8 +1,8 @@
 // Hazard creatures. Each owns its movement behaviour and knows how to draw
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
-import { WORLD, SHARK, KILL_POINTS } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel } from '../render/sprites.js';
+import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -100,6 +100,19 @@ export class Eel extends Creature {
     this._edgeBounce();
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawEel, t); }
+}
+
+// Piranha — small swarm hazard: fast, homes on the diver with a jittery dart.
+// Spawned in clusters (see spawn.js); low value each, dangerous in numbers.
+export class Piranha extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.piranha.radius; }
+  update(dt, t, diver) {
+    const P = CREATURES.piranha, dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.x += (dx / d) * P.speed * dt + Math.cos(t * 3 + this.t0) * P.jitter * dt;
+    this.y += (dy / d) * P.speed * dt + Math.sin(t * 3.3 + this.t0) * P.jitter * dt;
+    this.facing = dx >= 0 ? 1 : -1;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawPiranha, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

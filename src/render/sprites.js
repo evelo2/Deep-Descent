@@ -294,6 +294,36 @@ export function drawEel(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Piranha — small, fast swarm fish: sharp triangular body, forked tail, tiny
+// teeth, reddish-silver. Drawn small (~9px) — economy over detail.
+export function drawPiranha(ctx, t, hurt) {
+  ctx.save();
+  const swim = Math.sin(t * 10) * 2;
+  // forked tail
+  ctx.fillStyle = hurt ? PAL.danger : '#c23b3b';
+  ctx.beginPath();
+  ctx.moveTo(-6, swim * 0.4); ctx.lineTo(-13, -5 + swim); ctx.lineTo(-9, 0); ctx.lineTo(-13, 5 + swim);
+  ctx.closePath(); ctx.fill();
+  // sharp triangular body
+  const g = ctx.createLinearGradient(-8, 0, 9, 0);
+  g.addColorStop(0, '#c23b3b'); g.addColorStop(1, '#d8d8e0');
+  ctx.fillStyle = hurt ? PAL.danger : g;
+  ctx.beginPath();
+  ctx.moveTo(-8, swim * 0.4);
+  ctx.quadraticCurveTo(-2, -6, 9, 0);
+  ctx.quadraticCurveTo(-2, 6, -8, swim * 0.4);
+  ctx.fill();
+  // dorsal fin
+  ctx.fillStyle = hurt ? PAL.danger : '#a52d2d';
+  ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(1, -8); ctx.lineTo(3, -4); ctx.fill();
+  // tiny teeth
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(6, -1); ctx.lineTo(7, 1); ctx.lineTo(8, -1); ctx.fill();
+  // eye
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(4, -1.5, 1, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
