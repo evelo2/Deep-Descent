@@ -451,3 +451,269 @@ export function drawForeground(ctx, palette, t, roomIndex) {
 
   ctx.restore();
 }
+
+// ---------------------------------------------------------------------------
+// Live themed actors — hazards, loot, cache, doors. Replaces the old
+// placeholder shapes (circles/dots/pill/rects) drawn inline in
+// StageScene.composite(). Positions/AABBs are passed in unchanged from
+// room data; only the art within that footprint changes. Every helper
+// save()/restore()s and leaves ctx state (globalAlpha, composite op,
+// transforms) untouched on exit. No Math.random — all variation comes
+// from `t` and the actor's own position, exactly like the ambient layers
+// above.
+
+// Crackling energy orb (LAIR hazardGlyph 'arc'): glowing core + a few
+// jagged arcs whipping around it, pulsing with the same t*20 feel the old
+// placeholder used for its alpha flicker.
+function drawArcHazard(ctx, cx, cy, r, palette, t) {
+  const core = palette.hazard;
+  const neon = palette.neon || palette.hazard;
+  const pulse = 0.7 + 0.3 * Math.sin(t * 20);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // outer glow
+  ctx.globalAlpha = pulse * 0.5;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.3);
+  g.addColorStop(0, neon);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.3, 0, TAU); ctx.fill();
+
+  // glowing core
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, TAU); ctx.fill();
+
+  // jagged electric arcs, angle driven by t so they crackle without
+  // ever calling Math.random.
+  ctx.strokeStyle = neon;
+  ctx.lineWidth = 1.6;
+  const arms = 3;
+  for (let i = 0; i < arms; i++) {
+    const baseAngle = (i / arms) * TAU + t * 5;
+    let rad = r * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(baseAngle) * rad, Math.sin(baseAngle) * rad);
+    const segs = 3;
+    for (let s = 1; s <= segs; s++) {
+      rad = r * 0.55 + (r * 0.55) * (s / segs);
+      const ang = baseAngle + Math.sin(t * 14 + i * 2 + s) * 0.4;
+      ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Powder keg (SHIP hazardGlyph 'barrel'): wooden barrel with iron hoop
+// bands and a highlight sheen, bobbing/rocking gently with t.
+function drawKegHazard(ctx, cx, cy, w, h, palette, t) {
+  const plank = palette.plank || palette.hazard;
+  const plankHi = palette.plankHi || plank;
+  const iron = palette.rivet || palette.solidEdge || '#2c1d10';
+  const bob = Math.sin(t * 2 + cx) * 1.2;
+  const rot = Math.sin(t * 1.3 + cx) * 0.05;
+  const rw = w / 2 - 1, rh = h / 2 - 1;
+
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+  ctx.rotate(rot);
+
+  // barrel body
+  ctx.beginPath();
+  ctx.roundRect(-rw, -rh, rw * 2, rh * 2, rw * 0.5);
+  ctx.fillStyle = plank;
+  ctx.fill();
+
+  // highlight sheen, clipped to the body
+  ctx.save();
+  ctx.clip();
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = plankHi;
+  ctx.beginPath(); ctx.ellipse(-rw * 0.4, 0, rw * 0.3, rh * 0.85, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // iron hoop bands
+  ctx.strokeStyle = iron;
+  ctx.lineWidth = Math.max(2, w * 0.14);
+  for (const by of [-rh * 0.5, 0, rh * 0.5]) {
+    ctx.beginPath(); ctx.moveTo(-rw, by); ctx.lineTo(rw, by); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Themed hazard mover — dispatches on theme.hazardGlyph, drawn centered on
+// the mover's own AABB (m.x, m.y, m.w, m.h) so the visible body still sits
+// exactly on the collision box; the glow may bleed slightly past it.
+export function drawHazard(ctx, m, theme, palette, t) {
+  ctx.save();
+  const cx = m.x + m.w / 2, cy = m.y + m.h / 2;
+  if (theme.hazardGlyph === 'arc') {
+    drawArcHazard(ctx, cx, cy, m.w / 2, palette, t);
+  } else {
+    drawKegHazard(ctx, cx, cy, m.w, m.h, palette, t);
+  }
+  ctx.restore();
+}
+
+// Glinting gold coin — (x, y) is the loot tile's top-left; centers at
+// x+15, y+15 and keeps the existing bob. The "spin" reads as a periodic
+// horizontal squash (as if seen edge-on) plus a moving glint.
+export function drawCoin(ctx, x, y, palette, t) {
+  const cx = x + 15, cy = y + 15 + Math.sin(t * 3 + x) * 2;
+  const gold = palette.loot;
+  const glow = palette.glow || gold;
+  const spin = 0.55 + 0.15 * Math.abs(Math.sin(t * 2 + x * 0.5));
+  const shimmer = Math.max(0, Math.sin(t * 4 + x * 0.3));
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(spin, 1);
+
+  ctx.fillStyle = gold;
+  ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, 5.3, 0, TAU); ctx.stroke();
+
+  ctx.globalAlpha = 0.5 + 0.35 * shimmer;
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.ellipse(-1.5, -1.5, 1.8, 3, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Faceted gem — same footprint/bob contract as drawCoin, a diamond
+// polygon with facet lines and a pulsing glint highlight.
+export function drawGem(ctx, x, y, palette, t) {
+  const cx = x + 15, cy = y + 15 + Math.sin(t * 3 + x) * 2;
+  const gem = palette.loot;
+  const glow = palette.glow || gem;
+  const pulse = 0.6 + 0.4 * Math.max(0, Math.sin(t * 4 + x * 0.4));
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  ctx.fillStyle = gem;
+  ctx.beginPath();
+  ctx.moveTo(0, -7); ctx.lineTo(5, -1); ctx.lineTo(3, 7);
+  ctx.lineTo(-3, 7); ctx.lineTo(-5, -1);
+  ctx.closePath(); ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 7); ctx.moveTo(-5, -1); ctx.lineTo(5, -1); ctx.stroke();
+
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.moveTo(0, -6); ctx.lineTo(2, -1); ctx.lineTo(0, -1); ctx.lineTo(-1.5, -2);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// Open treasure chest spilling warm light — (x, y) is the cache tile's
+// top-left, centered at x+15, y+15. Reuses the cache's existing pulse
+// (0.8 + 0.2*sin(t*5)) for the glow strength.
+export function drawChest(ctx, x, y, palette, t) {
+  const cx = x + 15, cy = y + 15;
+  const plank = palette.plank || palette.cache;
+  const brass = palette.brass || palette.solidEdge;
+  const glow = palette.glow || palette.cache;
+  const pulse = 0.8 + 0.2 * Math.sin(t * 5);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // warm glow spilling up out of the open chest
+  ctx.save();
+  ctx.globalAlpha = pulse * 0.6;
+  const g = ctx.createRadialGradient(0, -4, 0, 0, -4, 16);
+  g.addColorStop(0, glow);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, -4, 16, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // chest base
+  ctx.fillStyle = plank;
+  ctx.beginPath(); ctx.roundRect(-11, 0, 22, 9, 2); ctx.fill();
+  ctx.fillStyle = brass;
+  ctx.fillRect(-11, 3, 22, 2);
+  ctx.beginPath(); ctx.arc(0, 4, 1.6, 0, TAU); ctx.fill();
+
+  // open lid, hinged at the back and tilted up
+  ctx.save();
+  ctx.rotate(-0.9);
+  ctx.fillStyle = plank;
+  ctx.beginPath(); ctx.roundRect(-11, -11, 22, 9, 2); ctx.fill();
+  ctx.fillStyle = brass;
+  ctx.fillRect(-11, -5, 22, 1.6);
+  ctx.restore();
+
+  // sparkle glints from the pile inside
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(-3, 1, 1.3, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, 2, 1.1, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// Door at tile (x, y). kind === '<' is a framed wooden hatch (retreat);
+// kind === '>' is a lit doorway/portal (advance/exit). Both keep the
+// original pulse timing (0.5 + 0.3*sin(t*4)) on their glowing part, and
+// both keep the centered chevron glyph so direction stays readable.
+export function drawHatch(ctx, x, y, kind, palette, t) {
+  const isExit = kind === '>';
+  const brass = palette.brass || palette.solidEdge;
+  const plank = palette.plank || palette.door;
+  const glow = palette.glow || palette.door;
+  const pulseAlpha = 0.5 + 0.3 * Math.sin(t * 4);
+
+  ctx.save();
+
+  // frame
+  ctx.fillStyle = brass;
+  ctx.fillRect(x + 3, y + 1, T - 6, T - 2);
+
+  if (isExit) {
+    // lit doorway: bright base + pulsing portal glow
+    ctx.fillStyle = palette.door;
+    ctx.fillRect(x + 5, y + 3, T - 10, T - 6);
+    ctx.save();
+    ctx.globalAlpha = pulseAlpha;
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(x + T / 2, y + T / 2, 1, x + T / 2, y + T / 2, T / 2 - 3);
+    g.addColorStop(0, glow);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x + 5, y + 3, T - 10, T - 6);
+    ctx.restore();
+  } else {
+    // framed wooden hatch: dim planks + a faint inward glow seam
+    ctx.fillStyle = plank;
+    ctx.fillRect(x + 5, y + 3, T - 10, T - 6);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 5, y + T / 2); ctx.lineTo(x + T - 5, y + T / 2); ctx.stroke();
+    ctx.fillStyle = brass;
+    ctx.beginPath(); ctx.arc(x + 8, y + 6, 1.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + T - 8, y + 6, 1.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 8, y + T - 6, 1.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + T - 8, y + T - 6, 1.2, 0, TAU); ctx.fill();
+    ctx.save();
+    ctx.globalAlpha = pulseAlpha;
+    ctx.fillStyle = glow;
+    ctx.fillRect(x + 9, y + T / 2 - 2, T - 18, 4);
+    ctx.restore();
+  }
+
+  // chevron glyph, centered, readable regardless of theme
+  ctx.fillStyle = '#04121f';
+  ctx.font = '700 16px system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(isExit ? '›' : '‹', x + T / 2, y + T / 2);
+
+  ctx.restore();
+}
