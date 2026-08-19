@@ -276,7 +276,56 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900, Parasite: 60, Sentinel: 300 };
+
+// Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
+// same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
+// for the existing roster — their params still live inline in creatures.js;
+// later creature tasks add an entry per new archetype here.
+export const CREATURES = {
+  // Piranha — small swarm hazard: a cluster of fast homing fish, low value each.
+  piranha: { speed: 70, count: [6, 9], radius: 9, jitter: 14 },
+  // Stonefish — camouflaged bottom-dweller: near-invisible until lit (flare/
+  // torch) or the diver strays within revealRange; contact always damages.
+  stonefish: { revealRange: 70, hiddenAlpha: 0.12, radius: 18 },
+  // Barracuda — charger: patrols horizontally, winds up (visible tell) when
+  // the diver lines up in range + vertically aligned, then dashes straight
+  // at them before recovering. A snare cancels a windup/dash.
+  barracuda: { patrolSpeed: 60, sightRange: 320, alignBand: 46, windupTime: 0.5, dashSpeed: 420, dashTime: 0.5, recover: 0.7, radius: 20 },
+  // Moray — ambusher: anchored in a wall/wreck crevice, hidden until the
+  // diver enters strikeRange, then lunges its head out toward them along a
+  // 0→reach→0 curve over strikeTime and retracts, with a cooldown before it
+  // can strike again. Only the extended head (hidden, it's parked inside the
+  // wall at the anchor) is the hazard.
+  moray: { strikeRange: 120, reach: 90, strikeTime: 0.35, cooldown: 2.5, radius: 16 },
+  // Electric Ray — ranged pulse: drifts slowly, periodically emitting an
+  // expanding pulse ring. Both the body AND the ring's leading edge (a band
+  // `band` px wide, checked in the overridden hits()) are hazards.
+  ray: { pulseR: 130, pulseCycle: 2.4, pulseTime: 0.6, band: 10, driftSpeed: 20, radius: 20 },
+  // Grouper — territorial guardian: anchored at a loot node (e.g. a wreck
+  // chest). Homes on the diver while they're inside `territory` of the
+  // anchor; once they leave, disengages and drifts back toward the anchor
+  // (at a slower speed) instead of chasing.
+  grouper: { territory: 260, guardSpeed: 70, radius: 22 },
+  // Sea Urchin — static/slow-drift spiky contact hazard: net-immune (nothing
+  // for the net to grab onto), but dies like any creature to harpoon/spear/
+  // charge. driftSpeed is 0 by default — most placements barely move,
+  // threading currents/dark rooms into obstacle courses.
+  urchin: { driftSpeed: 0, radius: 15 },
+  // Giant Squid — deep-water pursuer mini-boss: homes persistently on the
+  // diver and lunges (a speed burst) once it closes to lungeRange, then rests
+  // before it can lunge again. A small HP pool (chipped down like the Kraken,
+  // but simpler — no arms, no boss HP bar) rather than a one-hit kill.
+  squid: { cruise: 60, lunge: 240, lungeRange: 220, lungeTime: 0.45, restTime: 0.8, hp: 4, radius: 26 },
+  // Gut Parasite — belly-zone reskin of the Piranha: a translucent acid blob
+  // that drifts/darts toward the diver the same way, just a touch slower.
+  parasite: { speed: 58, radius: 10, jitter: 12 },
+  // Stone Sentinel — temple-zone reskin of the Grouper: an animated statue
+  // anchored at the key/vault. Identical guard geometry (territory/speed),
+  // but gated by a public `awake` flag the temple flips on the key grab —
+  // until then it only guards when the diver strays inside `territory`.
+  sentinel: { territory: 260, guardSpeed: 66, radius: 24 },
+};
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
 // bioluminescent highlights. Colour is backed by shape/motion for accessibility.

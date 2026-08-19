@@ -6,7 +6,7 @@ import { Boat } from './entities/boat.js';
 import { Clam, Chest } from './entities/shell.js';
 import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
-import { Shark, Octopus, Jelly, Puffer, Eel, Angler } from './entities/creatures.js';
+import { spawnCreature, pickFauna } from './entities/spawn.js';
 import { Cave } from './systems/cave.js';
 import { Flora } from './render/flora.js';
 import { Harpoon } from './entities/harpoon.js';
@@ -196,10 +196,17 @@ export class Game {
     for (const ch of spread(C.chambers(), 4, 700)) {
       const floorY = C.surfaceBelow(ch.x, ch.y, 300);
       this.wrecks.push(new Wreck(ch.x, floorY - 42));
-      this.shells.push(new Chest(ch.x, floorY - 66, chestValue(ch.y) + 200));
+      const cx = ch.x, cy = floorY - 66;
+      this.shells.push(new Chest(cx, cy, chestValue(ch.y) + 200));
       for (let k = 0; k < 3; k++) {
         const tx = ch.x + (Math.random() - 0.5) * 200, ty = floorY - 24 - Math.random() * 60;
         if (!C.isSolid(tx, ty)) this.treasures.push(new Treasure(tx, ty, 'gem'));
+      }
+      // A wreck guardian (moray/grouper) anchored at the deck chest.
+      const we = pickFauna('wreck', this.reef);
+      if (we) {
+        const g = spawnCreature(we, cx, cy, this.reef, { anchor: { x: cx, y: cy } });
+        if (Array.isArray(g)) this.creatures.push(...g); else if (g) this.creatures.push(g);
       }
     }
 
@@ -223,6 +230,15 @@ export class Game {
       const fc = C.randomOpen(s.y - 120) || s;
       if (Math.hypot(fc.x - s.x, fc.y - s.y) < DARKZONE.radius) this.powerups.push(new PowerUp(fc.x, fc.y, 'flare'));
       this.crates.push(new SupplyCrate(s.x, s.y - 30));
+      // A couple of dark-cave creatures lurking inside the zone.
+      const dCount = 1 + (Math.random() * 3 | 0);   // 1-3
+      for (let k = 0; k < dCount; k++) {
+        const dx = s.x + (Math.random() - 0.5) * DARKZONE.radius, dy = s.y + (Math.random() - 0.5) * DARKZONE.radius;
+        if (C.isSolid(dx, dy)) continue;
+        const de = pickFauna('dark', this.reef); if (!de) continue;
+        const spawned = spawnCreature(de, dx, dy, this.reef);
+        if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+      }
     }
 
     // Flora rooted on cave floors — lots of it, for atmosphere.
@@ -238,21 +254,24 @@ export class Game {
     const sizeUp = Math.min((this.reef - 1) * 0.06, 0.5);      // bigger sharks deeper into a run
     for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
-      const deep = c.y / WH, r = Math.random();
-      let cr;
-      if (deep < 0.30) {                       // shallow reef
-        cr = r < 0.42 ? new Jelly(c.x, c.y) : r < 0.72 ? new Puffer(c.x, c.y) : new Shark(c.x, c.y, 0.7 + sizeUp + Math.random() * 0.35);
-      } else if (deep < 0.62) {                // mid water
-        cr = r < 0.34 ? new Octopus(c.x, c.y) : r < 0.62 ? new Shark(c.x, c.y, 1.0 + sizeUp + Math.random() * 0.4)
-          : r < 0.82 ? new Puffer(c.x, c.y) : new Jelly(c.x, c.y);
-      } else {                                 // the deep
-        cr = r < 0.34 ? new Shark(c.x, c.y, 1.3 + sizeUp + Math.random() * 0.4) : r < 0.64 ? new Eel(c.x, c.y) : new Angler(c.x, c.y);
-      }
-      this.creatures.push(cr);
+      const deep = c.y / WH;
+      const band = deep < 0.30 ? 'shallow' : deep < 0.62 ? 'mid' : 'deep';
+      const entry = pickFauna(band, this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef, { sizeUp });
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
     }
 
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
     this._makeCurrents(5);
+    // A couple of urchins drifting as obstacle hazards near current lanes
+    // (reef-gated — nothing spawns below reef 4).
+    for (const cur of this.currents.slice(0, 2)) {
+      const cx = cur.x + cur.w / 2, cy = cur.y + cur.h / 2;
+      if (C.isSolid(cx, cy)) continue;
+      const ce = pickFauna('current', this.reef); if (!ce) continue;
+      const spawned = spawnCreature(ce, cx, cy, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
 
     // At most one special encounter per reef, and only sometimes — so each dive
     // feels different: a whale, a kraken, a temple gate, or just a plain reef.
@@ -297,6 +316,29 @@ export class Game {
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
     const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
+    this._clearCreaturesNearPortals();
+  }
+
+  // Keep hazards clear of "portals" — zone entrances/exits and dive stations — so
+  // you never arrive at (or get dropped back beside) one straight into an enemy.
+  // Call at the end of a generator, once every portal for the zone exists (some
+  // reef specials are placed after the creature loop, so this is a cleanup pass).
+  _clearCreaturesNearPortals() {
+    const portals = [];
+    if (this.zone === 'reef') {
+      for (const b of this.bells) portals.push({ x: b.x, y: b.y, r: BELL.radius });
+      if (this.templeGate) portals.push({ x: this.templeGate.x, y: this.templeGate.y, r: this.templeGate.r });
+      for (const w of this.whales) { const m = w.mouthZone(); portals.push({ x: m.x, y: m.y, r: 70 }); }
+      for (const e of this.stageEntrances) portals.push({ x: e.x, y: e.y, r: STAGE.entranceR });
+    } else if (this.zone === 'belly' && this.whaleExit) {
+      portals.push({ x: this.whaleExit.x, y: this.whaleExit.y, r: this.whaleExit.r });
+    } else if (this.zone === 'temple' && this.templeExit) {
+      portals.push({ x: this.templeExit.x, y: this.templeExit.y, r: this.templeExit.r });
+    }
+    if (!portals.length) return;
+    const clear = 90;   // gap kept beyond the portal's own interaction radius
+    this.creatures = this.creatures.filter((cr) =>
+      !portals.some((p) => Math.hypot(cr.x - p.x, cr.y - p.y) < p.r + clear + (cr.radius || 14)));
   }
 
   // Roll a wacky, theme-flavoured name for the upcoming reef.
@@ -549,7 +591,12 @@ export class Game {
     for (const f of spread(C.floors(), 10, 200)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
     for (let i = 0; i < 26; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.4 ? 'gem' : 'coin')); }
     for (const w of spread(C.walls(), 5, 380)) this.vents.push(new AirVent(w.x, w.y, w.side));
-    for (let i = 0; i < 6; i++) { const c = C.randomOpen(OPEN_BAND + 300); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Puffer(c.x, c.y)); }
+    for (let i = 0; i < 6; i++) {
+      const c = C.randomOpen(OPEN_BAND + 300); if (!c) continue;
+      const entry = pickFauna('temple', this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
     // Columns for temple flavour.
     for (const f of spread(C.floors(), 18, 200)) this.columns.push({ x: f.x, y: f.y });
 
@@ -568,6 +615,7 @@ export class Game {
     this._makeCurrents(2);
     this._makePowerups(1);
     this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._clearCreaturesNearPortals();
   }
 
   // Scatter current zones on open cells, flowing along the cave.
@@ -620,12 +668,18 @@ export class Game {
     for (let i = 0; i < 60; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.5 ? 'gem' : 'coin')); }
     // A couple of blowhole vents so it's survivable, plus swallowed hazards.
     for (const w of spread(C.walls(), 6, 400)) this.vents.push(new AirVent(w.x, w.y, w.side));
-    for (let i = 0; i < 8; i++) { const c = C.randomOpen(OPEN_BAND + 200); if (c) this.creatures.push(Math.random() < 0.5 ? new Eel(c.x, c.y) : new Jelly(c.x, c.y)); }
+    for (let i = 0; i < 8; i++) {
+      const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
+      const entry = pickFauna('belly', this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
     this.flora = new Flora([]);
     this._makeCurrents(3);   // churning guts
     this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
     this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._clearCreaturesNearPortals();
   }
 
   // ---- input events (from main) ---------------------------------------
@@ -696,6 +750,13 @@ export class Game {
   _angleDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
   _angleToward(a, target, maxStep) { const d = this._angleDiff(a, target); return a + Math.max(-maxStep, Math.min(maxStep, d)); }
 
+  // Apply one weapon hit to a creature: mini-bosses (with takeDamage) chip HP,
+  // ordinary creatures die outright. Returns true if the creature just died.
+  _damageCreature(cr) {
+    if (cr.takeDamage) { cr.takeDamage(1); return cr.dead; }
+    cr.dead = true; return true;
+  }
+
   _spear(angleOff = 0) {
     const d = this.diver, ca = Math.cos(angleOff), sa = Math.sin(angleOff);
     this.harpoons.push(new Harpoon(d.x, d.y, d.aimX * ca - d.aimY * sa, d.aimX * sa + d.aimY * ca));
@@ -739,17 +800,25 @@ export class Game {
       if (!best) break;
       used.add(best);
       bolts.push({ x1: from.x, y1: from.y, x2: best.x, y2: best.y });
-      best.shockHits = (best.shockHits || 0) + 1;
-      if (best.shockHits >= SHOCK.hitsToKill) {
-        // Second zap finishes it — same reward as a harpoon kill.
-        best.dead = true; this.score += best.points || 0;
-        this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill();
+      if (best.takeDamage) {
+        // Mini-bosses (e.g. the squid) chip HP per zap instead of the normal
+        // 2-cumulative-hit kill — never insta-killed by the shockHits logic.
+        best.takeDamage(1);
+        if (best.dead) { this.score += best.points || 0; this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill(); }
+        else { this.particles.sparkle(best.x, best.y, PAL.danger, 10); this.audio.hit(); }
       } else {
-        // First zap: stun + knock back, leaving it primed for the killing shot.
-        best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
-        const a = Math.atan2(best.y - from.y, best.x - from.x);
-        if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
-        this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+        best.shockHits = (best.shockHits || 0) + 1;
+        if (best.shockHits >= SHOCK.hitsToKill) {
+          // Second zap finishes it — same reward as a harpoon kill.
+          best.dead = true; this.score += best.points || 0;
+          this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill();
+        } else {
+          // First zap: stun + knock back, leaving it primed for the killing shot.
+          best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
+          const a = Math.atan2(best.y - from.y, best.x - from.x);
+          if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
+          this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+        }
       }
       from = best;
     }
@@ -944,9 +1013,10 @@ export class Game {
     for (const s of this.shells) s.update(dt, this.t, emitBig);
     for (const b of this.bigBubbles) b.update(dt, this.cave);
     for (const tr of this.treasures) tr.update(dt, this.t);
+    const lit = this.flareT > 0 || (this.torchOn && this.shockBattery > 0);
     for (const cr of this.creatures) {
       if (cr.snareT > 0) { cr.snareT -= dt; if (cr.vx !== undefined) { cr.x += cr.vx * dt; cr.y += cr.vy * dt; cr.vx *= 0.9; cr.vy *= 0.9; } this.cave.collide(cr); continue; }  // netted/stunned: held in place
-      cr.update(dt, this.t, this.diver);
+      cr.update(dt, this.t, this.diver, lit);
       if (this.cave.collide(cr) && cr.dir !== undefined) cr.dir = cr._nx > 0 ? -1 : 1; // turn off walls
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
@@ -995,6 +1065,9 @@ export class Game {
       // Key: grab it to unlock the door and the vault.
       if (this.key && !this.key.taken && Math.hypot(d.x - this.key.x, d.y - this.key.y) < this.key.r + d.radius) {
         this.key.taken = true; this.hasKey = true;
+        // Wake the temple's stone guardians — Sentinels start passive, only
+        // guarding within their territory, until the key is disturbed.
+        for (const cr of this.creatures) if (cr.awake === false) cr.awake = true;
         this.particles.sparkle(this.key.x, this.key.y, PAL.key, 22); this.audio.pearl();
       }
       // Door: opens once you have the key; blocks the passage until then.
@@ -1059,10 +1132,17 @@ export class Game {
       if (h.dead) continue;
       for (const cr of this.creatures) {
         if (!cr.dead && h.hits(cr)) {
-          h.dead = true; cr.dead = true;
-          this.score += cr.points;
-          this.particles.sparkle(cr.x, cr.y, PAL.danger, 20);
-          this.audio.kill();
+          h.dead = true;
+          const died = this._damageCreature(cr);
+          if (died) {
+            this.score += cr.points;
+            this.particles.sparkle(cr.x, cr.y, PAL.danger, 20);
+            this.audio.kill();
+          } else {
+            // Mini-boss chipped, not killed — a lighter hurt effect instead.
+            this.particles.sparkle(cr.x, cr.y, PAL.danger, 10);
+            this.audio.hit();
+          }
           break;
         }
       }
@@ -1085,7 +1165,7 @@ export class Game {
     for (const n of this.nets) {
       if (n.dead) continue;
       for (const cr of this.creatures) {
-        if (!cr.dead && cr.snareT <= 0 && n.hits(cr)) {
+        if (!cr.dead && cr.snareT <= 0 && !cr.netImmune && n.hits(cr)) {
           cr.snareT = NET.snare + (this.weaponLevel.net - 1) * 1.5; n.dead = true;
           if (cr.vx !== undefined) { cr.vx = 0; cr.vy = 0; }
           this.particles.sparkle(cr.x, cr.y, '#dbe9f2', 12); this.audio.pickup();
@@ -1117,7 +1197,7 @@ export class Game {
     }
     for (const cr of this.creatures) {
       if (!cr.dead && Math.hypot(cr.x - ch.x, cr.y - ch.y) < R + (cr.radius || 14)) {
-        cr.dead = true; this.score += cr.points;
+        if (this._damageCreature(cr)) this.score += cr.points;
         this.particles.sparkle(cr.x, cr.y, PAL.danger, 14);
       }
     }

@@ -294,6 +294,414 @@ export function drawEel(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Piranha — small, fast swarm fish: sharp triangular body, forked tail, tiny
+// teeth, reddish-silver. Drawn small (~9px) — economy over detail.
+export function drawPiranha(ctx, t, hurt) {
+  ctx.save();
+  const swim = Math.sin(t * 10) * 2;
+  // forked tail
+  ctx.fillStyle = hurt ? PAL.danger : '#c23b3b';
+  ctx.beginPath();
+  ctx.moveTo(-6, swim * 0.4); ctx.lineTo(-13, -5 + swim); ctx.lineTo(-9, 0); ctx.lineTo(-13, 5 + swim);
+  ctx.closePath(); ctx.fill();
+  // sharp triangular body
+  const g = ctx.createLinearGradient(-8, 0, 9, 0);
+  g.addColorStop(0, '#c23b3b'); g.addColorStop(1, '#d8d8e0');
+  ctx.fillStyle = hurt ? PAL.danger : g;
+  ctx.beginPath();
+  ctx.moveTo(-8, swim * 0.4);
+  ctx.quadraticCurveTo(-2, -6, 9, 0);
+  ctx.quadraticCurveTo(-2, 6, -8, swim * 0.4);
+  ctx.fill();
+  // dorsal fin
+  ctx.fillStyle = hurt ? PAL.danger : '#a52d2d';
+  ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(1, -8); ctx.lineTo(3, -4); ctx.fill();
+  // tiny teeth
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(6, -1); ctx.lineTo(7, 1); ctx.lineTo(8, -1); ctx.fill();
+  // eye
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(4, -1.5, 1, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Stonefish — lumpy, rock-mottled bottom-dweller with venomous dorsal spines.
+// Drab greens/browns so it reads as camouflage against the seabed; the caller
+// (Stonefish.draw) sets globalAlpha to fade it in/out of hiding.
+// Barracuda — long, lean, silver predator: an underbite of teeth and a
+// forked tail. Reference drawShark's proportions but thinner and more
+// elongated.
+export function drawBarracuda(ctx, t, hurt) {
+  ctx.save();
+  const swim = Math.sin(t * 7) * 3;
+  ctx.fillStyle = hurt ? PAL.danger : '#aebcc4';
+  // long lean body
+  ctx.beginPath();
+  ctx.moveTo(-40, swim * 0.2);
+  ctx.quadraticCurveTo(-4, -8, 34, 0);
+  ctx.quadraticCurveTo(-4, 8, -40, swim * 0.2);
+  ctx.fill();
+  // forked tail
+  ctx.beginPath();
+  ctx.moveTo(-36, 0); ctx.lineTo(-50, -10 + swim); ctx.lineTo(-45, 0);
+  ctx.lineTo(-50, 10 + swim); ctx.closePath(); ctx.fill();
+  // dorsal fin, set well back
+  ctx.beginPath(); ctx.moveTo(-10, -7); ctx.lineTo(-4, -16); ctx.lineTo(2, -7); ctx.fill();
+  // belly sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.moveTo(-24, 4); ctx.quadraticCurveTo(4, 9, 30, 2);
+  ctx.quadraticCurveTo(2, 6, -24, 4); ctx.fill();
+  // underbite jaw — lower jaw juts past the upper
+  ctx.fillStyle = hurt ? PAL.danger : '#8b98a0';
+  ctx.beginPath(); ctx.moveTo(24, 2); ctx.quadraticCurveTo(34, 5, 38, 1); ctx.quadraticCurveTo(32, -1, 24, 2); ctx.fill();
+  // needle teeth along the underbite
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 3; i++) { const tx = 27 + i * 4; ctx.beginPath(); ctx.moveTo(tx, 1); ctx.lineTo(tx + 1.2, -2.5); ctx.lineTo(tx + 2.4, 1); ctx.fill(); }
+  // eye + gill line
+  ctx.fillStyle = '#0a0f16';
+  ctx.beginPath(); ctx.arc(22, -3, 2, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(12, -6); ctx.lineTo(12, 5); ctx.stroke();
+  ctx.restore();
+}
+
+// Moray — ambusher: a gaping eel head lunging out of a wall/wreck crevice.
+// The neck fades into shadow behind it (it stays anchored in the dark even
+// mid-strike); only the head — wide jaw, needle teeth, small eye — reads
+// solid. Reference drawEel's palette family, darker/moodier for a wall-dweller.
+export function drawMoray(ctx, t, hurt) {
+  ctx.save();
+  // neck receding into the crevice's shadow
+  const neck = ctx.createLinearGradient(-42, 0, 4, 0);
+  neck.addColorStop(0, 'rgba(8,8,6,0)');
+  neck.addColorStop(1, hurt ? PAL.danger : '#4a3d2e');
+  ctx.fillStyle = neck;
+  ctx.beginPath();
+  ctx.moveTo(-42, -3);
+  ctx.quadraticCurveTo(-18, -9, 4, -8);
+  ctx.lineTo(4, 8);
+  ctx.quadraticCurveTo(-18, 9, -42, 3);
+  ctx.closePath(); ctx.fill();
+  // wide flattened head
+  ctx.fillStyle = hurt ? PAL.danger : '#4a3d2e';
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.quadraticCurveTo(16, -11, 27, -3);
+  ctx.quadraticCurveTo(30, 0, 27, 3);
+  ctx.quadraticCurveTo(16, 11, 0, 9);
+  ctx.quadraticCurveTo(6, 0, 0, -9);
+  ctx.fill();
+  // gaping lower jaw, hinged wide open
+  ctx.fillStyle = hurt ? PAL.danger : '#6b5a44';
+  ctx.beginPath();
+  ctx.moveTo(4, 5); ctx.quadraticCurveTo(18, 15, 29, 8); ctx.quadraticCurveTo(19, 8, 6, 9);
+  ctx.closePath(); ctx.fill();
+  // needle teeth, upper and lower
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 4; i++) {
+    const tx = 8 + i * 5;
+    ctx.beginPath(); ctx.moveTo(tx, -6); ctx.lineTo(tx + 1.4, -1); ctx.lineTo(tx + 2.8, -6); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tx, 8); ctx.lineTo(tx + 1.4, 3); ctx.lineTo(tx + 2.8, 8); ctx.fill();
+  }
+  // small eye, set back on the skull
+  ctx.fillStyle = '#0a0f16'; ctx.beginPath(); ctx.arc(6, -4, 1.8, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#e8d98a'; ctx.beginPath(); ctx.arc(5.6, -4.4, 0.7, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+export function drawStonefish(ctx, t, hurt) {
+  ctx.save();
+  // lumpy, warty body — an irregular blob rather than a clean ellipse
+  ctx.fillStyle = hurt ? PAL.danger : '#5a5238';
+  ctx.beginPath();
+  ctx.moveTo(-17, 2);
+  ctx.quadraticCurveTo(-14, -10, -2, -11);
+  ctx.quadraticCurveTo(8, -13, 15, -4);
+  ctx.quadraticCurveTo(19, 2, 13, 7);
+  ctx.quadraticCurveTo(6, 12, -4, 10);
+  ctx.quadraticCurveTo(-14, 10, -17, 2);
+  ctx.closePath(); ctx.fill();
+  // mottled rock-like patches
+  ctx.fillStyle = hurt ? PAL.danger : '#3f4a30';
+  ctx.beginPath(); ctx.ellipse(-8, -3, 4.5, 3, 0.3, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 4, 4, 2.6, -0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(9, -5, 3.5, 2.4, 0.5, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : '#7a7050';
+  ctx.beginPath(); ctx.ellipse(-3, -6, 3, 2, -0.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(11, 2, 2.6, 1.8, 0.1, 0, TAU); ctx.fill();
+  // venomous dorsal spines
+  ctx.strokeStyle = hurt ? PAL.danger : '#8a7f5a'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    const bx = -10 + i * 4.6, by = -10 - Math.abs(Math.sin(i * 1.3)) * 1.5;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 1, by - 7); ctx.stroke();
+  }
+  // small, well-camouflaged eye
+  ctx.fillStyle = '#c9c19a'; ctx.beginPath(); ctx.arc(12, -3, 2, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#141208'; ctx.beginPath(); ctx.arc(12.4, -3, 1, 0, TAU); ctx.fill();
+  // frilly, ragged pectoral fin
+  ctx.strokeStyle = hurt ? PAL.danger : '#4a4630'; ctx.lineWidth = 1.4;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath(); ctx.moveTo(-2, 8); ctx.lineTo(-2 + i * 3, 14 + Math.sin(t * 1.5 + i) * 1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Electric Ray — ranged drifter: a flat diamond body with a long whip-thin
+// tail and faint electric arcs crackling off its wingtips. The expanding
+// pulse ring (drawn separately by ElectricRay.draw, centred on the ray, once
+// it has a live `pulseR`) is a cyan ring — this function only draws the body.
+export function drawElectricRay(ctx, t, hurt) {
+  ctx.save();
+  const flap = Math.sin(t * 2.2) * 3;
+  // long whip tail
+  ctx.strokeStyle = hurt ? PAL.danger : '#3a4a52';
+  ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-8, 0);
+  ctx.quadraticCurveTo(-30, 4 + flap * 0.5, -46, -2 + flap);
+  ctx.stroke();
+  // flat diamond body
+  ctx.fillStyle = hurt ? PAL.danger : '#4a6068';
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.quadraticCurveTo(6, -18 - flap, -14, 0);
+  ctx.quadraticCurveTo(6, 18 + flap, 24, 0);
+  ctx.closePath(); ctx.fill();
+  // pale belly stripe
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  ctx.beginPath();
+  ctx.moveTo(16, 0); ctx.quadraticCurveTo(2, -6, -8, 0); ctx.quadraticCurveTo(2, 6, 16, 0); ctx.fill();
+  // small eyes atop the head
+  ctx.fillStyle = '#0a0f16';
+  ctx.beginPath(); ctx.arc(12, -3, 1.6, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(12, 3, 1.6, 0, TAU); ctx.fill();
+  // faint electric arcs off the wingtips
+  ctx.strokeStyle = `rgba(140,240,255,${0.35 + Math.sin(t * 9) * 0.2})`;
+  ctx.lineWidth = 1;
+  for (const s of [-1, 1]) {
+    const bx = 4, by = s * (16 + flap * s);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx + 5, by + s * 4);
+    ctx.lineTo(bx + 2, by + s * 7);
+    ctx.lineTo(bx + 8, by + s * 10);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Grouper — territorial loot guardian: a heavy-bodied, big-lipped reef fish
+// with mottled patches and a permanent downturned scowl. Larger and blunter
+// than drawPuffer — bulk, not spikes, does the intimidating here.
+export function drawGrouper(ctx, t, hurt) {
+  ctx.save();
+  const sway = Math.sin(t * 1.4) * 1.2;
+  // tail fin
+  ctx.fillStyle = hurt ? PAL.danger : '#5a6b4a';
+  ctx.beginPath();
+  ctx.moveTo(-19, 0);
+  ctx.lineTo(-30, -11 + sway); ctx.lineTo(-26, 0); ctx.lineTo(-30, 11 + sway);
+  ctx.closePath(); ctx.fill();
+  // heavy, deep-bellied body
+  ctx.fillStyle = hurt ? PAL.danger : '#6b7a52';
+  ctx.beginPath();
+  ctx.moveTo(24, -2);
+  ctx.quadraticCurveTo(20, -18, -6, -16);
+  ctx.quadraticCurveTo(-20, -13, -20, 0);
+  ctx.quadraticCurveTo(-20, 13, -6, 16);
+  ctx.quadraticCurveTo(20, 18, 24, 2);
+  ctx.closePath(); ctx.fill();
+  // mottled patches across the flank
+  ctx.fillStyle = hurt ? PAL.danger : '#40492f';
+  ctx.beginPath(); ctx.ellipse(-9, -6, 5, 3.4, 0.3, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 8, 5.5, 3.4, -0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -8, 4.4, 3, 0.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-2, -1, 3.6, 2.6, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : '#8a9a68';
+  ctx.beginPath(); ctx.ellipse(6, 2, 3.4, 2.2, 0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-13, 4, 2.8, 2, -0.3, 0, TAU); ctx.fill();
+  // dorsal fin, low and spiny
+  ctx.strokeStyle = hurt ? PAL.danger : '#4a5a3c'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const bx = -4 + i * 5;
+    ctx.beginPath(); ctx.moveTo(bx, -15); ctx.lineTo(bx - 1, -21); ctx.stroke();
+  }
+  // blunt, jutting lower jaw with a thick pouting lip
+  ctx.fillStyle = hurt ? PAL.danger : '#5a6a48';
+  ctx.beginPath();
+  ctx.moveTo(19, 6); ctx.quadraticCurveTo(28, 8, 29, 3); ctx.quadraticCurveTo(24, 1, 18, 2);
+  ctx.closePath(); ctx.fill();
+  // big rubbery upper lip, protruding past the snout
+  ctx.fillStyle = hurt ? PAL.danger : '#8a7a5c';
+  ctx.beginPath();
+  ctx.moveTo(17, -6); ctx.quadraticCurveTo(28, -6, 30, -1); ctx.quadraticCurveTo(29, 3, 20, 1);
+  ctx.quadraticCurveTo(15, -2, 17, -6);
+  ctx.closePath(); ctx.fill();
+  // permanent scowl — a heavy downturned brow ridge over the eye
+  ctx.strokeStyle = hurt ? PAL.danger : '#2e3524'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(4, -9); ctx.quadraticCurveTo(11, -12, 16, -8); ctx.stroke();
+  // small, sunken eye set back from the jutting lips
+  eye(ctx, 9, -5);
+  ctx.restore();
+}
+
+// Giant Squid — deep-water pursuer mini-boss. Head/arms lead the facing
+// direction (+x, as with the other creatures); a tapered, finned mantle
+// trails behind for a jet-propulsion silhouette. Two long hunting tentacles
+// reach out front, shorter grasping arms fan around the head, and one big
+// alert eye watches the diver. References the Kraken's palette/menace for
+// scale, but is a single simple sprite — no separate arm hit-geometry, no
+// boss HP bar; `hurt` flashes the whole body lighter/red on a weapon hit.
+export function drawGiantSquid(ctx, t, hurt) {
+  ctx.save();
+  const pulse = 1 + Math.sin(t * 2.4) * 0.06;   // gentle jet-propulsion breathing
+  const col = hurt ? PAL.danger : PAL.kraken;
+  const dark = hurt ? PAL.danger : PAL.krakenDark;
+
+  // Two long hunting tentacles, undulating out in front.
+  ctx.lineCap = 'round';
+  for (const s of [-1, 1]) {
+    let px = 12, py = s * 7, ang = 0;
+    const pts = [[px, py]];
+    for (let i = 1; i <= 5; i++) {
+      ang = s * 0.55 + Math.sin(t * 3 + s * 1.4 + i * 0.8) * 0.3;
+      px += Math.cos(ang) * 15; py += Math.sin(ang) * 15;
+      pts.push([px, py]);
+    }
+    ctx.strokeStyle = col;
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineWidth = 5 - i * 0.6;
+      ctx.beginPath(); ctx.moveTo(pts[i - 1][0], pts[i - 1][1]); ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke();
+    }
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.ellipse(px, py, 3.4, 2.4, ang, 0, TAU); ctx.fill();  // club at the tip
+  }
+
+  // Shorter grasping arms, fanning forward around the head.
+  ctx.strokeStyle = col; ctx.lineWidth = 3.2;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 5 - 0.5) * 1.9;
+    const sway = Math.sin(t * 4 + i) * 3;
+    ctx.beginPath();
+    ctx.moveTo(6, 0);
+    ctx.quadraticCurveTo(6 + Math.cos(a) * 9, sway + Math.sin(a) * 11, 6 + Math.cos(a) * 18, sway + Math.sin(a) * 20);
+    ctx.stroke();
+  }
+
+  // Tapered mantle trailing behind, with a pair of swept fins.
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(4, -13);
+  ctx.quadraticCurveTo(-20, -17 * pulse, -34, 0);
+  ctx.quadraticCurveTo(-20, 17 * pulse, 4, 13);
+  ctx.quadraticCurveTo(11, 0, 4, -13);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(-12, -12); ctx.quadraticCurveTo(-30, -24, -38, -9); ctx.quadraticCurveTo(-24, -8, -12, -12); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-12, 12); ctx.quadraticCurveTo(-30, 24, -38, 9); ctx.quadraticCurveTo(-24, 8, -12, 12); ctx.fill();
+
+  // Head, in front of the mantle.
+  const g = ctx.createRadialGradient(2, -4, 3, 4, 0, 16);
+  g.addColorStop(0, hurt ? '#ff8fb0' : '#9a4f88'); g.addColorStop(1, col);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(4, 0, 14, 12, 0, 0, TAU); ctx.fill();
+
+  // One big, alert eye.
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(8, -2, 6, 7, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = PAL.krakenEye; ctx.beginPath(); ctx.arc(9, -1, 3, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#20140a'; ctx.beginPath(); ctx.ellipse(9, -1, 1.3, 2.6, 0, 0, TAU); ctx.fill();
+
+  ctx.restore();
+}
+
+// Sea Urchin — static/slow-drift spiky contact hazard. A dark, radially
+// symmetric ball of long spines (drawn like drawJelly's radial tentacles,
+// but rigid rather than trailing) with a subtle collective sway rather than
+// any directional lean — it has no facing, it's the same from every side.
+export function drawUrchin(ctx, t, hurt) {
+  ctx.save();
+  const sway = Math.sin(t * 1.5) * 0.06;
+  glow(ctx, 18, '#3a1a5a', 0.2);
+  // long spines radiating outward, alternating length for a spiky silhouette
+  ctx.strokeStyle = hurt ? PAL.danger : '#1c1024'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  const spineCount = 16;
+  for (let i = 0; i < spineCount; i++) {
+    const a = (i / spineCount) * TAU + sway;
+    const len = i % 2 === 0 ? 16 : 11;
+    const bx = Math.cos(a) * 6, by = Math.sin(a) * 6;
+    const tx = Math.cos(a) * (6 + len), ty = Math.sin(a) * (6 + len);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+  }
+  // squat body, black shading to a deep purple sheen
+  const body = ctx.createRadialGradient(-2, -2, 1, 0, 0, 9);
+  body.addColorStop(0, hurt ? PAL.danger : '#4a2a6a');
+  body.addColorStop(1, hurt ? PAL.danger : '#0c0810');
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, TAU); ctx.fill();
+  // a faint purple rim highlight
+  ctx.strokeStyle = hurt ? PAL.danger : 'rgba(150,90,220,0.35)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
+// Gut Parasite — belly-zone reskin of the Piranha. A translucent, wobbling
+// acid-green blob (soft body, no scales/fins) with a visible dark nucleus
+// drifting inside it — reads as "swallowed hazard" rather than a fish.
+export function drawParasite(ctx, t, hurt) {
+  ctx.save();
+  const wob = 1 + Math.sin(t * 6) * 0.12;
+  const squash = 1 - Math.sin(t * 6) * 0.08;
+  glow(ctx, 16, '#8fe86b', 0.22);
+  ctx.globalAlpha = 0.68;
+  ctx.fillStyle = hurt ? PAL.danger : '#7bd94f';
+  ctx.beginPath(); ctx.ellipse(0, 0, 10 * wob, 8 * squash, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // membrane rim
+  ctx.strokeStyle = hurt ? PAL.danger : 'rgba(200,255,150,0.55)'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(0, 0, 10 * wob, 8 * squash, 0, 0, TAU); ctx.stroke();
+  // drifting nucleus, slightly off-centre
+  const nx = Math.sin(t * 1.6) * 2.4, ny = Math.cos(t * 1.3) * 1.6;
+  ctx.fillStyle = hurt ? PAL.danger : '#2f6b1f';
+  ctx.beginPath(); ctx.arc(nx, ny, 3.2, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : 'rgba(200,255,150,0.5)';
+  ctx.beginPath(); ctx.arc(nx - 1, ny - 1, 1.1, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Stone Sentinel — temple-zone reskin of the Grouper. A carved stone
+// fish-idol: blocky rock body with chiselled fin ridges and a pair of
+// glowing eyes (brighter while actively guarding). `hurt` mirrors the house
+// crack-flash style, tinted rather than swapped, since it's stone not flesh.
+export function drawSentinel(ctx, t, hurt) {
+  ctx.save();
+  // tail fin — angular, chiselled
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeDark;
+  ctx.beginPath();
+  ctx.moveTo(-18, 0); ctx.lineTo(-30, -12); ctx.lineTo(-24, 0); ctx.lineTo(-30, 12);
+  ctx.closePath(); ctx.fill();
+  // blocky stone body
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeRock;
+  ctx.beginPath();
+  ctx.moveTo(22, -4);
+  ctx.lineTo(10, -17); ctx.lineTo(-14, -14); ctx.lineTo(-22, 0);
+  ctx.lineTo(-14, 14); ctx.lineTo(10, 17); ctx.lineTo(22, 4);
+  ctx.closePath(); ctx.fill();
+  // carved rim + chisel lines
+  ctx.strokeStyle = hurt ? PAL.danger : PAL.templeRim; ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6, -13); ctx.lineTo(-4, 13); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, -16); ctx.lineTo(7, 16); ctx.stroke();
+  // dorsal ridge
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeDark;
+  ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(2, -22); ctx.lineTo(6, -15); ctx.fill();
+  // glowing eyes
+  const pulse = 0.7 + Math.sin(t * 2.2) * 0.3;
+  ctx.fillStyle = hurt ? '#fff' : PAL.gateGlow;
+  ctx.globalAlpha = hurt ? 1 : pulse;
+  ctx.beginPath(); ctx.arc(11, -4, 2.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
