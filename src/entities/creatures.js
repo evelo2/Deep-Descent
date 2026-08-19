@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -181,6 +181,39 @@ export class Moray extends Creature {
     }
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawMoray, t); }
+}
+
+// Electric Ray — ranged drifter: drifts slowly and periodically emits an
+// expanding pulse ring. Both its body AND the ring's leading edge (a band
+// `band` px wide, centred at `pulseR`) are hazards, so hits() is overridden
+// rather than relying on the base body-contact check alone. No projectile
+// system involved — the ring is checked directly against the diver's
+// distance, and drawn as a widening stroke while active.
+export class ElectricRay extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.ray.radius; this.pulseT = Math.random() * CREATURES.ray.pulseCycle; this.pulseActive = 0; this.pulseR = 0; }
+  update(dt, t, diver) {
+    const P = CREATURES.ray;
+    this.x += Math.sin(t * 0.5 + this.t0) * P.driftSpeed * dt; this.y = this.baseY + Math.sin(t * 0.7 + this.t0) * 12;
+    this.pulseT += dt;
+    if (this.pulseT >= P.pulseCycle) { this.pulseT = 0; this.pulseActive = P.pulseTime; }
+    if (this.pulseActive > 0) { this.pulseActive -= dt; this.pulseR = P.pulseR * (1 - this.pulseActive / P.pulseTime); } else this.pulseR = 0;
+  }
+  hits(diver) {
+    const d = Math.hypot(diver.x - this.x, diver.y - this.y);
+    if (d < this.radius + diver.radius * 0.7) return true;
+    return this.pulseR > 0 && Math.abs(d - this.pulseR) < CREATURES.ray.band + diver.radius * 0.5;
+  }
+  draw(ctx, camX, camY, t) {
+    blit(ctx, this, camX, camY, drawElectricRay, t);
+    if (this.pulseR > 0) {
+      ctx.save();
+      ctx.translate(this.x - camX, this.y - camY);
+      ctx.strokeStyle = 'rgba(120,235,255,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, this.pulseR, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {
