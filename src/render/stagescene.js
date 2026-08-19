@@ -3,7 +3,7 @@
 // cache, movers, diver) are drawn live every frame on top of the baked image.
 import { STAGE } from '../config.js';
 import { drawDiverFoot } from './sprites.js';
-import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck } from './stageart.js';
+import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck, drawShoal, drawForeground } from './stageart.js';
 
 const T = STAGE.tile;
 const { W, H } = { W: 900, H: 600 };
@@ -60,6 +60,9 @@ export class StageScene {
 
     const p = stage.theme.palette, room = stage.room;
 
+    // dim background fish shoal — mid layer, reads as behind the actors
+    drawShoal(ctx, p, t, stage.roomIndex);
+
     // doors (live — pulse with t)
     for (let r = 0; r < room.rows; r++) {
       for (let c = 0; c < room.cols; c++) {
@@ -110,5 +113,8 @@ export class StageScene {
     if (b.invuln > 0 && Math.floor(b.invuln * 12) % 2 === 0) ctx.globalAlpha = 0.4;
     drawDiverFoot(ctx, b.pose, stage.animT);
     ctx.restore();
+
+    // frontmost live ambient: silt, bubbles, edge kelp, vignette
+    drawForeground(ctx, p, t, stage.roomIndex);
   }
 }
