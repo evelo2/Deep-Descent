@@ -105,7 +105,40 @@ export class Stage {
     }
     this._updateMovers(dt);
     if (this.body.invuln <= 0 && this._checkDeath()) ev.died = true;
-    return ev;   // loot/exited filled in Task 6
+    ev.loot += this._collectLoot();
+    ev.exited = this._checkDoors();
+    return ev;
+  }
+
+  // Grab overlapping 'o' pickups and the '$' cache. Returns value gained.
+  _collectLoot() {
+    const b = this.body, room = this.room;
+    const gemAccent = this.theme.palette && this.theme.palette.accent === 'gem';
+    let gained = 0;
+    for (const l of room.loot) {
+      if (!l.taken && aabbOverlap(b, l)) { l.taken = true; gained += gemAccent ? STAGE.gemValue : STAGE.coinValue; }
+    }
+    if (room.cache && !room.cache.taken && aabbOverlap(b, room.cache)) { room.cache.taken = true; gained += STAGE.cacheValue; }
+    return gained;
+  }
+
+  // Resolve door overlaps: '<' retreats; '>' advances a room, or completes if
+  // this is the final room. Returns 'retreat' | 'complete' | null.
+  _checkDoors() {
+    const b = this.body, room = this.room;
+    const cx = Math.floor((b.x + b.w / 2) / T);
+    const cy = Math.floor((b.y + b.h / 2) / T);
+    const kind = doorKindAt(room, cx, cy);
+    if (kind === '<') return 'retreat';
+    if (kind === '>') {
+      if (this.roomIndex >= this.rooms.length - 1) return 'complete';
+      this.roomIndex += 1;
+      const st = this.room.start;
+      b.x = st.x; b.y = st.y; b.vx = 0; b.vy = 0; b.onGround = false; b.onLadder = false;
+      this.bannerT = 2.2;
+      return null;
+    }
+    return null;
   }
 
   _updateMovers(dt) {
