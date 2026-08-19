@@ -67,6 +67,11 @@ export function spawnCreature(entry, x, y, reef, opts = {}) {
         const a = rng() * Math.PI * 2, r = rng() * 40;
         units.push(new Piranha(x + Math.cos(a) * r, y + Math.sin(a) * r));
       }
+      // Link the swarm into one shared-HP shoal: a hit on any member drains the
+      // shared pool, and clearing it kills the whole shoal at once (see
+      // Piranha.takeDamage). shoalHp is the scalable difficulty knob.
+      const shoal = { hp: CREATURES.piranha.shoalHp ?? 1, units };
+      for (const u of units) u.shoal = shoal;
       return units;
     }
     default: return null;

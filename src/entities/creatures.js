@@ -11,7 +11,9 @@ class Creature {
     this.radius = 18; this.scale = 1;
     this.snareT = 0;   // >0 while netted/stunned: frozen and harmless
   }
-  get points() { return KILL_POINTS[this.constructor.name] ?? 100; }
+  // Kill value. `_pointsOverride` lets a killing hit award a custom total (e.g.
+  // a shoal folds its whole swarm's value onto the fish that clears it).
+  get points() { return this._pointsOverride ?? (KILL_POINTS[this.constructor.name] ?? 100); }
   hits(diver) {
     return Math.hypot(diver.x - this.x, diver.y - this.y) < this.radius + diver.radius * 0.7;
   }
@@ -105,9 +107,27 @@ export class Eel extends Creature {
 // Piranha — small swarm hazard: fast, homes on the diver with a jittery dart.
 // Spawned in clusters (see spawn.js); low value each, dangerous in numbers.
 export class Piranha extends Creature {
-  constructor(x, y) { super(x, y); this.radius = CREATURES.piranha.radius; }
+  constructor(x, y) { super(x, y); this.radius = CREATURES.piranha.radius; this.hurtT = 0; }
+  // Shoal group-death: hits drain the SHARED pool (`this.shoal`, linked at spawn);
+  // when it empties, the whole swarm dies at once and this striker is credited
+  // with the shoal's combined points (scored once at the weapon-hit call site).
+  // A lone piranha with no shoal just dies in one hit. Routing through takeDamage
+  // means every weapon path (harpoon/blast/shock) already handles it — those
+  // sites branch on `cr.takeDamage`.
+  takeDamage(n = 1) {
+    this.hurtT = 0.2;
+    const s = this.shoal;
+    if (!s) { this.dead = true; return; }
+    s.hp -= n;
+    if (s.hp <= 0) {
+      let total = 0;
+      for (const u of s.units) if (!u.dead) { total += KILL_POINTS.Piranha ?? 100; u.dead = true; }
+      this._pointsOverride = total;
+    }
+  }
   update(dt, t, diver) {
     const P = CREATURES.piranha, dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.hurtT = Math.max(0, this.hurtT - dt);
     this.x += (dx / d) * P.speed * dt + Math.cos(t * 3 + this.t0) * P.jitter * dt;
     this.y += (dy / d) * P.speed * dt + Math.sin(t * 3.3 + this.t0) * P.jitter * dt;
     this.facing = dx >= 0 ? 1 : -1;
