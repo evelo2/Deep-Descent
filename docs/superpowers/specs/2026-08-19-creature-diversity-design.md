@@ -86,10 +86,13 @@ Each is a small `update()` variant. Params below live in `CREATURES.<type>`.
    territory it homes at `guardSpeed`; when the diver leaves, it disengages and
    drifts back to its anchor. Makes rich loot contested. States: `guard | return`.
 
-7. **Pursuer** — a relentless deep hunter (**Giant Squid**): homes persistently
-   at `cruise`, and when within `lungeRange` does a short speed burst (`lunge`)
-   with a brief `rest`. Distinct from the Kraken boss: smaller, killable by normal
-   weapons, no arms/HP bar — just a fast, committed chaser you must lose or kill.
+7. **Pursuer (mini-boss)** — a relentless deep hunter (**Giant Squid**): homes
+   persistently at `cruise`, and when within `lungeRange` does a short speed burst
+   (`lunge`) with a brief `rest`. Unlike the ordinary hazards it has a small **HP
+   pool** (`hp`, ~4) and a `takeDamage(n)` — several weapon hits to kill, a hurt
+   flash on each, a reward on defeat. Lighter than the Kraken boss (no arms, no
+   big HP bar / 2500 bonus): a tense deep encounter you can still take down with
+   normal weapons, or flee.
 
 8. **Static/drift hazard** — a **Sea Urchin / Drift Mine**: spiky contact ball,
    either fixed on a floor or slowly current-borne. `snareT` is irrelevant (net
@@ -106,7 +109,7 @@ Each is a small `update()` variant. Params below live in `CREATURES.<type>`.
 | **Stonefish** | Camouflaged | 18 | revealRange 70, hiddenAlpha 0.12 | 180 | dark caves, floors |
 | **Electric Ray** | Ranged pulse | 20 | pulseR 130, pulseCycle 2.4s, pulseTime 0.6s | 320 | deep, dark |
 | **Grouper** | Guardian | 22 | territory 260, guardSpeed 70 | 300 | wrecks |
-| **Giant Squid** | Pursuer | 26 | cruise 60, lungeRange 220, lunge 240, rest 0.8s | 500 | the deep |
+| **Giant Squid** | Pursuer (mini-boss) | 26 | cruise 60, lungeRange 220, lunge 240, rest 0.8s, **hp 4** | 900 | the deep |
 | **Sea Urchin** | Static/drift | 15 | drift 0/slow; net-immune | 120 | currents, dark, floors |
 
 Two zone-themed **reskins** (same archetypes, themed art + placement), so the
@@ -158,7 +161,10 @@ selection:
 - **Net:** snares (`snareT`) any creature; **Sea Urchin is net-immune** (spiky,
   nothing to snare) — net passes/ends without snaring.
 - **Shock rod:** 2nd cumulative hit kills; chains across swarms nicely.
-- **Harpoon/Speargun/Charge:** kill on hit; charge AoE clears swarms/urchins.
+- **Harpoon/Speargun/Charge:** kill ordinary creatures on hit; charge AoE clears
+  swarms/urchins. The **Giant Squid** instead takes `takeDamage(1)` per hit and
+  dies after `hp` hits (the Game's weapon-hit code chips it, like the Kraken but
+  simpler — no arms/hit-zones, just body overlap + HP).
 - **Snare/stun:** `snareT>0` freezes behavior (chargers cancel a dash, pulses
   pause, guardians hold) and disables contact — already handled by the base check.
 - **Dark/torch/flare:** camouflaged types read a `lit` flag; a lit flare/torch
@@ -175,7 +181,8 @@ Creatures are pure `update()` logic → Node-unit-testable like the Stage engine
 - **Camouflaged:** `hits()` unchanged, but draw/`revealed` flips under `lit` or
   proximity.
 - **Guardian:** homes inside territory, disengages + returns outside it.
-- **Pursuer:** persistent homing + lunge within range.
+- **Pursuer (mini-boss):** persistent homing + lunge within range; survives `hp−1`
+  hits and dies on the `hp`-th (`takeDamage` decrements, hurt flash, reward once).
 - **Urchin:** net-immune (snare no-op), harpoon/charge destroys.
 - **Spawn table:** reef gating (no `minReef>reef` type spawns), zone context picks
   the right roster, swarm expands to N.
@@ -194,12 +201,12 @@ testable and reviewable — a good fit for subagent-driven execution:
 4. **Balance/tuning pass** — reef-gating schedule, density, and points, verified
    in-browser.
 
-## Open questions for review
+## Decisions (resolved 2026-08-19)
 
-1. **Ranged damage:** OK to let the Electric Ray's pulse ring and the Moray's
-   extended head damage via the Game's existing per-creature overlap check (each
-   creature exposes an extra hazard region), rather than adding projectiles?
-2. **Art budget:** new `drawX` procedural sprites for all 8 (preferred), or reskin/
-   tint a few (e.g. Piranha = small tinted Shark) to move faster?
-3. **Giant Squid vs Kraken:** keep the squid a normal-weapon-killable pursuer
-   (no HP bar), distinct from the boss — confirm that's the intent.
+1. **Ranged damage:** reuse the Game's existing per-creature overlap check — each
+   creature exposes an extra hazard region (Electric Ray pulse ring, Moray extended
+   head). No projectile system.
+2. **Art budget:** new procedural `drawX` sprites for all 8 creatures (+ the two
+   reskins), matching the existing hand-drawn vector style.
+3. **Giant Squid:** a **mini-boss** — small HP pool (~4), `takeDamage` per weapon
+   hit, hurt flash, reward on defeat; lighter than the Kraken (no arms/boss bar).
