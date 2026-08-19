@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -288,6 +288,10 @@ export const CREATURES = {
   // Stonefish — camouflaged bottom-dweller: near-invisible until lit (flare/
   // torch) or the diver strays within revealRange; contact always damages.
   stonefish: { revealRange: 70, hiddenAlpha: 0.12, radius: 18 },
+  // Barracuda — charger: patrols horizontally, winds up (visible tell) when
+  // the diver lines up in range + vertically aligned, then dashes straight
+  // at them before recovering. A snare cancels a windup/dash.
+  barracuda: { patrolSpeed: 60, sightRange: 320, alignBand: 46, windupTime: 0.5, dashSpeed: 420, dashTime: 0.5, recover: 0.7, radius: 20 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,

@@ -327,6 +327,43 @@ export function drawPiranha(ctx, t, hurt) {
 // Stonefish — lumpy, rock-mottled bottom-dweller with venomous dorsal spines.
 // Drab greens/browns so it reads as camouflage against the seabed; the caller
 // (Stonefish.draw) sets globalAlpha to fade it in/out of hiding.
+// Barracuda — long, lean, silver predator: an underbite of teeth and a
+// forked tail. Reference drawShark's proportions but thinner and more
+// elongated.
+export function drawBarracuda(ctx, t, hurt) {
+  ctx.save();
+  const swim = Math.sin(t * 7) * 3;
+  ctx.fillStyle = hurt ? PAL.danger : '#aebcc4';
+  // long lean body
+  ctx.beginPath();
+  ctx.moveTo(-40, swim * 0.2);
+  ctx.quadraticCurveTo(-4, -8, 34, 0);
+  ctx.quadraticCurveTo(-4, 8, -40, swim * 0.2);
+  ctx.fill();
+  // forked tail
+  ctx.beginPath();
+  ctx.moveTo(-36, 0); ctx.lineTo(-50, -10 + swim); ctx.lineTo(-45, 0);
+  ctx.lineTo(-50, 10 + swim); ctx.closePath(); ctx.fill();
+  // dorsal fin, set well back
+  ctx.beginPath(); ctx.moveTo(-10, -7); ctx.lineTo(-4, -16); ctx.lineTo(2, -7); ctx.fill();
+  // belly sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.moveTo(-24, 4); ctx.quadraticCurveTo(4, 9, 30, 2);
+  ctx.quadraticCurveTo(2, 6, -24, 4); ctx.fill();
+  // underbite jaw — lower jaw juts past the upper
+  ctx.fillStyle = hurt ? PAL.danger : '#8b98a0';
+  ctx.beginPath(); ctx.moveTo(24, 2); ctx.quadraticCurveTo(34, 5, 38, 1); ctx.quadraticCurveTo(32, -1, 24, 2); ctx.fill();
+  // needle teeth along the underbite
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 3; i++) { const tx = 27 + i * 4; ctx.beginPath(); ctx.moveTo(tx, 1); ctx.lineTo(tx + 1.2, -2.5); ctx.lineTo(tx + 2.4, 1); ctx.fill(); }
+  // eye + gill line
+  ctx.fillStyle = '#0a0f16';
+  ctx.beginPath(); ctx.arc(22, -3, 2, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(12, -6); ctx.lineTo(12, 5); ctx.stroke();
+  ctx.restore();
+}
+
 export function drawStonefish(ctx, t, hurt) {
   ctx.save();
   // lumpy, warty body — an irregular blob rather than a clean ellipse
