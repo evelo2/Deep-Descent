@@ -394,6 +394,13 @@ export class Game {
   // The items on offer, given reef (gates unlocks), ownership and levels.
   _shopItems() {
     const items = [];
+    // At a dive bell with an un-banked haul: banking is the first shop choice,
+    // at the bell's depth-scaled rate (the boat always banks in full, elsewhere).
+    if (this.shopWhere === 'bell' && this.carried > 0) {
+      const rate = this.atBell ? bellBankRate(this.atBell.y) : 1;
+      const value = Math.round(this.carried * rate);
+      items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank haul here — ${this.carried} → ${value}  (${Math.round(rate * 100)}%)`, cost: 0 });
+    }
     for (const w of WEAPON_ORDER) {
       const info = WEAPON_INFO[w];
       if (info.cost > 0 && !this.owned.has(w) && this.reef >= info.minReef)
@@ -446,6 +453,11 @@ export class Game {
     const items = this._shopItems();
     const it = items[this.shopSel]; if (!it) return;
     if (it.kind === 'close') { this._closeShop(); return; }
+    if (it.kind === 'bank') {
+      this._bankLoot(this.atBell ? bellBankRate(this.atBell.y) : 1);   // plays the bank sfx
+      this.shopSel = 0;   // the bank row is gone now — reselect the top
+      return;
+    }
     if (this.gold < it.cost) { this.shopDeny = 0.6; this.audio.gasp(); return; }
     this.gold -= it.cost;
     if (it.kind === 'weapon') {
@@ -1020,12 +1032,12 @@ export class Game {
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
     }
-    // Shop / bell-bank control. At a dive bell with a haul, the first press banks
-    // it (opt-in, depth-discounted); once empty, the press opens the shop. The
-    // boat has already auto-banked, so its press opens the shop directly.
+    // Open the shop while docked. The boat auto-banked, so it opens empty-handed;
+    // a dive bell opens with loot too — banking there (at its depth discount) is a
+    // choice offered inside the shop, so you can bank deep or carry up to the boat.
     if (atStation && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
-      if (atBell && this.carried > 0) this._bankLoot(bellBankRate(atBell.y));
-      else if (this.carried === 0) this._openShop(atBoat ? 'boat' : 'bell');
+      if (atBell) this._openShop('bell');
+      else if (atBoat && this.carried === 0) this._openShop('boat');
     }
 
     // Entities.
@@ -1649,13 +1661,12 @@ export class Game {
       if (this.state === 'playing' && this.zone === 'stage') {
         btns.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
       }
-      // At a station with loot banked: a SHOP button. At a dive bell while still
-      // carrying: the same button banks the haul (opt-in, depth-discounted).
+      // A SHOP button: at the boat once the hold is empty (auto-banked), or at a
+      // dive bell any time (the shop offers banking there).
       const onReef = this.state === 'playing' && this.zone === 'reef';
-      const atStation = onReef && this.carried === 0 &&
-        (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)));
-      const bellLoaded = onReef && this.carried > 0 && this.bells.some((b) => b.contains(this.diver));
-      if (atStation || bellLoaded) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
+      const atBoatEmpty = onReef && this.carried === 0 && this.boat.contains(this.diver);
+      const atAnyBell = onReef && this.bells.some((b) => b.contains(this.diver));
+      if (atBoatEmpty || atAnyBell) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
       // In the shop: one tappable button per item row.
       if (this.state === 'shop') {
         const items = this._shopItems();
@@ -1699,13 +1710,7 @@ export class Game {
       this._text(WEAPON_INFO[this.weapon].glyph, cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     } else if (b.id === 'shop') {
-      // At a dive bell with a haul, this button banks (shows the depth rate);
-      // otherwise it opens the shop.
-      if (this.carried > 0 && this.atBell) {
-        this._text(`🔔 BANK ${Math.round(bellBankRate(this.atBell.y) * 100)}%`, cx, cy + 1, 14, PAL.bellLight, 'center', 'middle', true);
-      } else {
-        this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
-      }
+      this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'help') {
       this._text('❔ HELP', cx, cy + 1, 14, PAL.hudText, 'center', 'middle', true);
     } else if (b.id === 'aim') {
@@ -1838,8 +1843,8 @@ export class Game {
     } else if (this.atBell) {
       if (this.carried > 0) {
         const pct = Math.round(bellBankRate(this.atBell.y) * 100);
-        const how = this.input.isTouch ? 'Tap 🔔 BANK' : `Press ${this._key('shop')}`;
-        this._text(`🔔 DIVE BELL — air topped up.  ${how} to bank here (${pct}%)  ·  or carry up to the boat for full value`, W / 2, H - 30, 13.5, PAL.bellLight, 'center', 'middle');
+        const how = this.input.isTouch ? 'Tap ⚙ SHOP' : `Press ${this._key('shop')}`;
+        this._text(`🔔 DIVE BELL — air topped up.  ${how} to bank here (${pct}%) or spend gold  ·  or carry up to the boat for full value`, W / 2, H - 30, 13, PAL.bellLight, 'center', 'middle');
       } else {
         this._text('🔔 DIVE BELL — air topped up. A safe haven in the deep', W / 2, H - 30, 15, PAL.bellLight, 'center', 'middle');
       }
