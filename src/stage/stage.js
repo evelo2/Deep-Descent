@@ -112,10 +112,35 @@ export class Stage {
     // Horizontal intent.
     b.vx = cmd.moveX * STAGE.walk;
     if (cmd.moveX !== 0) b.facing = cmd.moveX > 0 ? 1 : -1;
-    // Jump only from the ground (no double jump). Ladder handling: Task 4.
-    if (cmd.jump && b.onGround) { b.vy = -STAGE.jump; b.onGround = false; }
-    // Gravity.
-    b.vy = Math.min(STAGE.maxFall, b.vy + STAGE.gravity * dt);
+
+    // Ladder: if the body's centre column is a ladder tile and the player holds
+    // up/down, climb (gravity off). Grabbing also holds position when climbY=0
+    // *after* already on the ladder, so you can pause on a rung.
+    const cx = Math.floor((b.x + b.w / 2) / T);
+    const cyTop = Math.floor(b.y / T);
+    const cyBot = Math.floor((b.y + b.h - 1) / T);
+    const onLadderTile = ladderAt(this.room, cx, cyTop) || ladderAt(this.room, cx, cyBot);
+    if (onLadderTile && (cmd.climbY !== 0 || b.onLadder)) {
+      b.onLadder = true;
+      let vy = cmd.climbY * STAGE.climb;
+      // Already at the top rung (no ladder tile above, checking two rows up
+      // so a single-tile gap — e.g. the 'S' spawn cell carved out of a ladder
+      // column — still bridges via body-height overlap): stop climbing
+      // instead of launching into free flight, which would overshoot upward
+      // and then immediately re-grab on the way back down (unstable bounce
+      // forever).
+      if (vy < 0 && !ladderAt(this.room, cx, cyTop - 1) && !ladderAt(this.room, cx, cyTop - 2)) vy = 0;
+      b.vy = vy;
+      // Gently centre on the ladder column for a clean climb.
+      const target = cx * T + (T - b.w) / 2;
+      b.x += (target - b.x) * Math.min(1, dt * 12);
+    } else {
+      b.onLadder = false;
+    }
+    // Jump only from the ground OR off a ladder (leaves climb).
+    if (cmd.jump && (b.onGround || b.onLadder)) { b.vy = -STAGE.jump; b.onGround = false; b.onLadder = false; }
+    // Gravity — suspended while on a ladder.
+    if (!b.onLadder) b.vy = Math.min(STAGE.maxFall, b.vy + STAGE.gravity * dt);
 
     // --- X axis ---
     b.x += b.vx * dt;
@@ -128,7 +153,8 @@ export class Stage {
     // Pose (renderer hint). Use walk intent (not just resultant vx) so pressing
     // into a wall still reads as "walking" rather than snapping to "stand" the
     // instant collision zeroes vx.
-    if (!b.onGround) b.pose = 'jump';
+    if (b.onLadder) b.pose = 'climb';
+    else if (!b.onGround) b.pose = 'jump';
     else if (Math.abs(b.vx) > 10 || cmd.moveX !== 0) b.pose = 'walk';
     else b.pose = 'stand';
   }
