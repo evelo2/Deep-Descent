@@ -3,7 +3,7 @@
 // cache, movers, diver) are drawn live every frame on top of the baked image.
 import { STAGE } from '../config.js';
 import { drawDiverFoot } from './sprites.js';
-import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck, drawShoal, drawForeground } from './stageart.js';
+import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck, drawShoal, drawForeground, drawHazard, drawCoin, drawGem, drawChest, drawHatch } from './stageart.js';
 
 const T = STAGE.tile;
 const { W, H } = { W: 900, H: 600 };
@@ -69,41 +69,22 @@ export class StageScene {
         const gch = room.grid[r][c];
         if (gch !== '<' && gch !== '>') continue;
         const x = c * T, y = r * T;
-        ctx.save();
-        ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 4);
-        ctx.fillStyle = p.door; ctx.fillRect(x + 4, y + 2, T - 8, T - 4);
-        ctx.globalAlpha = 1; ctx.fillStyle = '#04121f';
-        ctx.font = '700 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(gch === '>' ? '›' : '‹', x + T / 2, y + T / 2);
-        ctx.restore();
+        drawHatch(ctx, x, y, gch, p, t);
       }
     }
     // loot
     for (const l of room.loot) {
       if (l.taken) continue;
-      ctx.fillStyle = p.loot;
-      ctx.beginPath(); ctx.arc(l.x + T / 2, l.y + T / 2 + Math.sin(t * 3 + l.x) * 2, 6, 0, Math.PI * 2); ctx.fill();
+      if (p.accent === 'gem') drawGem(ctx, l.x, l.y, p, t);
+      else drawCoin(ctx, l.x, l.y, p, t);
     }
     // cache
     if (room.cache && !room.cache.taken) {
-      const cxp = room.cache.x + T / 2, cyp = room.cache.y + T / 2;
-      ctx.save(); ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 5);
-      ctx.fillStyle = p.cache;
-      ctx.beginPath(); ctx.roundRect(cxp - 11, cyp - 8, 22, 16, 3); ctx.fill();
-      ctx.fillStyle = p.solidEdge; ctx.fillRect(cxp - 11, cyp - 2, 22, 3);
-      ctx.restore();
+      drawChest(ctx, room.cache.x, room.cache.y, p, t);
     }
     // movers
     for (const m of room.movers) {
-      ctx.fillStyle = p.hazard;
-      if (stage.theme.hazardGlyph === 'arc') {
-        ctx.save(); ctx.globalAlpha = 0.7 + 0.3 * Math.sin(t * 20);
-        ctx.beginPath(); ctx.arc(m.x + m.w / 2, m.y + m.h / 2, m.w / 2, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.beginPath(); ctx.arc(m.x + m.w / 2, m.y + m.h / 2, m.w / 2 - 2, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = p.solidEdge; ctx.lineWidth = 2; ctx.stroke();
-      }
+      drawHazard(ctx, m, stage.theme, p, t);
     }
     // diver on foot
     const b = stage.body;
