@@ -114,7 +114,7 @@ export function drawStageHud(ctx, stage, hud) {
     ctx.fillText(`ROOM ${stage.roomIndex + 1}/${stage.rooms.length}`, W / 2, H / 2 - 40);
     ctx.restore();
   }
-  // Controls hint (bottom).
+  // Controls hint (bottom) — scheme-aware string supplied by the game.
   ctx.textAlign = 'center'; ctx.fillStyle = '#9fc6e0'; ctx.font = '600 13px system-ui, sans-serif';
-  ctx.fillText('← / → walk   ·   ↑ / Space / A jump   ·   ↑ / ↓ climb ladders   ·   ‹ door retreats', W / 2, H - 24);
+  ctx.fillText(hud.hint || '← / → walk   ·   Space jump   ·   ↑ / ↓ climb ladders   ·   ‹ door retreats', W / 2, H - 24);
 }

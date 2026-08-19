@@ -105,6 +105,7 @@ export class Input {
     const pads = navigator.getGamepads ? navigator.getGamepads() : null;
     let gp = null;
     if (pads) for (const p of pads) if (p && p.connected) { gp = p; break; }
+    this.padConnected = !!gp;   // exposed so the game can auto-pick pad prompts
     if (!gp) { this.pad.x = 0; this.pad.y = 0; this._padPrev = {}; this._padFire = false; }
     else {
       const dead = 0.28;

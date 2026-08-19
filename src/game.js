@@ -19,6 +19,7 @@ import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
+import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
 import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
@@ -29,6 +30,7 @@ import { STAGE } from './config.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
+const CONTROLS_KEY = 'deepdescent.controls';
 const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
 
 // Reef flavour: each reef gets a wacky procedural name and a light theme (a
@@ -49,7 +51,7 @@ const WACKY_OF = ['of Doom', 'of Secrets', 'of Regret', 'of Lost Socks', 'of Whi
 
 // How-to-play pages shown on the Help screen.
 const HELP_PAGES = [
-  { title: '🐟 CONTROLS', lines: [
+  { title: '🐟 CONTROLS', id: 'controls', lines: [
     'Swim — Arrows / WASD / drag / left stick',
     'Fire — Space / F / tap / A   ·   HOLD fire to auto-aim the nearest threat',
     'Swap weapon — Q / E   ·   gamepad Y / LB',
@@ -101,6 +103,13 @@ export class Game {
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
     this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
+    // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
+    // wins; otherwise we start on Keyboard and auto-switch to pad prompts once a
+    // gamepad shows up (until the player picks manually).
+    const savedScheme = localStorage.getItem(CONTROLS_KEY);
+    this.controlScheme = SCHEMES.includes(savedScheme) ? savedScheme : 'keyboard';
+    this._schemeManual = !!savedScheme;
+    this._applyHintStrip();
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
@@ -467,8 +476,13 @@ export class Game {
     const p = HELP_PAGES[this.helpPage];
     this._text('HOW TO PLAY', W / 2, 92, 30, PAL.glow, 'center', 'middle', true);
     this._text(p.title, W / 2, 146, 24, PAL.gold, 'center', 'middle', true);
-    let y = 208;
-    for (const line of p.lines) { this._text(line, W / 2, y, 16, PAL.hudText, 'center', 'middle'); y += 33; }
+    // The CONTROLS page is rebuilt for the chosen scheme, with a live selector.
+    const lines = p.id === 'controls' ? controlsHelpLines(this.controlScheme) : p.lines;
+    if (p.id === 'controls') {
+      this._text(`Scheme: ‹ ${SCHEME_LABEL[this.controlScheme]} ›   (${this.input.isTouch ? 'tap' : 'C'} to change)`, W / 2, 176, 14, PAL.gold, 'center', 'middle', true);
+    }
+    let y = p.id === 'controls' ? 214 : 208;
+    for (const line of lines) { this._text(line, W / 2, y, 16, PAL.hudText, 'center', 'middle'); y += 31; }
     // page dots
     for (let i = 0; i < HELP_PAGES.length; i++) {
       ctx.fillStyle = i === this.helpPage ? PAL.gold : 'rgba(200,220,240,0.35)';
@@ -755,13 +769,16 @@ export class Game {
     this.reentryT = Math.max(0, (this.reentryT || 0) - dt);
 
     this.input.poll();   // gamepad
+    this._autoDetectScheme();   // pad plugged in → pad prompts (until picked manually)
     this._syncTouchButtons();   // on-screen buttons for touch play
     // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
     const startEdge = this.input.consumeStart();
+    const cycleControls = this.input.pressed('controls') || this.input.consumeButton('controls');
 
-    // Help screen: page through, then close (returns to menu or pause).
+    // Help screen: page through, cycle the control legend, then close.
     if (this.state === 'help') {
       const n = HELP_PAGES.length;
+      if (cycleControls) this._cycleScheme();
       if (this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.consumeButton('helpnext') || this.input.consumeTapFire()) this.helpPage = (this.helpPage + 1) % n;
       if (this.input.pressed('left') || this.input.pressed('weaponPrev') || this.input.consumeButton('helpprev')) this.helpPage = (this.helpPage - 1 + n) % n;
       if (this.input.pressed('help') || this.input.pressed('pause') || startEdge || this.input.consumeButton('helpclose')) this._closeHelp();
@@ -769,6 +786,11 @@ export class Game {
     }
     // Open help from the menu, pause or game-over screens (H or the ? button).
     if (this.state !== 'playing' && (this.input.pressed('help') || this.input.consumeButton('help'))) { this._openHelp(this.state); this.input.endFrame(); return; }
+
+    // Change the on-screen control legend (C / a menu tap; ← → on the menus).
+    if (cycleControls) this._cycleScheme();
+    else if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('right') || this.input.consumeButton('schemeNext'))) this._cycleScheme();
+    else if ((this.state === 'menu' || this.state === 'gameover') && this.input.pressed('left')) this._setScheme(prevScheme(this.controlScheme));
 
     if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
@@ -1288,7 +1310,7 @@ export class Game {
       ctx.restore();
       if (this.flash > 0.01) { ctx.fillStyle = `rgba(255,40,40,${0.35 * this.flash})`; ctx.fillRect(0, 0, W, H); }
       if (this.zoneFade > 0.01) { ctx.fillStyle = `rgba(120,180,220,${0.7 * this.zoneFade})`; ctx.fillRect(0, 0, W, H); }
-      drawStageHud(ctx, this.stage, { air: this.air, airMax: this.airMax, lives: this.lives, score: this.score, carried: this.carried });
+      drawStageHud(ctx, this.stage, { air: this.air, airMax: this.airMax, lives: this.lives, score: this.score, carried: this.carried, hint: stageHintStrip(this.controlScheme) });
       if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
       if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume'));
       if (this.state === 'gameover') this._gameOverScreen();
@@ -1533,7 +1555,12 @@ export class Game {
       }
       // Help: a "?" on the menus, and nav/close inside the help screen.
       if (this.state === 'menu' || this.state === 'gameover' || this.state === 'paused') btns.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
-      if (this.state === 'help') { const r = this._helpRects(); btns.push(r.prev, r.next, r.close); }
+      // Control-scheme selector: a tap target over the menu/gameover selector row.
+      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
+      if (this.state === 'help') {
+        const r = this._helpRects(); btns.push(r.prev, r.next, r.close);
+        if (HELP_PAGES[this.helpPage].id === 'controls') btns.push({ id: 'controls', x: W / 2 - 150, y: 162, w: 300, h: 30 });
+      }
     }
     this._touchBtns = btns;
     this.input.touchButtons = btns;
@@ -1541,6 +1568,9 @@ export class Game {
 
   // Draw one on-screen touch button with its icon/label.
   _touchBtn(b) {
+    // The scheme selectors are invisible tap targets over their own menu/help
+    // text — no button chrome, just a hit region.
+    if (b.id === 'schemeNext' || b.id === 'controls') return;
     const ctx = this.ctx;
     const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive) || (b.id === 'torch' && this.torchOn);
     ctx.save();
@@ -1716,7 +1746,7 @@ export class Game {
     }
     // Shop hint at any station once loot is banked.
     if (this.zone === 'reef' && this.carried === 0 && (this.boat.contains(this.diver) || this.bells.some((b) => b.contains(this.diver)))) {
-      this._text(this.input.isTouch ? 'Tap ⚙ SHOP to spend gold on gear' : 'Press B to open the ⚙ SHOP', W / 2, H - 52, 13, PAL.gold, 'center', 'middle');
+      this._text(this.input.isTouch ? 'Tap ⚙ SHOP to spend gold on gear' : `Press ${this._key('shop')} to open the ⚙ SHOP`, W / 2, H - 52, 13, PAL.gold, 'center', 'middle');
     }
 
     // Dark cave — remind the player how to light it (suppressed once the torch
@@ -1724,8 +1754,8 @@ export class Game {
     const torchLit = this.torchOn && this.shockBattery > 0;
     if (this.flareT <= 0 && !torchLit && this.darkZones && this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r) && this.zone === 'reef') {
       let msg;
-      if (this.hasTorch) msg = this.input.isTouch ? '🔦 DARK CAVE — tap 🔦 torch or 🔥 flare' : '🔦 DARK CAVE — press T for torch, G for a flare';
-      else msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : '🔦 DARK CAVE — press G to light a flare') : '🔦 DARK CAVE — out of flares! Buy some at the shop';
+      if (this.hasTorch) msg = this.input.isTouch ? '🔦 DARK CAVE — tap 🔦 torch or 🔥 flare' : `🔦 DARK CAVE — ${this._key('torch')} for torch, ${this._key('flare')} for a flare`;
+      else msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : `🔦 DARK CAVE — press ${this._key('flare')} to light a flare`) : '🔦 DARK CAVE — out of flares! Buy some at the shop';
       this._text(msg, W / 2, H - 96, 14, PAL.puffer, 'center', 'middle', true);
     }
 
@@ -1871,6 +1901,27 @@ export class Game {
     ctx.restore();   // end alpha
   }
 
+  // ---- control-scheme legend ------------------------------------------
+  // Reflect the chosen scheme in the always-visible HTML hint strip below canvas.
+  _applyHintStrip() {
+    const el = (typeof document !== 'undefined') && document.getElementById('hint');
+    if (el) el.textContent = hintStrip(this.controlScheme);
+  }
+  _setScheme(s) {
+    this.controlScheme = s; this._schemeManual = true;
+    try { localStorage.setItem(CONTROLS_KEY, s); } catch (e) { /* private mode */ }
+    this._applyHintStrip(); this.audio.select();
+  }
+  _cycleScheme() { this._setScheme(nextScheme(this.controlScheme)); }
+  // Auto-switch to pad prompts when a gamepad appears — until the player picks.
+  _autoDetectScheme() {
+    if (this._schemeManual) return;
+    const want = this.input.padConnected ? 'steamdeck' : 'keyboard';
+    if (want !== this.controlScheme) { this.controlScheme = want; this._applyHintStrip(); }
+  }
+  // A single action's prompt label for the current scheme (non-touch surfaces).
+  _key(action) { return ctrlPrompt(this.controlScheme, action); }
+
   _menu() {
     const cx = W / 2;
     this._panel();
@@ -1881,9 +1932,13 @@ export class Game {
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
-    this._text('Swim: Arrows / WASD / drag / stick   ·   Fire: Space / F / tap   ·   Hold fire: auto-aim   ·   Weapons: Q / E   ·   Shop: B', cx, 452, 13, '#9fc6e0', 'center', 'middle');
-    this._text('🎮 Gamepad supported (Steam Deck, ROG Ally & more)', cx, 472, 12, '#7fb0d0', 'center', 'middle');
-    if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 486, 14, '#bfe6ff', 'center', 'middle');
+    // Control-scheme selector (‹ Keyboard / Steam Deck / ROG Ally ›). Tap it on
+    // touch, or press C / ← → to cycle; the legend below updates to match.
+    this._text('🎮 Controls:', cx - 128, 450, 14, '#9fc6e0', 'right', 'middle');
+    this._text(`‹ ${SCHEME_LABEL[this.controlScheme]} ›`, cx - 6, 450, 16, PAL.gold, 'center', 'middle', true);
+    this._text(this.input.isTouch ? 'tap to change' : 'C / ← →', cx + 120, 450, 12, '#7fb0d0', 'left', 'middle');
+    this._text(`Swim ${this._key('swim')}   ·   Fire ${this._key('fire')} (hold to aim)   ·   Swap ${this._key('swap')}   ·   Shop ${this._key('shop')}`, cx, 474, 12, '#7fb0d0', 'center', 'middle');
+    if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 494, 14, '#bfe6ff', 'center', 'middle');
     // Help button / prompt.
     const ctx = this.ctx;
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
