@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper, drawUrchin, drawGiantSquid } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper, drawUrchin, drawGiantSquid, drawParasite, drawSentinel } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -263,6 +263,41 @@ export class GiantSquid extends Creature {
     this.x += (dx / d) * sp * dt; this.y += (dy / d) * sp * dt;
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawGiantSquid, t); }
+}
+
+// Gut Parasite — belly-zone reskin of the Piranha: a translucent acid blob
+// that drifts/darts toward the diver, identical behaviour to Piranha (just a
+// touch slower, and spawned solo rather than in a swarm cluster).
+export class Parasite extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.parasite.radius; }
+  update(dt, t, diver) {
+    const P = CREATURES.parasite, dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.x += (dx / d) * P.speed * dt + Math.cos(t * 3 + this.t0) * P.jitter * dt;
+    this.y += (dy / d) * P.speed * dt + Math.sin(t * 3.3 + this.t0) * P.jitter * dt;
+    this.facing = dx >= 0 ? 1 : -1;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawParasite, t); }
+}
+
+// Stone Sentinel — temple-zone reskin of the Grouper: a carved idol anchored
+// at the key/vault. Same guard geometry as Grouper (homes on the diver while
+// they're inside `territory`, else drifts back to the anchor), but it also
+// wakes and holds the guard permanently once `awake` is flipped true (the
+// temple does this when the key is grabbed) — until then, straying inside
+// `territory` is the only thing that rouses it.
+export class Sentinel extends Creature {
+  constructor(x, y, anchor) { super(x, y); this.radius = CREATURES.sentinel.radius; this.ax = anchor ? anchor.x : x; this.ay = anchor ? anchor.y : y; this.awake = false; }
+  update(dt, t, diver) {
+    const P = CREATURES.sentinel;
+    const inTerritory = Math.hypot(diver.x - this.ax, diver.y - this.ay) < P.territory;
+    const guarding = this.awake || inTerritory;
+    const tx = guarding ? diver.x : this.ax, ty = guarding ? diver.y : this.ay;
+    const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
+    const sp = guarding ? P.guardSpeed : P.guardSpeed * 0.7;
+    if (d > 4) { this.x += (dx / d) * sp * dt; this.y += (dy / d) * sp * dt; }
+    this.facing = dx >= 0 ? 1 : -1;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawSentinel, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

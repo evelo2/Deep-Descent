@@ -643,6 +643,65 @@ export function drawUrchin(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Gut Parasite — belly-zone reskin of the Piranha. A translucent, wobbling
+// acid-green blob (soft body, no scales/fins) with a visible dark nucleus
+// drifting inside it — reads as "swallowed hazard" rather than a fish.
+export function drawParasite(ctx, t, hurt) {
+  ctx.save();
+  const wob = 1 + Math.sin(t * 6) * 0.12;
+  const squash = 1 - Math.sin(t * 6) * 0.08;
+  glow(ctx, 16, '#8fe86b', 0.22);
+  ctx.globalAlpha = 0.68;
+  ctx.fillStyle = hurt ? PAL.danger : '#7bd94f';
+  ctx.beginPath(); ctx.ellipse(0, 0, 10 * wob, 8 * squash, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // membrane rim
+  ctx.strokeStyle = hurt ? PAL.danger : 'rgba(200,255,150,0.55)'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(0, 0, 10 * wob, 8 * squash, 0, 0, TAU); ctx.stroke();
+  // drifting nucleus, slightly off-centre
+  const nx = Math.sin(t * 1.6) * 2.4, ny = Math.cos(t * 1.3) * 1.6;
+  ctx.fillStyle = hurt ? PAL.danger : '#2f6b1f';
+  ctx.beginPath(); ctx.arc(nx, ny, 3.2, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : 'rgba(200,255,150,0.5)';
+  ctx.beginPath(); ctx.arc(nx - 1, ny - 1, 1.1, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Stone Sentinel — temple-zone reskin of the Grouper. A carved stone
+// fish-idol: blocky rock body with chiselled fin ridges and a pair of
+// glowing eyes (brighter while actively guarding). `hurt` mirrors the house
+// crack-flash style, tinted rather than swapped, since it's stone not flesh.
+export function drawSentinel(ctx, t, hurt) {
+  ctx.save();
+  // tail fin — angular, chiselled
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeDark;
+  ctx.beginPath();
+  ctx.moveTo(-18, 0); ctx.lineTo(-30, -12); ctx.lineTo(-24, 0); ctx.lineTo(-30, 12);
+  ctx.closePath(); ctx.fill();
+  // blocky stone body
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeRock;
+  ctx.beginPath();
+  ctx.moveTo(22, -4);
+  ctx.lineTo(10, -17); ctx.lineTo(-14, -14); ctx.lineTo(-22, 0);
+  ctx.lineTo(-14, 14); ctx.lineTo(10, 17); ctx.lineTo(22, 4);
+  ctx.closePath(); ctx.fill();
+  // carved rim + chisel lines
+  ctx.strokeStyle = hurt ? PAL.danger : PAL.templeRim; ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6, -13); ctx.lineTo(-4, 13); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, -16); ctx.lineTo(7, 16); ctx.stroke();
+  // dorsal ridge
+  ctx.fillStyle = hurt ? PAL.danger : PAL.templeDark;
+  ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(2, -22); ctx.lineTo(6, -15); ctx.fill();
+  // glowing eyes
+  const pulse = 0.7 + Math.sin(t * 2.2) * 0.3;
+  ctx.fillStyle = hurt ? '#fff' : PAL.gateGlow;
+  ctx.globalAlpha = hurt ? 1 : pulse;
+  ctx.beginPath(); ctx.arc(11, -4, 2.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
