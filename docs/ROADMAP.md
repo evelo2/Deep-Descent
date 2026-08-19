@@ -4,26 +4,9 @@ A backlog of possible future features. Below the **Planned next** section these
 are **ideas, not commitments** — a place to park things. Roughly grouped and
 unordered within each group.
 
-## Known bugs
-
-- **Downdraft current can trap the diver in a narrow tunnel.** Vertical currents
-  are always pure downdrafts (`fy = 1`) and `_makeCurrents` places them on any
-  open cell with no clearance check, so a downdraft can sit over a thin vertical
-  neck. In open water the diver out-thrusts the current, but in a tight tunnel the
-  cave collider slides you along the walls and eats the small net upward velocity
-  while the current keeps pushing down — you get swept down and can't climb back.
-  Fix direction: don't place down-currents on narrow passages (require vertical
-  clearance / use roomy chambers), and/or guarantee held-up thrust always beats a
-  current so escape is always possible.
-
 ## Planned next (committed direction)
 
-1. **Cave-entrance minigames.** Some cave entrances open into a **different
-   minigame** rather than more reef. First target: a **classic 1980s platformer**
-   stage (run/jump/hazards, its own tiny renderer + input mapping, reached via
-   the zone-stack like the belly/temple). Each minigame returns loot/gold on
-   completion. Frame it as an optional detour with its own win/lose.
-2. **Secure online scoring service.** A server-backed high-score / leaderboard.
+1. **Secure online scoring service.** A server-backed high-score / leaderboard.
    Design goals: submissions must be **verifiable and tamper-resistant** (don't
    trust the client's posted score) — e.g. sign runs, replay/validate a compact
    input log server-side, rate-limit, and authenticate. Needs a small backend
@@ -37,7 +20,12 @@ curve → done. Limited-ammo weapons, weapon economy/shop, hold-to-aim, help
 screen, dive bells → all shipped (see `DESIGN.md` v9–v15). **One-shot special
 zones** → done: exiting the whale removes it (`_exitWhale` filters it from
 `whales`), matching the temple's spent gate — no more re-entering/farming a
-special. Remaining ideas below are still open.
+special. **Cave-entrance minigames** → done: some reef entrances open a
+**classic 1980s platformer** stage via the zone-stack, with two launch themes
+(**ship** wreck decks, **lair** cave interior) driven by data-only theme
+definitions (palette + hazards + rooms). Each stage returns loot/gold on
+completion, retreat, or death, and is a one-shot per entrance like the whale/
+temple. Remaining ideas below are still open.
 
 ## Power-ups (new pickups)
 
