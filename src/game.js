@@ -948,9 +948,10 @@ export class Game {
     for (const s of this.shells) s.update(dt, this.t, emitBig);
     for (const b of this.bigBubbles) b.update(dt, this.cave);
     for (const tr of this.treasures) tr.update(dt, this.t);
+    const lit = this.flareT > 0 || (this.torchOn && this.shockBattery > 0);
     for (const cr of this.creatures) {
       if (cr.snareT > 0) { cr.snareT -= dt; if (cr.vx !== undefined) { cr.x += cr.vx * dt; cr.y += cr.vy * dt; cr.vx *= 0.9; cr.vy *= 0.9; } this.cave.collide(cr); continue; }  // netted/stunned: held in place
-      cr.update(dt, this.t, this.diver);
+      cr.update(dt, this.t, this.diver, lit);
       if (this.cave.collide(cr) && cr.dir !== undefined) cr.dir = cr._nx > 0 ? -1 : 1; // turn off walls
     }
     for (const h of this.harpoons) h.update(dt, this.cave);
