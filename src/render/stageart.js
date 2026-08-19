@@ -325,6 +325,21 @@ export function drawLadderTile(ctx, x, y, capTop, palette, theme) {
 
 const AMBIENT_W = 900, AMBIENT_H = 600;
 
+// The foreground vignette is a fixed radial gradient (same center/radii/
+// stops every frame, independent of t/roomIndex/palette) — build it once
+// per canvas context and reuse the CanvasGradient object across frames
+// instead of re-allocating it every draw.
+let _vignette = null;
+function vignetteGrad(ctx) {
+  if (!_vignette) {
+    const W = AMBIENT_W, H = AMBIENT_H;
+    _vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+    _vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    _vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+  }
+  return _vignette;
+}
+
 // Cheap deterministic pseudo-random in [0,1) from an integer seed — no
 // Math.random, fully reproducible per index.
 function hash01(i) {
@@ -443,10 +458,7 @@ export function drawForeground(ctx, palette, t, roomIndex) {
   ctx.globalAlpha = 1;
 
   // 4. Soft vignette — subtle edge darkening, center stays bright.
-  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,0.35)');
-  ctx.fillStyle = vg;
+  ctx.fillStyle = vignetteGrad(ctx);
   ctx.fillRect(0, 0, W, H);
 
   ctx.restore();

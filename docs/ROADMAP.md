@@ -25,7 +25,12 @@ special. **Cave-entrance minigames** → done: some reef entrances open a
 (**ship** wreck decks, **lair** cave interior) driven by data-only theme
 definitions (palette + hazards + rooms). Each stage returns loot/gold on
 completion, retreat, or death, and is a one-shot per entrance like the whale/
-temple. Remaining ideas below are still open.
+temple. **Stage backgrounds / parallax depth / platformer art polish** →
+**SHIPPED** (DESIGN.md v20, "stage wreck overhaul"): a layered baked renderer
+(depth-gradient backdrop, godrays/caustics, parallax wreck silhouettes,
+autotiled structure + ladders, themed actors/loot/doors, foreground silt/
+bubbles/kelp/vignette), more rooms (Ship 5, Lair 3) each proven traversable by
+a real-physics test, and a themed HUD. Remaining ideas below are still open.
 
 ## Power-ups (new pickups)
 
