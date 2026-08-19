@@ -63,6 +63,48 @@ const SHIP = {
       '....H.......$............>....','##############################',
     ],
   ],
+  // Non-colliding set-dressing per room, indexed to match `rooms` above.
+  // Parser/physics never read this — see src/render/stageart.js `drawDecor`
+  // and src/render/stagescene.js for how it's baked/composited. Every
+  // (c, r) below sits in an empty ('.') cell, clear of H/>/</S/$/o — the
+  // exact coordinates below have been verified against `rooms` above.
+  decor: [
+    // 1/5 Main Deck — wheel + broken mast stub + portholes up top.
+    [
+      { k: 'wheel', c: 24, r: 4 },
+      { k: 'mast', c: 28, r: 10 },
+      { k: 'porthole', c: 8, r: 1 },
+      { k: 'porthole', c: 15, r: 1, cracked: true },
+    ],
+    // 2/5 Gun Deck — a row of cannons along the decks + portholes.
+    [
+      { k: 'cannon', c: 2, r: 7 },
+      { k: 'cannon', c: 7, r: 7 },
+      { k: 'cannon', c: 14, r: 18 },
+      { k: 'porthole', c: 14, r: 0 },
+      { k: 'porthole', c: 22, r: 0 },
+    ],
+    // 3/5 Crew Hold — hanging chains (hammocks) + a swinging lantern.
+    [
+      { k: 'chain', c: 11, r: 5 },
+      { k: 'chain', c: 15, r: 5 },
+      { k: 'lantern', c: 24, r: 11 },
+    ],
+    // 4/5 Cargo Hold — stacked crates + a porthole.
+    [
+      { k: 'crate', c: 20, r: 10 },
+      { k: 'crate', c: 22, r: 11 },
+      { k: 'crate', c: 20, r: 13 },
+      { k: 'porthole', c: 20, r: 0 },
+    ],
+    // 5/5 Captain's Vault — compass rose on the cabin floor + portholes + lantern.
+    [
+      { k: 'compass', c: 20, r: 18 },
+      { k: 'porthole', c: 18, r: 0 },
+      { k: 'porthole', c: 24, r: 0, cracked: true },
+      { k: 'lantern', c: 15, r: 10 },
+    ],
+  ],
 };
 
 // Secret-lair theme — a cave mouth; descend into cold rock, metal, neon arcs.
@@ -105,6 +147,32 @@ const LAIR = {
       '....H.........................','....H.........................','....H.........................',
       '....H.........................','....H.........................','....H.........................',
       '....H......$............>.....','##############################',
+    ],
+  ],
+  // Non-colliding set-dressing per room, indexed to match `rooms` above.
+  // See the SHIP theme above for the shared contract; coordinates verified
+  // against `rooms` above.
+  decor: [
+    // 1/3 Cave Mouth — broken wreck timbers + a conduit + a porthole.
+    [
+      { k: 'timber', c: 15, r: 9 },
+      { k: 'timber', c: 22, r: 15 },
+      { k: 'conduit', c: 27, r: 6 },
+      { k: 'porthole', c: 20, r: 0 },
+    ],
+    // 2/3 Flooded Gallery — conduits/pipes + a timber + a hanging chain.
+    [
+      { k: 'conduit', c: 20, r: 9 },
+      { k: 'conduit', c: 22, r: 13 },
+      { k: 'timber', c: 17, r: 5 },
+      { k: 'chain', c: 25, r: 9 },
+    ],
+    // 3/3 Neon Vault — neon conduits + a lantern + a timber.
+    [
+      { k: 'conduit', c: 15, r: 7 },
+      { k: 'conduit', c: 22, r: 10 },
+      { k: 'lantern', c: 18, r: 14 },
+      { k: 'timber', c: 25, r: 16 },
     ],
   ],
 };
