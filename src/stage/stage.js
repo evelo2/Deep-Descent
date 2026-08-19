@@ -96,14 +96,61 @@ export class Stage {
     this.bannerT = Math.max(0, this.bannerT - dt);
     this.animT += dt * (Math.abs(this.body.vx) > 10 || this.body.onLadder ? 1 : 0);
     if (this.body.invuln > 0) this.body.invuln -= dt;
-    let remaining = dt;
     const ev = { loot: 0, died: false, exited: null };
+    let remaining = dt;
     while (remaining > 0) {
       const step = Math.min(STAGE.substep, remaining);
       this._step(step, cmd);
       remaining -= step;
     }
-    return ev;   // Tasks 4-6 fill loot/died/exited
+    this._updateMovers(dt);
+    if (this.body.invuln <= 0 && this._checkDeath()) ev.died = true;
+    return ev;   // loot/exited filled in Task 6
+  }
+
+  _updateMovers(dt) {
+    const room = this.room, spd = STAGE.moverSpeed;
+    for (const m of room.movers) {
+      if (m.mode === 'patrol') {
+        m.x += m.dir * spd * dt;
+        const footRow = Math.floor((m.y + m.h) / T);           // tile row just below
+        const aheadCol = Math.floor((m.x + (m.dir > 0 ? m.w : 0)) / T);
+        const wallAhead = solidAt(room, aheadCol, Math.floor((m.y + m.h / 2) / T));
+        const groundAhead = solidAt(room, aheadCol, footRow);
+        if (wallAhead || !groundAhead) {
+          m.dir *= -1;
+          // nudge back onto the platform so it can't creep off the edge
+          m.x += m.dir * spd * dt;
+        }
+      } else { // slide
+        m.x += m.dir * spd * dt;
+        const leftCol = Math.floor(m.x / T), rightCol = Math.floor((m.x + m.w) / T);
+        const row = Math.floor((m.y + m.h / 2) / T);
+        if (solidAt(room, rightCol, row) && m.dir > 0) { m.x = rightCol * T - m.w; m.dir = -1; }
+        else if (solidAt(room, leftCol, row) && m.dir < 0) { m.x = (leftCol + 1) * T; m.dir = 1; }
+      }
+    }
+  }
+
+  // True on the frame the body should die: pit, spike tile, or mover overlap.
+  _checkDeath() {
+    const b = this.body, room = this.room;
+    if (b.y > room.rows * T + T) return true;   // fell below the floor
+    const rng = tileRange(b.x, b.y, b.w, b.h);
+    for (let r = rng.r0; r <= rng.r1; r++)
+      for (let c = rng.c0; c <= rng.c1; c++)
+        if (spikeAt(room, c, r)) return true;
+    for (const m of room.movers) if (aabbOverlap(b, m)) return true;
+    return false;
+  }
+
+  respawn() {
+    const st = this.room.start;
+    const b = this.body;
+    b.x = st.x; b.y = st.y; b.vx = 0; b.vy = 0;
+    b.onGround = false; b.onLadder = false; b.invuln = STAGE.respawnInvuln; b.pose = 'stand';
+    // reset movers on this room to their spawn columns
+    for (const m of this.room.movers) { m.x = m.x0; m.dir = 1; }
   }
 
   // One physics sub-step: input → intent, gravity, X-then-Y tile collision.
