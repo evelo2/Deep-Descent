@@ -489,6 +489,61 @@ export function drawElectricRay(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Grouper — territorial loot guardian: a heavy-bodied, big-lipped reef fish
+// with mottled patches and a permanent downturned scowl. Larger and blunter
+// than drawPuffer — bulk, not spikes, does the intimidating here.
+export function drawGrouper(ctx, t, hurt) {
+  ctx.save();
+  const sway = Math.sin(t * 1.4) * 1.2;
+  // tail fin
+  ctx.fillStyle = hurt ? PAL.danger : '#5a6b4a';
+  ctx.beginPath();
+  ctx.moveTo(-19, 0);
+  ctx.lineTo(-30, -11 + sway); ctx.lineTo(-26, 0); ctx.lineTo(-30, 11 + sway);
+  ctx.closePath(); ctx.fill();
+  // heavy, deep-bellied body
+  ctx.fillStyle = hurt ? PAL.danger : '#6b7a52';
+  ctx.beginPath();
+  ctx.moveTo(24, -2);
+  ctx.quadraticCurveTo(20, -18, -6, -16);
+  ctx.quadraticCurveTo(-20, -13, -20, 0);
+  ctx.quadraticCurveTo(-20, 13, -6, 16);
+  ctx.quadraticCurveTo(20, 18, 24, 2);
+  ctx.closePath(); ctx.fill();
+  // mottled patches across the flank
+  ctx.fillStyle = hurt ? PAL.danger : '#40492f';
+  ctx.beginPath(); ctx.ellipse(-9, -6, 5, 3.4, 0.3, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 8, 5.5, 3.4, -0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -8, 4.4, 3, 0.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-2, -1, 3.6, 2.6, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = hurt ? PAL.danger : '#8a9a68';
+  ctx.beginPath(); ctx.ellipse(6, 2, 3.4, 2.2, 0.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-13, 4, 2.8, 2, -0.3, 0, TAU); ctx.fill();
+  // dorsal fin, low and spiny
+  ctx.strokeStyle = hurt ? PAL.danger : '#4a5a3c'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const bx = -4 + i * 5;
+    ctx.beginPath(); ctx.moveTo(bx, -15); ctx.lineTo(bx - 1, -21); ctx.stroke();
+  }
+  // blunt, jutting lower jaw with a thick pouting lip
+  ctx.fillStyle = hurt ? PAL.danger : '#5a6a48';
+  ctx.beginPath();
+  ctx.moveTo(19, 6); ctx.quadraticCurveTo(28, 8, 29, 3); ctx.quadraticCurveTo(24, 1, 18, 2);
+  ctx.closePath(); ctx.fill();
+  // big rubbery upper lip, protruding past the snout
+  ctx.fillStyle = hurt ? PAL.danger : '#8a7a5c';
+  ctx.beginPath();
+  ctx.moveTo(17, -6); ctx.quadraticCurveTo(28, -6, 30, -1); ctx.quadraticCurveTo(29, 3, 20, 1);
+  ctx.quadraticCurveTo(15, -2, 17, -6);
+  ctx.closePath(); ctx.fill();
+  // permanent scowl — a heavy downturned brow ridge over the eye
+  ctx.strokeStyle = hurt ? PAL.danger : '#2e3524'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(4, -9); ctx.quadraticCurveTo(11, -12, 16, -8); ctx.stroke();
+  // small, sunken eye set back from the jutting lips
+  eye(ctx, 9, -5);
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();

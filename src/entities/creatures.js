@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -214,6 +214,25 @@ export class ElectricRay extends Creature {
       ctx.restore();
     }
   }
+}
+
+// Grouper — territorial guardian: anchored at a loot node (ax, ay), e.g. a
+// wreck chest. While the diver is inside `territory` of the anchor it homes
+// straight at them; once the diver leaves, it disengages and drifts back
+// toward the anchor instead, at a slower speed — it guards the loot, it
+// doesn't chase across the map.
+export class Grouper extends Creature {
+  constructor(x, y, anchor) { super(x, y); this.radius = CREATURES.grouper.radius; this.ax = anchor ? anchor.x : x; this.ay = anchor ? anchor.y : y; }
+  update(dt, t, diver) {
+    const P = CREATURES.grouper;
+    const inTerritory = Math.hypot(diver.x - this.ax, diver.y - this.ay) < P.territory;
+    const tx = inTerritory ? diver.x : this.ax, ty = inTerritory ? diver.y : this.ay;
+    const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
+    const sp = inTerritory ? P.guardSpeed : P.guardSpeed * 0.7;
+    if (d > 4) { this.x += (dx / d) * sp * dt; this.y += (dy / d) * sp * dt; }
+    this.facing = dx >= 0 ? 1 : -1;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawGrouper, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {
