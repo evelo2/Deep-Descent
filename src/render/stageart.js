@@ -119,6 +119,139 @@ export function drawStructureTile(ctx, x, y, mask, palette, theme) {
   ctx.restore();
 }
 
+// Full room dimensions the bake canvas covers (see stagescene.js).
+const ROOM_W = 900, ROOM_H = 600;
+
+function hexToRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function lerpColor(a, b, t) {
+  const ca = hexToRgb(a), cb = hexToRgb(b);
+  const r = Math.round(ca[0] + (cb[0] - ca[0]) * t);
+  const g = Math.round(ca[1] + (cb[1] - ca[1]) * t);
+  const bl = Math.round(ca[2] + (cb[2] - ca[2]) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+function rgba(hexColor, a) {
+  const [r, g, b] = hexToRgb(hexColor);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// Baked deep backdrop: depth gradient + a couple of faint godray wedges +
+// a subtle caustic band near the top. Fully static — `seed` (the room
+// index) drives the only variety, never a live clock, since this is drawn
+// once into the offscreen bake and must be identical every re-bake.
+export function drawBackdrop(ctx, palette, seed) {
+  ctx.save();
+  const W = ROOM_W, H = ROOM_H;
+
+  // 1. vertical depth gradient, top -> bottom.
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, palette.bg1);
+  g.addColorStop(1, palette.bg2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2. soft godray wedges, themed by the palette's glow color (warm for
+  // SHIP, cool for LAIR). Kept low-alpha so they read as ambient light,
+  // not a foreground effect.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const tint = palette.glow || palette.neon || '#bfe9ff';
+  const rayCount = 2 + (seed % 2); // 2 or 3 rays, varies by room
+  for (let i = 0; i < rayCount; i++) {
+    const bx = (seed * 197 + i * 260) % W;
+    const topW = 50 + ((seed + i) * 17) % 40;
+    const rayA = 0.05 + ((seed + i * 3) % 3) * 0.017; // ~0.05-0.10
+    ctx.beginPath();
+    ctx.moveTo(bx, -20);
+    ctx.lineTo(bx + topW, -20);
+    ctx.lineTo(bx + topW + 140, H);
+    ctx.lineTo(bx - 40, H);
+    ctx.closePath();
+    const rg = ctx.createLinearGradient(0, 0, 0, H);
+    rg.addColorStop(0, rgba(tint, rayA));
+    rg.addColorStop(1, rgba(tint, 0));
+    ctx.fillStyle = rg;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // 3. one subtle caustic band near the top, phase-shifted by seed so
+  // rooms don't look identical — static, no time term.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = 2;
+  const phase = seed * 0.9;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 20) {
+      const yy = 50 + i * 28 + Math.sin(x * 0.05 + phase + i) * 10;
+      x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// Dim, low-contrast parallax wreck silhouettes baked BEHIND the play
+// structure — pure decoration, no collision meaning. `roomIndex` varies
+// the composition (which elements appear) and placement so consecutive
+// rooms in a theme don't look identical.
+export function drawFarWreck(ctx, palette, roomIndex) {
+  ctx.save();
+  const mix = lerpColor(palette.bg2, palette.bg1, 0.45);
+  const alpha = 0.14 + (roomIndex % 3) * 0.03; // 0.14 / 0.17 / 0.20
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = mix;
+  ctx.strokeStyle = mix;
+  ctx.lineCap = 'round';
+
+  const variant = roomIndex % 3; // 0: hull+masts, 1: hull+ribs, 2: hull+masts+ribs
+  const xOff = (roomIndex * 137) % 260;
+  const baseX = 560 + xOff * 0.6;
+  const baseY = 520;
+
+  ctx.translate(baseX, baseY);
+  ctx.rotate(-0.08 - (roomIndex % 2) * 0.05);
+
+  // listing hull silhouette — always present, forms the base read.
+  ctx.beginPath();
+  ctx.moveTo(-140, -10);
+  ctx.quadraticCurveTo(-160, 40, -100, 48);
+  ctx.lineTo(100, 48);
+  ctx.quadraticCurveTo(160, 36, 128, -16);
+  ctx.lineTo(100, -8);
+  ctx.quadraticCurveTo(0, 6, -120, -12);
+  ctx.closePath();
+  ctx.fill();
+
+  if (variant !== 1) {
+    // broken masts jutting up from the deck.
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-70, -10); ctx.lineTo(-64, -90); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(50, -8); ctx.lineTo(58, -60); ctx.stroke();
+  }
+  if (variant !== 0) {
+    // exposed hull ribs.
+    ctx.lineWidth = 4;
+    for (let i = -2; i <= 2; i++) {
+      const x = i * 26;
+      ctx.beginPath();
+      ctx.moveTo(x, 40);
+      ctx.quadraticCurveTo(x + (i % 2 === 0 ? 14 : -14), 4, x, -30);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
 // One 30x30 ladder tile. `capTop` is true when the tile ABOVE is not a
 // ladder — draw a rounded cap/knot so the ladder top reads finished.
 export function drawLadderTile(ctx, x, y, capTop, palette, theme) {

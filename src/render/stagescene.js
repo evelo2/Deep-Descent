@@ -3,7 +3,7 @@
 // cache, movers, diver) are drawn live every frame on top of the baked image.
 import { STAGE } from '../config.js';
 import { drawDiverFoot } from './sprites.js';
-import { neighborMask, drawStructureTile, drawLadderTile } from './stageart.js';
+import { neighborMask, drawStructureTile, drawLadderTile, drawBackdrop, drawFarWreck } from './stageart.js';
 
 const T = STAGE.tile;
 const { W, H } = { W: 900, H: 600 };
@@ -26,10 +26,10 @@ export class StageScene {
     const ctx = this._ctx;
     const p = stage.theme.palette, room = stage.room;
 
-    // themed background
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, p.bg1); g.addColorStop(1, p.bg2);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // themed deep backdrop (depth gradient + godrays + caustics), then dim
+    // parallax wreck silhouettes — both baked BEHIND the structure below.
+    drawBackdrop(ctx, p, stage.roomIndex);
+    drawFarWreck(ctx, p, stage.roomIndex);
 
     // static tiles
     for (let r = 0; r < room.rows; r++) {
