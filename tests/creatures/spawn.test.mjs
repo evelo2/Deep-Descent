@@ -9,7 +9,7 @@ function assert(name, cond) { if (cond) { passed++; console.log(`ok   - ${name}`
 function done() { console.log(`\n${passed} passed, ${failed} failed`); if (failed) process.exit(1); }
 
 // pickFauna('shallow', 1) always returns one of the shallow roster's keys.
-const shallowKeys = new Set(['jelly', 'puffer', 'shark']);
+const shallowKeys = new Set(['jelly', 'puffer', 'shark', 'piranha']);
 let allShallow = true;
 for (let i = 0; i < 100; i++) {
   const e = pickFauna('shallow', 1);

@@ -4,12 +4,13 @@
 // from a band's pool; spawnCreature builds the actual creature instance(s)
 // from an entry. This replaces the old depth-band if/else cascade in
 // game.js with a table the later creature tasks can extend in place.
-import { Shark, Octopus, Jelly, Puffer, Eel, Angler } from './creatures.js';
+import { Shark, Octopus, Jelly, Puffer, Eel, Angler, Piranha } from './creatures.js';
+import { CREATURES } from '../config.js';
 
 // Existing roster only — new keys are added by later creature tasks.
 export const ZONE_FAUNA = {
-  shallow: [ {k:'jelly',w:3}, {k:'puffer',w:3}, {k:'shark',w:2,scale:'small'} ],
-  mid:     [ {k:'octopus',w:2}, {k:'shark',w:3,scale:'mid'}, {k:'puffer',w:2}, {k:'jelly',w:1} ],
+  shallow: [ {k:'jelly',w:3}, {k:'puffer',w:3}, {k:'shark',w:2,scale:'small'}, {k:'piranha',w:2,minReef:1} ],
+  mid:     [ {k:'octopus',w:2}, {k:'shark',w:3,scale:'mid'}, {k:'puffer',w:2}, {k:'jelly',w:1}, {k:'piranha',w:1,minReef:2} ],
   deep:    [ {k:'shark',w:2,scale:'big'}, {k:'eel',w:2}, {k:'angler',w:2} ],
   dark:    [ {k:'eel',w:2}, {k:'jelly',w:1} ],
   wreck:   [ {k:'puffer',w:2}, {k:'eel',w:1} ],
@@ -47,6 +48,16 @@ export function spawnCreature(entry, x, y, reef, opts = {}) {
     case 'puffer':  return new Puffer(x, y);
     case 'eel':     return new Eel(x, y);
     case 'angler':  return new Angler(x, y);
+    case 'piranha': {
+      const [lo, hi] = CREATURES.piranha.count;
+      const count = lo + Math.floor(rng() * (hi - lo + 1));
+      const units = [];
+      for (let i = 0; i < count; i++) {
+        const a = rng() * Math.PI * 2, r = rng() * 40;
+        units.push(new Piranha(x + Math.cos(a) * r, y + Math.sin(a) * r));
+      }
+      return units;
+    }
     default: return null;
   }
 }
