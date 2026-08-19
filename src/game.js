@@ -1090,7 +1090,7 @@ export class Game {
     for (const n of this.nets) {
       if (n.dead) continue;
       for (const cr of this.creatures) {
-        if (!cr.dead && cr.snareT <= 0 && n.hits(cr)) {
+        if (!cr.dead && cr.snareT <= 0 && !cr.netImmune && n.hits(cr)) {
           cr.snareT = NET.snare + (this.weaponLevel.net - 1) * 1.5; n.dead = true;
           if (cr.vx !== undefined) { cr.vx = 0; cr.vy = 0; }
           this.particles.sparkle(cr.x, cr.y, '#dbe9f2', 12); this.audio.pickup();

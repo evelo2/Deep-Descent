@@ -544,6 +544,36 @@ export function drawGrouper(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Sea Urchin — static/slow-drift spiky contact hazard. A dark, radially
+// symmetric ball of long spines (drawn like drawJelly's radial tentacles,
+// but rigid rather than trailing) with a subtle collective sway rather than
+// any directional lean — it has no facing, it's the same from every side.
+export function drawUrchin(ctx, t, hurt) {
+  ctx.save();
+  const sway = Math.sin(t * 1.5) * 0.06;
+  glow(ctx, 18, '#3a1a5a', 0.2);
+  // long spines radiating outward, alternating length for a spiky silhouette
+  ctx.strokeStyle = hurt ? PAL.danger : '#1c1024'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  const spineCount = 16;
+  for (let i = 0; i < spineCount; i++) {
+    const a = (i / spineCount) * TAU + sway;
+    const len = i % 2 === 0 ? 16 : 11;
+    const bx = Math.cos(a) * 6, by = Math.sin(a) * 6;
+    const tx = Math.cos(a) * (6 + len), ty = Math.sin(a) * (6 + len);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+  }
+  // squat body, black shading to a deep purple sheen
+  const body = ctx.createRadialGradient(-2, -2, 1, 0, 0, 9);
+  body.addColorStop(0, hurt ? PAL.danger : '#4a2a6a');
+  body.addColorStop(1, hurt ? PAL.danger : '#0c0810');
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, TAU); ctx.fill();
+  // a faint purple rim highlight
+  ctx.strokeStyle = hurt ? PAL.danger : 'rgba(150,90,220,0.35)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
 function eye(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, TAU); ctx.fill();
