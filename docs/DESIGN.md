@@ -29,6 +29,34 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v16 — platformer stages (cave-entrance minigames)
+
+- **Stage subsystem** (`stage/stage.js`, `stage/themes.js`, `render/stage.js`,
+  `entities/stageentrance.js`): some reef entrances open into a **themed 1980s
+  platformer** stage instead of more reef — reached via the zone-stack exactly
+  like the whale belly or the temple (`zone === 'stage'`, snapshot/restore the
+  reef, one-shot entrance).
+- **Data-driven themes** (`stage/themes.js`, `THEMES`/`getTheme`): a theme is
+  pure data — palette, hazards, entrance sprite kind, and a sequence of
+  ASCII tile-map rooms (30×20 @ 30px, glyphs `. # H ^ x o E < > S $`). Two
+  themes ship: **ship** (shipwreck decks, wood/brass, entered via a reef-side
+  wreck sprite) and **lair** (a dark cave interior, entered via a cave-mouth
+  sprite).
+- **Canvas-free `Stage` engine** (`stage/stage.js`): gravity + terminal
+  velocity, axis-separated AABB collision against the parsed tile grid,
+  ladders (climb/rest/jump-off), room transitions (`>`/`<`), a one-time gold
+  cache (`$`), and avoid-only patrol/hazard movers. `Stage.update(dt, cmd)`
+  returns `{ loot, died, exited }`; fully unit-tested without a canvas
+  (`tests/stage/*.test.mjs`).
+- **Game wiring** (`game.js` `_enterStage`/`_updateStage`/`_exitStage`): the
+  fire/harpoon path is inert in-stage (movement/jump/climb only); loot adds to
+  `carried` with the usual sparkle + pearl SFX, death routes through the
+  existing `_loseLife` (respawn at the room start if lives remain, game-over at
+  zero), and exiting restores the reef and removes the entered entrance
+  (one-shot, like `_exitWhale`/`_exitTemple`). Each room is a single fixed
+  screen — no in-room scrolling. HUD is reused with a room banner and a greyed
+  "AIR — SEALED" indicator; a touch **JUMP** button appears while in-stage.
+
 ## v15 — dark caves & flares
 
 - **Dark caves** (`config.DARKZONE`, `game.darkZones`): 1–2 pitch-black chambers

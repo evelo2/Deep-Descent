@@ -300,3 +300,51 @@ function eye(ctx, x, y) {
   ctx.fillStyle = '#101018'; ctx.beginPath(); ctx.arc(x + 0.5, y, 1.8, 0, TAU); ctx.fill();
   ctx.restore();
 }
+
+// The diver on foot, for platformer stages. Drawn upright around the origin:
+// helmet at top, boots at bottom, inside a ~20×28 box. `pose` picks the stance;
+// `animT` swings the limbs. Facing/flip + world translate are the caller's job.
+export function drawDiverFoot(ctx, pose, animT) {
+  const swing = Math.sin(animT * 10);
+  ctx.save();
+  // legs
+  ctx.strokeStyle = PAL.diverSuit; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  if (pose === 'climb') {
+    // legs together on the rung, slight alternating bend
+    const c = Math.sin(animT * 8) * 3;
+    ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(-3 - 2, 14 + c); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, 6); ctx.lineTo(3 + 2, 14 - c); ctx.stroke();
+  } else if (pose === 'jump') {
+    ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(-6, 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, 6); ctx.lineTo(6, 12); ctx.stroke();
+  } else if (pose === 'walk') {
+    ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(-3 + swing * 5, 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, 6); ctx.lineTo(3 - swing * 5, 14); ctx.stroke();
+  } else { // stand
+    ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(-4, 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, 6); ctx.lineTo(4, 14); ctx.stroke();
+  }
+  // body
+  ctx.fillStyle = PAL.diverSuit;
+  ctx.beginPath(); ctx.roundRect(-6, -6, 12, 13, 4); ctx.fill();
+  // tank
+  ctx.fillStyle = '#4a5c78';
+  ctx.beginPath(); ctx.roundRect(-8, -5, 4, 9, 2); ctx.fill();
+  // arm(s)
+  ctx.strokeStyle = PAL.diverSuit; ctx.lineWidth = 3.5;
+  if (pose === 'climb') {
+    const a = Math.sin(animT * 8) * 3;
+    ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(6, -8 + a); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(6, -2 - a); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(2, -1); ctx.lineTo(7, 3 + (pose === 'walk' ? -swing * 3 : 0)); ctx.stroke();
+  }
+  // helmet + glass
+  ctx.fillStyle = PAL.diver;
+  ctx.beginPath(); ctx.arc(0, -11, 7, 0, TAU); ctx.fill();
+  ctx.fillStyle = PAL.diverGlass;
+  ctx.beginPath(); ctx.arc(2, -11, 3.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath(); ctx.arc(3.4, -12.4, 1.3, 0, TAU); ctx.fill();
+  ctx.restore();
+}
