@@ -48,10 +48,13 @@ life every 5,000 points and a per-reef difficulty curve. Still on the table:
 
 ## Content (creatures, bosses, zones)
 
-- **More deep-sea creatures** — moray in wall crevices, a swordfish that charges,
-  a drifting mine/urchin field.
-- **Boss variants** — a giant squid vs. the kraken, or a guardian in the temple
-  vault.
+- **More deep-sea creatures** → **SHIPPED** (DESIGN.md v19): a diverse,
+  zone-aware, reef-gated roster — moray ambushers in crevices, a barracuda
+  charger, piranha swarms, a camouflaged stonefish, an electric-ray pulse
+  hazard, a wreck-guarding grouper, and a drifting urchin/obstacle field.
+- **Boss variants** → **SHIPPED**: a **Giant Squid** mini-boss (HP-chipped like
+  a lighter kraken) and a **Stone Sentinel** guardian that wakes to defend the
+  temple key/vault. (A full second boss is still open.)
 - **Temple puzzle variety** — multiple keys/doors, pressure-plate gates, a
   timed vault that reseals.
 - **Weather / surface events** — storms that churn the surface and currents.
