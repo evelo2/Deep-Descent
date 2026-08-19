@@ -29,6 +29,38 @@ gameplay gain. Vanilla ES modules — no build step, no dependencies.
 - Clean state machine: menu → playing ⇄ paused → gameover. localStorage high score.
 - Accessibility: high-contrast HUD, pause, reduced reliance on colour alone.
 
+## v19 — creature diversity (zone-aware, reef-gated ecosystem)
+
+The hazard roster grew from 6 near-identical patrollers to a diverse ecosystem
+where different creatures inhabit different locations, introduced gradually with
+depth and reef. Built via a data-driven spawn system (`src/entities/spawn.js`:
+`ZONE_FAUNA` table + `pickFauna`/`spawnCreature`), each creature Node-unit-tested
+(`tests/creatures/*.test.mjs`), all with new procedural sprites.
+
+- **8 new creatures across new behavior archetypes** (`entities/creatures.js`):
+  **Barracuda** (charger — patrol → windup tell → dash), **Moray** (ambusher —
+  strikes from a wall crevice), **Piranha** (swarm), **Stonefish** (camouflaged —
+  near-invisible until a flare/torch or proximity reveals it, tying the light
+  systems to safety), **Electric Ray** (ranged — an expanding pulse-ring hazard
+  via an overridden `hits()`, no projectile system), **Grouper** (territorial
+  guardian on wreck loot), **Sea Urchin** (net-immune drift/obstacle hazard), and
+  the **Giant Squid** (a mini-boss: HP pool chipped by weapons via a shared
+  `_damageCreature` helper across harpoon/charge/shock, distinct from the Kraken).
+  Plus two zone reskins: **Gut Parasite** (belly) and **Stone Sentinel** (temple —
+  wakes when the key is taken).
+- **Zone → fauna map + reef gating:** shallow/mid/deep bands plus dark caves,
+  wrecks, currents, belly and temple each pull their own signature roster, with
+  per-type `minReef` so variety unfolds (wrecks from reef 2, currents/squid from
+  reef 4). The belly/temple/wreck/dark/current generators feed the table with a
+  zone context instead of the old generic roster.
+- **Portals stay clear:** `_clearCreaturesNearPortals()` runs at the end of each
+  generator so no creature spawns on a zone entrance/exit or a dive station —
+  you never portal in (or get dropped back) straight into an enemy.
+- **Interactions preserved:** net snare (urchin excepted — net-immune), shock
+  2nd-hit kill (mini-boss chips HP instead), harpoon/spear/charge kills, snare
+  freeze, and the dark/torch reveal all keep working. Spec + plan under
+  `docs/superpowers/{specs,plans}/2026-08-19-creature-diversity*`.
+
 ## v18 — cavern-entry fix + selectable control legend
 
 - **Cavern spawn-exit fix** (`stage/stage.js`, `stage/themes.js`,
