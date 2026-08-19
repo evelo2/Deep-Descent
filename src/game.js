@@ -196,10 +196,17 @@ export class Game {
     for (const ch of spread(C.chambers(), 4, 700)) {
       const floorY = C.surfaceBelow(ch.x, ch.y, 300);
       this.wrecks.push(new Wreck(ch.x, floorY - 42));
-      this.shells.push(new Chest(ch.x, floorY - 66, chestValue(ch.y) + 200));
+      const cx = ch.x, cy = floorY - 66;
+      this.shells.push(new Chest(cx, cy, chestValue(ch.y) + 200));
       for (let k = 0; k < 3; k++) {
         const tx = ch.x + (Math.random() - 0.5) * 200, ty = floorY - 24 - Math.random() * 60;
         if (!C.isSolid(tx, ty)) this.treasures.push(new Treasure(tx, ty, 'gem'));
+      }
+      // A wreck guardian (moray/grouper) anchored at the deck chest.
+      const we = pickFauna('wreck', this.reef);
+      if (we) {
+        const g = spawnCreature(we, cx, cy, this.reef, { anchor: { x: cx, y: cy } });
+        if (Array.isArray(g)) this.creatures.push(...g); else if (g) this.creatures.push(g);
       }
     }
 
@@ -223,6 +230,15 @@ export class Game {
       const fc = C.randomOpen(s.y - 120) || s;
       if (Math.hypot(fc.x - s.x, fc.y - s.y) < DARKZONE.radius) this.powerups.push(new PowerUp(fc.x, fc.y, 'flare'));
       this.crates.push(new SupplyCrate(s.x, s.y - 30));
+      // A couple of dark-cave creatures lurking inside the zone.
+      const dCount = 1 + (Math.random() * 3 | 0);   // 1-3
+      for (let k = 0; k < dCount; k++) {
+        const dx = s.x + (Math.random() - 0.5) * DARKZONE.radius, dy = s.y + (Math.random() - 0.5) * DARKZONE.radius;
+        if (C.isSolid(dx, dy)) continue;
+        const de = pickFauna('dark', this.reef); if (!de) continue;
+        const spawned = spawnCreature(de, dx, dy, this.reef);
+        if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+      }
     }
 
     // Flora rooted on cave floors — lots of it, for atmosphere.
@@ -247,6 +263,15 @@ export class Game {
 
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
     this._makeCurrents(5);
+    // A couple of urchins drifting as obstacle hazards near current lanes
+    // (reef-gated — nothing spawns below reef 4).
+    for (const cur of this.currents.slice(0, 2)) {
+      const cx = cur.x + cur.w / 2, cy = cur.y + cur.h / 2;
+      if (C.isSolid(cx, cy)) continue;
+      const ce = pickFauna('current', this.reef); if (!ce) continue;
+      const spawned = spawnCreature(ce, cx, cy, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
 
     // At most one special encounter per reef, and only sometimes — so each dive
     // feels different: a whale, a kraken, a temple gate, or just a plain reef.
@@ -1015,6 +1040,9 @@ export class Game {
       // Key: grab it to unlock the door and the vault.
       if (this.key && !this.key.taken && Math.hypot(d.x - this.key.x, d.y - this.key.y) < this.key.r + d.radius) {
         this.key.taken = true; this.hasKey = true;
+        // Wake the temple's stone guardians — Sentinels start passive, only
+        // guarding within their territory, until the key is disturbed.
+        for (const cr of this.creatures) if (cr.awake === false) cr.awake = true;
         this.particles.sparkle(this.key.x, this.key.y, PAL.key, 22); this.audio.pearl();
       }
       // Door: opens once you have the key; blocks the passage until then.

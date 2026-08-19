@@ -4,19 +4,21 @@
 // from a band's pool; spawnCreature builds the actual creature instance(s)
 // from an entry. This replaces the old depth-band if/else cascade in
 // game.js with a table the later creature tasks can extend in place.
-import { Shark, Octopus, Jelly, Puffer, Eel, Angler, Piranha, Stonefish, Barracuda, Moray, ElectricRay, Grouper, Urchin, GiantSquid } from './creatures.js';
+import { Shark, Octopus, Jelly, Puffer, Eel, Angler, Piranha, Stonefish, Barracuda, Moray, ElectricRay, Grouper, Urchin, GiantSquid, Parasite, Sentinel } from './creatures.js';
 import { CREATURES } from '../config.js';
 
-// Existing roster only — new keys are added by later creature tasks.
+// Depth bands + special zones. dark/wreck/current/belly/temple carry their
+// final zone-themed rosters (Task 10); shallow/mid/deep are the generic
+// depth-band roster used by the main reef spawn loop.
 export const ZONE_FAUNA = {
   shallow: [ {k:'jelly',w:3}, {k:'puffer',w:3}, {k:'shark',w:2,scale:'small'}, {k:'piranha',w:2,minReef:1} ],
   mid:     [ {k:'octopus',w:2}, {k:'shark',w:3,scale:'mid'}, {k:'puffer',w:2}, {k:'jelly',w:1}, {k:'piranha',w:1,minReef:2}, {k:'barracuda',w:2,minReef:2} ],
   deep:    [ {k:'shark',w:2,scale:'big'}, {k:'eel',w:2}, {k:'angler',w:2}, {k:'stonefish',w:1,minReef:2}, {k:'barracuda',w:1,minReef:3}, {k:'moray',w:1,minReef:3}, {k:'ray',w:1,minReef:3}, {k:'urchin',w:1,minReef:5}, {k:'squid',w:1,minReef:4} ],
-  dark:    [ {k:'eel',w:2}, {k:'jelly',w:1}, {k:'stonefish',w:3,minReef:1}, {k:'moray',w:2,minReef:2}, {k:'ray',w:1,minReef:3}, {k:'urchin',w:2,minReef:4} ],
-  wreck:   [ {k:'puffer',w:2}, {k:'eel',w:1}, {k:'moray',w:2,minReef:2}, {k:'grouper',w:2,minReef:3} ],
-  current: [ {k:'jelly',w:1}, {k:'urchin',w:3,minReef:4} ],
-  belly:   [ {k:'eel',w:1}, {k:'jelly',w:1} ],
-  temple:  [ {k:'eel',w:1}, {k:'puffer',w:1} ],
+  dark:    [ {k:'stonefish',w:3,minReef:1}, {k:'moray',w:2,minReef:2}, {k:'urchin',w:2,minReef:4} ],
+  wreck:   [ {k:'moray',w:2,minReef:2}, {k:'grouper',w:2,minReef:3} ],
+  current: [ {k:'urchin',w:3,minReef:4} ],
+  belly:   [ {k:'parasite',w:3}, {k:'urchin',w:1} ],
+  temple:  [ {k:'sentinel',w:2} ],
 };
 
 // Weighted pick from a zone's fauna pool, filtered by reef gating
@@ -55,6 +57,8 @@ export function spawnCreature(entry, x, y, reef, opts = {}) {
     case 'grouper':   return new Grouper(x, y, opts.anchor);
     case 'urchin':    return new Urchin(x, y, opts.drift || 0);
     case 'squid':     return new GiantSquid(x, y);
+    case 'parasite':  return new Parasite(x, y);
+    case 'sentinel':  return new Sentinel(x, y, opts.anchor);
     case 'piranha': {
       const [lo, hi] = CREATURES.piranha.count;
       const count = lo + Math.floor(rng() * (hi - lo + 1));

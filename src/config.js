@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900, Parasite: 60, Sentinel: 300 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -317,6 +317,14 @@ export const CREATURES = {
   // before it can lunge again. A small HP pool (chipped down like the Kraken,
   // but simpler — no arms, no boss HP bar) rather than a one-hit kill.
   squid: { cruise: 60, lunge: 240, lungeRange: 220, lungeTime: 0.45, restTime: 0.8, hp: 4, radius: 26 },
+  // Gut Parasite — belly-zone reskin of the Piranha: a translucent acid blob
+  // that drifts/darts toward the diver the same way, just a touch slower.
+  parasite: { speed: 58, radius: 10, jitter: 12 },
+  // Stone Sentinel — temple-zone reskin of the Grouper: an animated statue
+  // anchored at the key/vault. Identical guard geometry (territory/speed),
+  // but gated by a public `awake` flag the temple flips on the key grab —
+  // until then it only guards when the diver strays inside `territory`.
+  sentinel: { territory: 260, guardSpeed: 66, radius: 24 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
