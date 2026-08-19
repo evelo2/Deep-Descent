@@ -224,6 +224,7 @@ export const AIM = {
   fireMultPerLevel: 0.78, // cooldown ×= this per targeting level (faster fire)
   lockTol: 0.17,          // radians within which it will fire
   range: 720,             // only auto-target threats within this range
+  unlockLevel: 1,         // auto-aim LOCK is gated: engages only at aimLevel >= this (0 = manual fire only)
   maxLevel: 3,
   baseCost: 250,   // level 1 cost; doubles each subsequent level
 };
