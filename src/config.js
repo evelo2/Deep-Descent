@@ -360,4 +360,5 @@ export const KEYMAP = {
   help: ['KeyH'],
   flare: ['KeyG'],
   torch: ['KeyT'],
+  controls: ['KeyC'],
 };
