@@ -180,6 +180,9 @@ export class Moray extends Creature {
       if (this.timer <= 0) { this.state = 'hidden'; this.timer = P.cooldown; }
     }
   }
+  // Only the extended head is a hazard — while hidden the moray is retracted into
+  // its crevice and can't bite (its body sits at the anchor, not out in the open).
+  hits(diver) { return this.state === 'strike' && super.hits(diver); }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawMoray, t); }
 }
 
@@ -305,6 +308,6 @@ function blit(ctx, c, camX, camY, fn, t, flip = true) {
   ctx.translate(c.x - camX, c.y - camY);
   if (c.scale !== 1) ctx.scale(c.scale, c.scale);
   if (flip && c.facing < 0) ctx.scale(-1, 1);
-  fn(ctx, t + c.t0, false);
+  fn(ctx, t + c.t0, (c.hurtT || 0) > 0);   // forward a hurt flash for stateful-hurt creatures (e.g. the squid)
   ctx.restore();
 }

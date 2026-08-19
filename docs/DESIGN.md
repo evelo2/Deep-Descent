@@ -44,8 +44,9 @@ depth and reef. Built via a data-driven spawn system (`src/entities/spawn.js`:
   systems to safety), **Electric Ray** (ranged — an expanding pulse-ring hazard
   via an overridden `hits()`, no projectile system), **Grouper** (territorial
   guardian on wreck loot), **Sea Urchin** (net-immune drift/obstacle hazard), and
-  the **Giant Squid** (a mini-boss: HP pool chipped by weapons via a shared
-  `_damageCreature` helper across harpoon/charge/shock, distinct from the Kraken).
+  the **Giant Squid** (a mini-boss: HP pool chipped by weapons — a shared
+  `_damageCreature` helper for harpoon/charge, with the shock rod using its own
+  mini-boss branch — distinct from the Kraken).
   Plus two zone reskins: **Gut Parasite** (belly) and **Stone Sentinel** (temple —
   wakes when the key is taken).
 - **Zone → fauna map + reef gating:** shallow/mid/deep bands plus dark caves,
