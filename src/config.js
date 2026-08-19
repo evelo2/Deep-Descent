@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -312,6 +312,11 @@ export const CREATURES = {
   // charge. driftSpeed is 0 by default — most placements barely move,
   // threading currents/dark rooms into obstacle courses.
   urchin: { driftSpeed: 0, radius: 15 },
+  // Giant Squid — deep-water pursuer mini-boss: homes persistently on the
+  // diver and lunges (a speed burst) once it closes to lungeRange, then rests
+  // before it can lunge again. A small HP pool (chipped down like the Kraken,
+  // but simpler — no arms, no boss HP bar) rather than a one-hit kill.
+  squid: { cruise: 60, lunge: 240, lungeRange: 220, lungeTime: 0.45, restTime: 0.8, hp: 4, radius: 26 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,

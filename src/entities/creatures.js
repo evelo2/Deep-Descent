@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper, drawUrchin } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray, drawElectricRay, drawGrouper, drawUrchin, drawGiantSquid } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -244,6 +244,25 @@ export class Urchin extends Creature {
   constructor(x, y, drift = 0) { super(x, y); this.radius = CREATURES.urchin.radius; this.driftX = drift; this.netImmune = true; }
   update(dt, t) { this.x += this.driftX * dt; this.y = this.baseY + Math.sin(t * 0.4 + this.t0) * 3; }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawUrchin, t, false); }
+}
+
+// Giant Squid — deep-water pursuer mini-boss: homes persistently on the diver
+// (unlike Octopus/Angler, it never disengages) and, once within lungeRange,
+// speed-bursts ("lunges") toward them before resting and resuming a cruise
+// approach. Has a small HP pool — takeDamage() chips it down over several
+// weapon hits, like the Kraken, but simpler: no arms, no boss HP bar.
+export class GiantSquid extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.squid.radius; this.hp = CREATURES.squid.hp; this.hurtT = 0; this.lungeT = 0; this.rest = 0; }
+  takeDamage(n = 1) { this.hp -= n; this.hurtT = 0.2; if (this.hp <= 0) this.dead = true; }
+  update(dt, t, diver) {
+    const P = CREATURES.squid; this.hurtT = Math.max(0, this.hurtT - dt);
+    const dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1; this.facing = dx >= 0 ? 1 : -1;
+    this.lungeT -= dt; this.rest = Math.max(0, this.rest - dt);
+    if (d < P.lungeRange && this.rest <= 0 && this.lungeT <= 0) { this.lungeT = P.lungeTime; this.rest = P.restTime; }
+    const sp = this.lungeT > 0 ? P.lunge : P.cruise;
+    this.x += (dx / d) * sp * dt; this.y += (dy / d) * sp * dt;
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawGiantSquid, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

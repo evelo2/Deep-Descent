@@ -544,6 +544,75 @@ export function drawGrouper(ctx, t, hurt) {
   ctx.restore();
 }
 
+// Giant Squid — deep-water pursuer mini-boss. Head/arms lead the facing
+// direction (+x, as with the other creatures); a tapered, finned mantle
+// trails behind for a jet-propulsion silhouette. Two long hunting tentacles
+// reach out front, shorter grasping arms fan around the head, and one big
+// alert eye watches the diver. References the Kraken's palette/menace for
+// scale, but is a single simple sprite — no separate arm hit-geometry, no
+// boss HP bar; `hurt` flashes the whole body lighter/red on a weapon hit.
+export function drawGiantSquid(ctx, t, hurt) {
+  ctx.save();
+  const pulse = 1 + Math.sin(t * 2.4) * 0.06;   // gentle jet-propulsion breathing
+  const col = hurt ? PAL.danger : PAL.kraken;
+  const dark = hurt ? PAL.danger : PAL.krakenDark;
+
+  // Two long hunting tentacles, undulating out in front.
+  ctx.lineCap = 'round';
+  for (const s of [-1, 1]) {
+    let px = 12, py = s * 7, ang = 0;
+    const pts = [[px, py]];
+    for (let i = 1; i <= 5; i++) {
+      ang = s * 0.55 + Math.sin(t * 3 + s * 1.4 + i * 0.8) * 0.3;
+      px += Math.cos(ang) * 15; py += Math.sin(ang) * 15;
+      pts.push([px, py]);
+    }
+    ctx.strokeStyle = col;
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineWidth = 5 - i * 0.6;
+      ctx.beginPath(); ctx.moveTo(pts[i - 1][0], pts[i - 1][1]); ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke();
+    }
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.ellipse(px, py, 3.4, 2.4, ang, 0, TAU); ctx.fill();  // club at the tip
+  }
+
+  // Shorter grasping arms, fanning forward around the head.
+  ctx.strokeStyle = col; ctx.lineWidth = 3.2;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 5 - 0.5) * 1.9;
+    const sway = Math.sin(t * 4 + i) * 3;
+    ctx.beginPath();
+    ctx.moveTo(6, 0);
+    ctx.quadraticCurveTo(6 + Math.cos(a) * 9, sway + Math.sin(a) * 11, 6 + Math.cos(a) * 18, sway + Math.sin(a) * 20);
+    ctx.stroke();
+  }
+
+  // Tapered mantle trailing behind, with a pair of swept fins.
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(4, -13);
+  ctx.quadraticCurveTo(-20, -17 * pulse, -34, 0);
+  ctx.quadraticCurveTo(-20, 17 * pulse, 4, 13);
+  ctx.quadraticCurveTo(11, 0, 4, -13);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(-12, -12); ctx.quadraticCurveTo(-30, -24, -38, -9); ctx.quadraticCurveTo(-24, -8, -12, -12); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-12, 12); ctx.quadraticCurveTo(-30, 24, -38, 9); ctx.quadraticCurveTo(-24, 8, -12, 12); ctx.fill();
+
+  // Head, in front of the mantle.
+  const g = ctx.createRadialGradient(2, -4, 3, 4, 0, 16);
+  g.addColorStop(0, hurt ? '#ff8fb0' : '#9a4f88'); g.addColorStop(1, col);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(4, 0, 14, 12, 0, 0, TAU); ctx.fill();
+
+  // One big, alert eye.
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(8, -2, 6, 7, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = PAL.krakenEye; ctx.beginPath(); ctx.arc(9, -1, 3, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#20140a'; ctx.beginPath(); ctx.ellipse(9, -1, 1.3, 2.6, 0, 0, TAU); ctx.fill();
+
+  ctx.restore();
+}
+
 // Sea Urchin — static/slow-drift spiky contact hazard. A dark, radially
 // symmetric ball of long spines (drawn like drawJelly's radial tentacles,
 // but rigid rather than trailing) with a subtle collective sway rather than
