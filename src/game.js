@@ -416,7 +416,7 @@ export class Game {
     if (this.owned.has('charge') && this.chargeMax < CHARGE.capMax)
       items.push({ kind: 'chargecap', id: 'chargecap', label: `💣 Charge Capacity +1 (${this.chargeMax}→${this.chargeMax + 1})`, cost: this._dblCost(CHARGE.capCostBase, this.chargeCapLevel) });
     if (this.aimLevel < AIM.maxLevel)
-      items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: this._dblCost(AIM.baseCost, this.aimLevel) });
+      items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (${this.aimLevel === 0 ? 'unlock auto-aim' : 'faster aim + fire rate'})`, cost: this._dblCost(AIM.baseCost, this.aimLevel) });
     if (this.tankLevel < SHOP.tankMaxLevel)
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     if (!this.hasTorch && this.reef >= TORCH.minReef)
@@ -732,6 +732,14 @@ export class Game {
     }
   }
 
+  // Auto-aim lock is a PAID perk: it engages only once the Targeting upgrade is
+  // owned (aimLevel >= AIM.unlockLevel). Below that, holding fire just rapid-fires
+  // in the facing direction (manual aim) — this returns null so no threat is locked.
+  _acquireAimTarget(engaged) {
+    if (!engaged || this.aimLevel < AIM.unlockLevel) return null;
+    return this._nearestThreat();
+  }
+
   // Nearest live, un-snared threat (creature or kraken) within aim range.
   _nearestThreat() {
     const d = this.diver; let best = null, bd = AIM.range * AIM.range;
@@ -944,7 +952,7 @@ export class Game {
     if (holding) this.fireHeldT += dt; else this.fireHeldT = 0;
     let intent = this.input.vector();
     const engaged = holding && this.fireHeldT >= AIM.threshold;   // past the brief pre-hold
-    const threat = engaged ? this._nearestThreat() : null;
+    const threat = this._acquireAimTarget(engaged);
     this.aiming = !!threat; this.aimTarget = threat;
     if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; this._didAim = true; }   // hold position
 
