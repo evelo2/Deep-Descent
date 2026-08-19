@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -302,6 +302,11 @@ export const CREATURES = {
   // expanding pulse ring. Both the body AND the ring's leading edge (a band
   // `band` px wide, checked in the overridden hits()) are hazards.
   ray: { pulseR: 130, pulseCycle: 2.4, pulseTime: 0.6, band: 10, driftSpeed: 20, radius: 20 },
+  // Grouper — territorial guardian: anchored at a loot node (e.g. a wreck
+  // chest). Homes on the diver while they're inside `territory` of the
+  // anchor; once they leave, disengages and drifts back toward the anchor
+  // (at a slower speed) instead of chasing.
+  grouper: { territory: 260, guardSpeed: 70, radius: 22 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
