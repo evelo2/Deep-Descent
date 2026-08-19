@@ -1411,8 +1411,8 @@ export class Game {
           g2.addColorStop(0, `rgba(255,180,90,${wf})`); g2.addColorStop(1, 'rgba(255,120,40,0)');
           ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
         }
-        const darkA = darkness * (lit ? 0.72 : 0.95);
-        const grd = ctx.createRadialGradient(dsx, dsy, vr, dsx, dsy, vr + 170);
+        const darkA = darkness * (lit ? DARKZONE.litAlpha : DARKZONE.unlitAlpha);
+        const grd = ctx.createRadialGradient(dsx, dsy, vr, dsx, dsy, vr + DARKZONE.falloff);
         grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, `rgba(2,4,8,${darkA})`);
         ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
       }
