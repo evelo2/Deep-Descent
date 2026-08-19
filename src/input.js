@@ -122,6 +122,7 @@ export class Input {
       if (edge(4)) this._padEdges.add('weaponPrev');                       // LB → prev weapon
       if (edge(1)) this._padEdges.add('shop');                             // B → open shop (at a station)
       if (edge(6)) this._padEdges.add('flare');                            // LT → light a flare
+      if (edge(11)) this._padEdges.add('torch');                           // R3 → toggle torch (provisional; #38 finalizes pad map)
       if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop nav)
       if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop nav)
       if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus

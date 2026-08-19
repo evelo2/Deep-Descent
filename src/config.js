@@ -103,12 +103,23 @@ export const DARKZONE = {
   count: 2,             // attempted dark rooms per reef
   minDepthFrac: 0.38,   // only place below this fraction of the world
   radius: 360,          // room radius
+  unlitAlpha: 0.99,     // near-total black past the diver's tiny unlit view
+  litAlpha: 0.8,        // still meaningfully dark even with a flare burning
+  falloff: 120,         // px over which the black closes in past the visible radius
+};
+// Torch: a battery-powered sustained light for dark caves. Standalone shop item;
+// shares the shock-rod battery (SHOCK.batteryMax) — light now vs. zaps later.
+export const TORCH = {
+  cost: 350,        // shop price (deliberately a commitment)
+  minReef: 2,       // shop-gate: appears from reef 2
+  litRadius: 250,   // dark-cave visible radius while lit (unlit 52 < this < flare 300)
+  drain: 8,         // battery drained per second while lit (~12.5s on a full battery)
 };
 export const FLARE = {
   startCount: 2,
-  duration: 9,          // seconds a flare burns
+  duration: 16,         // seconds a flare burns (long, to offset the darker caves)
   litRadius: 300,       // visible radius while a flare is lit
-  diverRadius: 74,      // dim radius you can see without a flare
+  diverRadius: 52,      // small dim radius you can see without a flare
   pack: 3, packCost: 90, // shop pack
   findMin: 1, findMax: 3, // pickup grant
 };
@@ -164,9 +175,16 @@ export const SHOCK = {
   primaryRange: 320,   // range to the first struck creature
   chainRange: 240,     // arc distance from one creature to the next
   stun: 3.5, knock: 150,
+  hitsToKill: 2,       // first zap stuns; the second (cumulative) kills the creature
   batteryMax: 100, cost: 40, recharge: 11,   // ~2-3 zaps on a full battery, ~9s to refill
 };
-export const SPEARGUN = { shots: 3, interval: 0.07, spread: 0.06 };
+export const SPEARGUN = {
+  shots: 3, interval: 0.07, spread: 0.06,
+  startAmmo: 20,     // spears granted on first acquiring the speargun
+  ammoMax: 100,      // capacity ceiling (buy in packs up to here)
+  ammoPack: 20,      // spears per shop purchase
+  packCost: 450,     // deliberately expensive — the rapid 3-shot burst is strong
+};
 
 // Dive bells: deep refuel/bank checkpoints so you don't have to surface.
 export const BELL = {
@@ -338,4 +356,5 @@ export const KEYMAP = {
   shop: ['KeyB'],
   help: ['KeyH'],
   flare: ['KeyG'],
+  torch: ['KeyT'],
 };
