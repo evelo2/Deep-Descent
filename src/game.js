@@ -700,6 +700,13 @@ export class Game {
   _angleDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
   _angleToward(a, target, maxStep) { const d = this._angleDiff(a, target); return a + Math.max(-maxStep, Math.min(maxStep, d)); }
 
+  // Apply one weapon hit to a creature: mini-bosses (with takeDamage) chip HP,
+  // ordinary creatures die outright. Returns true if the creature just died.
+  _damageCreature(cr) {
+    if (cr.takeDamage) { cr.takeDamage(1); return cr.dead; }
+    cr.dead = true; return true;
+  }
+
   _spear(angleOff = 0) {
     const d = this.diver, ca = Math.cos(angleOff), sa = Math.sin(angleOff);
     this.harpoons.push(new Harpoon(d.x, d.y, d.aimX * ca - d.aimY * sa, d.aimX * sa + d.aimY * ca));
@@ -743,17 +750,25 @@ export class Game {
       if (!best) break;
       used.add(best);
       bolts.push({ x1: from.x, y1: from.y, x2: best.x, y2: best.y });
-      best.shockHits = (best.shockHits || 0) + 1;
-      if (best.shockHits >= SHOCK.hitsToKill) {
-        // Second zap finishes it — same reward as a harpoon kill.
-        best.dead = true; this.score += best.points || 0;
-        this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill();
+      if (best.takeDamage) {
+        // Mini-bosses (e.g. the squid) chip HP per zap instead of the normal
+        // 2-cumulative-hit kill — never insta-killed by the shockHits logic.
+        best.takeDamage(1);
+        if (best.dead) { this.score += best.points || 0; this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill(); }
+        else { this.particles.sparkle(best.x, best.y, PAL.danger, 10); this.audio.hit(); }
       } else {
-        // First zap: stun + knock back, leaving it primed for the killing shot.
-        best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
-        const a = Math.atan2(best.y - from.y, best.x - from.x);
-        if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
-        this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+        best.shockHits = (best.shockHits || 0) + 1;
+        if (best.shockHits >= SHOCK.hitsToKill) {
+          // Second zap finishes it — same reward as a harpoon kill.
+          best.dead = true; this.score += best.points || 0;
+          this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill();
+        } else {
+          // First zap: stun + knock back, leaving it primed for the killing shot.
+          best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
+          const a = Math.atan2(best.y - from.y, best.x - from.x);
+          if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
+          this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+        }
       }
       from = best;
     }
@@ -1064,10 +1079,17 @@ export class Game {
       if (h.dead) continue;
       for (const cr of this.creatures) {
         if (!cr.dead && h.hits(cr)) {
-          h.dead = true; cr.dead = true;
-          this.score += cr.points;
-          this.particles.sparkle(cr.x, cr.y, PAL.danger, 20);
-          this.audio.kill();
+          h.dead = true;
+          const died = this._damageCreature(cr);
+          if (died) {
+            this.score += cr.points;
+            this.particles.sparkle(cr.x, cr.y, PAL.danger, 20);
+            this.audio.kill();
+          } else {
+            // Mini-boss chipped, not killed — a lighter hurt effect instead.
+            this.particles.sparkle(cr.x, cr.y, PAL.danger, 10);
+            this.audio.hit();
+          }
           break;
         }
       }
@@ -1122,7 +1144,7 @@ export class Game {
     }
     for (const cr of this.creatures) {
       if (!cr.dead && Math.hypot(cr.x - ch.x, cr.y - ch.y) < R + (cr.radius || 14)) {
-        cr.dead = true; this.score += cr.points;
+        if (this._damageCreature(cr)) this.score += cr.points;
         this.particles.sparkle(cr.x, cr.y, PAL.danger, 14);
       }
     }
