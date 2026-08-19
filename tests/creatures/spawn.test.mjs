@@ -15,7 +15,7 @@ for (let i = 0; i < 100; i++) {
   const e = pickFauna('shallow', 1);
   if (!e || !shallowKeys.has(e.k)) { allShallow = false; break; }
 }
-assert("pickFauna('shallow', 1) returns jelly/puffer/shark", allShallow);
+assert("pickFauna('shallow', 1) returns only shallow-band fauna", allShallow);
 
 // Unknown band → null.
 assert("pickFauna('nope', 1) returns null for an unknown band", pickFauna('nope', 1) === null);
