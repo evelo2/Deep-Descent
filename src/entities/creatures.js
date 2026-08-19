@@ -2,7 +2,7 @@
 // itself. Contact costs the diver a life (handled by the Game). Movement is in
 // the 2D world; the Game confines them to the cave via the Cave collider.
 import { WORLD, SHARK, KILL_POINTS, CREATURES } from '../config.js';
-import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda } from '../render/sprites.js';
+import { drawOctopus, drawShark, drawJelly, drawPuffer, drawAngler, drawEel, drawPiranha, drawStonefish, drawBarracuda, drawMoray } from '../render/sprites.js';
 
 class Creature {
   constructor(x, y) {
@@ -157,6 +157,30 @@ export class Barracuda extends Creature {
     } else { this.x += P.patrolSpeed * 0.5 * this.dir * dt; if (this.timer <= 0) this.state = 'patrol'; }
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawBarracuda, t); }
+}
+
+// Moray — ambusher: anchored in a wall/wreck crevice, hidden at (ax, ay)
+// until the diver enters strikeRange, then lunges its head out toward them
+// (a 0→reach→0 curve over strikeTime) and retracts, with a cooldown before
+// it can strike again. Only the extended head is the hazard — hidden, it
+// sits at the anchor inside the wall where the diver can't reach.
+export class Moray extends Creature {
+  constructor(x, y) { super(x, y); this.radius = CREATURES.moray.radius; this.ax = x; this.ay = y; this.state = 'hidden'; this.timer = 0; }
+  update(dt, t, diver) {
+    const P = CREATURES.moray;
+    if (this.snareT > 0) return;
+    const dx = diver.x - this.ax, dy = diver.y - this.ay, d = Math.hypot(dx, dy) || 1;
+    this.facing = dx >= 0 ? 1 : -1; this.timer -= dt;
+    if (this.state === 'hidden') {
+      this.x = this.ax; this.y = this.ay;
+      if (d < P.strikeRange && this.timer <= 0) { this.state = 'strike'; this.timer = P.strikeTime; this.dirx = dx / d; this.diry = dy / d; }
+    } else {
+      const k = 1 - Math.abs(this.timer / P.strikeTime - 0.5) * 2;        // 0→1→0 lunge
+      this.x = this.ax + this.dirx * P.reach * k; this.y = this.ay + this.diry * P.reach * k;
+      if (this.timer <= 0) { this.state = 'hidden'; this.timer = P.cooldown; }
+    }
+  }
+  draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawMoray, t); }
 }
 
 function blit(ctx, c, camX, camY, fn, t, flip = true) {

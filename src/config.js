@@ -276,7 +276,7 @@ export const STAGE = {
 };
 
 // Points awarded for spearing each creature type.
-export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260 };
+export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240 };
 
 // Per-type tuning for creatures (speeds/ranges/points/etc.), keyed by the
 // same `k` used in ZONE_FAUNA / spawnCreature (src/entities/spawn.js). Empty
@@ -292,6 +292,12 @@ export const CREATURES = {
   // the diver lines up in range + vertically aligned, then dashes straight
   // at them before recovering. A snare cancels a windup/dash.
   barracuda: { patrolSpeed: 60, sightRange: 320, alignBand: 46, windupTime: 0.5, dashSpeed: 420, dashTime: 0.5, recover: 0.7, radius: 20 },
+  // Moray — ambusher: anchored in a wall/wreck crevice, hidden until the
+  // diver enters strikeRange, then lunges its head out toward them along a
+  // 0→reach→0 curve over strikeTime and retracts, with a cooldown before it
+  // can strike again. Only the extended head (hidden, it's parked inside the
+  // wall at the anchor) is the hazard.
+  moray: { strikeRange: 120, reach: 90, strikeTime: 0.35, cooldown: 2.5, radius: 16 },
 };
 
 // Cohesive underwater palette — deep blues → teal, warm treasure accents,
