@@ -59,11 +59,98 @@ export function doorKindAt(room, col, row) {
 
 // Tile-range helpers used by the physics (Task 3+).
 export function tileRange(x, y, w, h) {
+  // The upper bound uses a tiny epsilon (not a full pixel) so a body resting
+  // exactly on a tile boundary doesn't select the next tile, while genuine
+  // sub-pixel overlap (e.g. one substep of gravity jitter at rest) still does.
+  const EPS = 1e-3;
   return {
-    c0: Math.floor(x / T), c1: Math.floor((x + w - 1) / T),
-    r0: Math.floor(y / T), r1: Math.floor((y + h - 1) / T),
+    c0: Math.floor(x / T), c1: Math.floor((x + w - EPS) / T),
+    r0: Math.floor(y / T), r1: Math.floor((y + h - EPS) / T),
   };
 }
 export function aabbOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+export class Stage {
+  constructor(theme) {
+    this.theme = theme;
+    this.rooms = theme.rooms.map((r) => parseRoom(r));
+    this.roomIndex = 0;
+    this.result = null;         // set to 'retreat' | 'complete' when leaving
+    this.bannerT = 2.2;         // seconds the room banner shows
+    this.animT = 0;             // walk/climb animation clock
+    const st = this.rooms[0].start;
+    this.body = {
+      x: st.x, y: st.y, w: STAGE.bodyW, h: STAGE.bodyH,
+      vx: 0, vy: 0, onGround: false, onLadder: false, facing: 1,
+      invuln: 0, pose: 'stand',
+    };
+  }
+
+  get room() { return this.rooms[this.roomIndex]; }
+
+  // Advance the stage. Sub-steps the physics so a terminal-speed fall never
+  // skips a tile. Returns per-frame events for the Game to apply.
+  update(dt, cmd) {
+    this.bannerT = Math.max(0, this.bannerT - dt);
+    this.animT += dt * (Math.abs(this.body.vx) > 10 || this.body.onLadder ? 1 : 0);
+    if (this.body.invuln > 0) this.body.invuln -= dt;
+    let remaining = dt;
+    const ev = { loot: 0, died: false, exited: null };
+    while (remaining > 0) {
+      const step = Math.min(STAGE.substep, remaining);
+      this._step(step, cmd);
+      remaining -= step;
+    }
+    return ev;   // Tasks 4-6 fill loot/died/exited
+  }
+
+  // One physics sub-step: input → intent, gravity, X-then-Y tile collision.
+  _step(dt, cmd) {
+    const b = this.body;
+    // Horizontal intent.
+    b.vx = cmd.moveX * STAGE.walk;
+    if (cmd.moveX !== 0) b.facing = cmd.moveX > 0 ? 1 : -1;
+    // Jump only from the ground (no double jump). Ladder handling: Task 4.
+    if (cmd.jump && b.onGround) { b.vy = -STAGE.jump; b.onGround = false; }
+    // Gravity.
+    b.vy = Math.min(STAGE.maxFall, b.vy + STAGE.gravity * dt);
+
+    // --- X axis ---
+    b.x += b.vx * dt;
+    this._collideAxis('x');
+    // --- Y axis ---
+    b.onGround = false;
+    b.y += b.vy * dt;
+    this._collideAxis('y');
+
+    // Pose (renderer hint). Use walk intent (not just resultant vx) so pressing
+    // into a wall still reads as "walking" rather than snapping to "stand" the
+    // instant collision zeroes vx.
+    if (!b.onGround) b.pose = 'jump';
+    else if (Math.abs(b.vx) > 10 || cmd.moveX !== 0) b.pose = 'walk';
+    else b.pose = 'stand';
+  }
+
+  // Resolve the body out of any solid tiles it overlaps along one axis.
+  _collideAxis(axis) {
+    const b = this.body, room = this.room;
+    const rng = tileRange(b.x, b.y, b.w, b.h);
+    for (let r = rng.r0; r <= rng.r1; r++) {
+      for (let c = rng.c0; c <= rng.c1; c++) {
+        if (!solidAt(room, c, r)) continue;
+        const tileL = c * T, tileR = c * T + T, tileT = r * T, tileB = r * T + T;
+        if (axis === 'x') {
+          if (b.vx > 0) b.x = tileL - b.w;
+          else if (b.vx < 0) b.x = tileR;
+          b.vx = 0;
+        } else {
+          if (b.vy > 0) { b.y = tileT - b.h; b.onGround = true; }
+          else if (b.vy < 0) b.y = tileB;
+          b.vy = 0;
+        }
+      }
+    }
+  }
 }
