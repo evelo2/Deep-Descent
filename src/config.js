@@ -107,6 +107,14 @@ export const DARKZONE = {
   litAlpha: 0.8,        // still meaningfully dark even with a flare burning
   falloff: 120,         // px over which the black closes in past the visible radius
 };
+// Torch: a battery-powered sustained light for dark caves. Standalone shop item;
+// shares the shock-rod battery (SHOCK.batteryMax) — light now vs. zaps later.
+export const TORCH = {
+  cost: 350,        // shop price (deliberately a commitment)
+  minReef: 2,       // shop-gate: appears from reef 2
+  litRadius: 250,   // dark-cave visible radius while lit (unlit 52 < this < flare 300)
+  drain: 8,         // battery drained per second while lit (~12.5s on a full battery)
+};
 export const FLARE = {
   startCount: 2,
   duration: 16,         // seconds a flare burns (long, to offset the darker caves)
@@ -348,4 +356,5 @@ export const KEYMAP = {
   shop: ['KeyB'],
   help: ['KeyH'],
   flare: ['KeyG'],
+  torch: ['KeyT'],
 };

@@ -19,7 +19,7 @@ import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -54,6 +54,7 @@ const HELP_PAGES = [
     'Fire — Space / F / tap / A   ·   HOLD fire to auto-aim the nearest threat',
     'Swap weapon — Q / E   ·   gamepad Y / LB',
     'Flare — G   (light up a dark cave)',
+    'Torch — T   (toggle a battery light; shares the shock-rod battery)',
     'Shop — B   at the boat or a dive bell',
     'Pause — P / Esc     Mute — M',
   ] },
@@ -137,6 +138,7 @@ export class Game {
     this.chargeAmmo = CHARGE.startAmmo; this.chargeMax = CHARGE.baseMax; this.chargeCapLevel = 0;
     this.armedCharge = null; this.explosions = [];
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
+    this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
@@ -366,6 +368,8 @@ export class Game {
       items.push({ kind: 'aim', id: 'aim', label: `🎯 Targeting System → Lv${this.aimLevel + 1} (aim + fire rate)`, cost: this._dblCost(AIM.baseCost, this.aimLevel) });
     if (this.tankLevel < SHOP.tankMaxLevel)
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
+    if (!this.hasTorch && this.reef >= TORCH.minReef)
+      items.push({ kind: 'torch', id: 'torch', label: `🔦 Torch — battery light for dark caves (T)`, cost: TORCH.cost });
     items.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
     return items;
   }
@@ -373,7 +377,15 @@ export class Game {
   // Upgrade prices double each level: base at level 0, 2× at level 1, 4× at 2…
   _dblCost(base, level) { return Math.round(base * Math.pow(2, level)); }
 
-  _shopRow(i) { const w = 470, x = (W - w) / 2, y = 178 + i * 46; return { x, y, w, h: 40 }; }
+  // Row geometry adapts to the item count so a long list (many unlocks +
+  // upgrades + refills) still fits — and its Close row stays tappable — inside
+  // the 600px playfield; short lists keep the roomy 46px spacing.
+  _shopRow(i) {
+    const n = this._shopItems().length;
+    const top = 176, bottom = 556, w = 470, x = (W - w) / 2;
+    const step = Math.min(46, (bottom - top) / Math.max(1, n));
+    return { x, y: top + i * step, w, h: Math.min(40, step - 6) };
+  }
 
   _openShop(where) { this.state = 'shop'; this.shopWhere = where; this.shopSel = 0; this.shopDeny = 0; this.audio.select(); }
   _closeShop() { this.state = 'playing'; this._fireGrace = 0.3; }   // don't fire on the closing press
@@ -402,6 +414,9 @@ export class Game {
       this.harpoonAmmo = Math.min(this.harpoonMax, this.harpoonAmmo + SHOP.harpoonPack);
     } else if (it.kind === 'spears') {
       this.speargunAmmo = Math.min(SPEARGUN.ammoMax, this.speargunAmmo + SPEARGUN.ammoPack);
+    } else if (it.kind === 'torch') {
+      this.hasTorch = true;
+      this.puName = 'TORCH!'; this.puCol = PAL.gateGlow; this.puT = 1.6;
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
       this.puName = `HARPOON CAP ${this.harpoonMax}`; this.puCol = PAL.harpoon; this.puT = 1.6;
@@ -787,6 +802,12 @@ export class Game {
       this.flares -= 1; this.flareT = FLARE.duration; this.audio.pickup(); this.particles.sparkle(this.diver.x, this.diver.y, '#ff7a3c', 24);
     }
     this.flareT = Math.max(0, this.flareT - dt);
+    // Toggle the torch (a sustained, battery-powered dark-cave light). It shares
+    // the shock-rod battery, so it's light-now vs. zaps-later.
+    if (this.hasTorch && (this.input.pressed('torch') || this.input.consumeButton('torch'))) {
+      if (!this.torchOn && this.shockBattery <= 0) { this.audio.gasp(); }   // can't light a dead battery
+      else { this.torchOn = !this.torchOn; this.audio.select(); }
+    }
     // Brief grace after entering play (from a menu/shop) so the fire button
     // that started the game / closed the shop doesn't waste a shot.
     this._fireGrace = Math.max(0, (this._fireGrace || 0) - dt);
@@ -814,7 +835,13 @@ export class Game {
     this.speedT = Math.max(0, this.speedT - dt);
     this.magnetT = Math.max(0, this.magnetT - dt);
     this.shockT = Math.max(0, this.shockT - dt);
-    this.shockBattery = Math.min(SHOCK.batteryMax, this.shockBattery + SHOCK.recharge * dt);   // slow recharge
+    if (this.torchOn) {
+      // Torch burns the shared battery; it cuts out (and stays off) when flat.
+      this.shockBattery = Math.max(0, this.shockBattery - TORCH.drain * dt);
+      if (this.shockBattery <= 0) { this.torchOn = false; this.audio.gasp(); }
+    } else {
+      this.shockBattery = Math.min(SHOCK.batteryMax, this.shockBattery + SHOCK.recharge * dt);   // slow recharge
+    }
     if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
     // Hold-to-aim: after a brief hold, root the diver and lock the nearest
@@ -1404,14 +1431,19 @@ export class Game {
       if (darkness > 0.01) {
         const dsx = this.diver.x - cx, dsy = this.diver.y - cy;
         const lit = this.flareT > 0;
-        const vr = lit ? FLARE.litRadius : FLARE.diverRadius;
+        const torchLit = this.torchOn && this.shockBattery > 0;   // flare wins if both are up
+        const vr = lit ? FLARE.litRadius : (torchLit ? TORCH.litRadius : FLARE.diverRadius);
         if (lit) {   // warm flare glow
           const wf = Math.min(1, this.flareT) * 0.3;
           const g2 = ctx.createRadialGradient(dsx, dsy, 8, dsx, dsy, vr);
           g2.addColorStop(0, `rgba(255,180,90,${wf})`); g2.addColorStop(1, 'rgba(255,120,40,0)');
           ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+        } else if (torchLit) {   // cool, steady torch beam
+          const g2 = ctx.createRadialGradient(dsx, dsy, 8, dsx, dsy, vr);
+          g2.addColorStop(0, 'rgba(190,225,255,0.20)'); g2.addColorStop(1, 'rgba(120,180,255,0)');
+          ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
         }
-        const darkA = darkness * (lit ? DARKZONE.litAlpha : DARKZONE.unlitAlpha);
+        const darkA = darkness * ((lit || torchLit) ? DARKZONE.litAlpha : DARKZONE.unlitAlpha);
         const grd = ctx.createRadialGradient(dsx, dsy, vr, dsx, dsy, vr + DARKZONE.falloff);
         grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, `rgba(2,4,8,${darkA})`);
         ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
@@ -1485,6 +1517,7 @@ export class Game {
         btns.push({ id: 'aim', x: W - 124, y: H - 74, w: 52, h: 44 });   // hold to aim
         if (this.weapons.length > 1) btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
         if (this.flares > 0) btns.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
+        if (this.hasTorch) btns.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
       }
       if (this.state === 'playing' && this.zone === 'stage') {
         btns.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
@@ -1509,7 +1542,7 @@ export class Game {
   // Draw one on-screen touch button with its icon/label.
   _touchBtn(b) {
     const ctx = this.ctx;
-    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive);
+    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive) || (b.id === 'torch' && this.torchOn);
     ctx.save();
     ctx.fillStyle = active ? 'rgba(18,58,88,0.85)' : 'rgba(6,22,38,0.72)';
     ctx.strokeStyle = 'rgba(120,200,255,0.35)'; ctx.lineWidth = 1.5;
@@ -1537,6 +1570,9 @@ export class Game {
     } else if (b.id === 'flare') {
       this._text('🔥', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
       this._text('FLARE', cx, cy + 12, 8, 'rgba(255,190,140,0.9)', 'center', 'middle', true);
+    } else if (b.id === 'torch') {
+      this._text('🔦', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
+      this._text('TORCH', cx, cy + 12, 8, this.torchOn ? 'rgba(150,210,255,0.95)' : 'rgba(180,215,240,0.7)', 'center', 'middle', true);
     } else if (b.id === 'jump') {
       this._text('⤴', cx, cy - 4, 20, PAL.hudText, 'center', 'middle');
       this._text('JUMP', cx, cy + 13, 9, 'rgba(180,215,240,0.85)', 'center', 'middle', true);
@@ -1607,13 +1643,16 @@ export class Game {
     if (this.owned.has('speargun'))
       this._text(`⋙ ${this.speargunAmmo}/${SPEARGUN.ammoMax}`, bx + 344, by + bh + 46, 14, this.speargunAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
 
-    // Shock-rod battery gauge (when owned) — drains on use, recharges slowly.
-    if (this.owned.has('shock')) {
+    // Shared battery gauge (shown when you own the shock rod or the torch) —
+    // drains on zaps / torchlight, recharges slowly while idle.
+    if (this.owned.has('shock') || this.hasTorch) {
       const byb = by + bh + 66, bwb = 92, bhb = 7, bxb = bx + 24;
       this._text('⚡', bx + 10, byb + bhb / 2, 12, PAL.gateGlow, 'left', 'middle');
       ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.roundRect(bxb, byb, bwb, bhb, 3); ctx.fill();
       const bf = this.shockBattery / SHOCK.batteryMax;
       ctx.fillStyle = bf < 0.3 ? '#ff9a6b' : PAL.gateGlow; ctx.beginPath(); ctx.roundRect(bxb, byb, Math.max(2, bwb * bf), bhb, 3); ctx.fill();
+      if (this.hasTorch)
+        this._text(this.torchOn ? '🔦 ON' : '🔦', bxb + bwb + 8, byb + bhb / 2, 12, this.torchOn ? PAL.air : 'rgba(160,195,225,0.7)', 'left', 'middle', true);
     }
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
@@ -1680,9 +1719,13 @@ export class Game {
       this._text(this.input.isTouch ? 'Tap ⚙ SHOP to spend gold on gear' : 'Press B to open the ⚙ SHOP', W / 2, H - 52, 13, PAL.gold, 'center', 'middle');
     }
 
-    // Dark cave — remind the player to light a flare.
-    if (this.flareT <= 0 && this.darkZones && this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r) && this.zone === 'reef') {
-      const msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : '🔦 DARK CAVE — press G to light a flare') : '🔦 DARK CAVE — out of flares! Buy some at the shop';
+    // Dark cave — remind the player how to light it (suppressed once the torch
+    // is actually burning, and torch-aware when they own one).
+    const torchLit = this.torchOn && this.shockBattery > 0;
+    if (this.flareT <= 0 && !torchLit && this.darkZones && this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r) && this.zone === 'reef') {
+      let msg;
+      if (this.hasTorch) msg = this.input.isTouch ? '🔦 DARK CAVE — tap 🔦 torch or 🔥 flare' : '🔦 DARK CAVE — press T for torch, G for a flare';
+      else msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : '🔦 DARK CAVE — press G to light a flare') : '🔦 DARK CAVE — out of flares! Buy some at the shop';
       this._text(msg, W / 2, H - 96, 14, PAL.puffer, 'center', 'middle', true);
     }
 
