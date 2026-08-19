@@ -63,7 +63,7 @@ const HELP_PAGES = [
     '⋙ Speargun — a rapid three-shot burst.',
     '💣 Depth charge — click to throw, click again to detonate. Huge blast that',
     '     hurts you too — keep clear! Scarce and expensive to restock.',
-    '⚡ Shock rod — chain lightning; runs on a battery that recharges slowly.',
+    '⚡ Shock rod — chain lightning; first zap stuns, a second kills. Battery-fed.',
   ] },
   { title: '🫧 STAY ALIVE', lines: [
     'Air drains constantly — faster the deeper you go, and more each new reef.',
@@ -702,10 +702,18 @@ export class Game {
       if (!best) break;
       used.add(best);
       bolts.push({ x1: from.x, y1: from.y, x2: best.x, y2: best.y });
-      best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
-      const a = Math.atan2(best.y - from.y, best.x - from.x);
-      if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
-      this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+      best.shockHits = (best.shockHits || 0) + 1;
+      if (best.shockHits >= SHOCK.hitsToKill) {
+        // Second zap finishes it — same reward as a harpoon kill.
+        best.dead = true; this.score += best.points || 0;
+        this.particles.sparkle(best.x, best.y, PAL.danger, 18); this.audio.kill();
+      } else {
+        // First zap: stun + knock back, leaving it primed for the killing shot.
+        best.snareT = Math.max(best.snareT || 0, SHOCK.stun);
+        const a = Math.atan2(best.y - from.y, best.x - from.x);
+        if (best.vx !== undefined) { best.vx += Math.cos(a) * SHOCK.knock; best.vy += Math.sin(a) * SHOCK.knock; }
+        this.particles.sparkle(best.x, best.y, PAL.gateGlow, 10);
+      }
       from = best;
     }
     this.shockBolts = bolts; this.shockT = 0.22;

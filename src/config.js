@@ -164,6 +164,7 @@ export const SHOCK = {
   primaryRange: 320,   // range to the first struck creature
   chainRange: 240,     // arc distance from one creature to the next
   stun: 3.5, knock: 150,
+  hitsToKill: 2,       // first zap stuns; the second (cumulative) kills the creature
   batteryMax: 100, cost: 40, recharge: 11,   // ~2-3 zaps on a full battery, ~9s to refill
 };
 export const SPEARGUN = { shots: 3, interval: 0.07, spread: 0.06 };
