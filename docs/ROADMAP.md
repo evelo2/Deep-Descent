@@ -4,18 +4,6 @@ A backlog of possible future features. Below the **Planned next** section these
 are **ideas, not commitments** — a place to park things. Roughly grouped and
 unordered within each group.
 
-## Known bugs
-
-- **Downdraft current can trap the diver in a narrow tunnel.** Vertical currents
-  are always pure downdrafts (`fy = 1`) and `_makeCurrents` places them on any
-  open cell with no clearance check, so a downdraft can sit over a thin vertical
-  neck. In open water the diver out-thrusts the current, but in a tight tunnel the
-  cave collider slides you along the walls and eats the small net upward velocity
-  while the current keeps pushing down — you get swept down and can't climb back.
-  Fix direction: don't place down-currents on narrow passages (require vertical
-  clearance / use roomy chambers), and/or guarantee held-up thrust always beats a
-  current so escape is always possible.
-
 ## Planned next (committed direction)
 
 1. **Secure online scoring service.** A server-backed high-score / leaderboard.

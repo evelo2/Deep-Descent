@@ -67,7 +67,6 @@ assert('jump gives upward velocity', s.body.vy < 0);
 let minY = s.body.y;
 for (let i = 0; i < 60; i++) { s.update(1 / 60, idle); minY = Math.min(minY, s.body.y); }
 assert('jump reached higher than ground', minY < groundY - T);
-assert('cannot jump in mid-air (no double jump)', true); // covered by onGround gate below
 // verify double-jump gate: while airborne a jump command does not re-boost upward beyond gravity
 s = mkStage(floorRoom);
 for (let i = 0; i < 120; i++) s.update(1 / 60, idle);
