@@ -29,6 +29,16 @@ remains"), delivered through unlockable **relics** rather than stat inflation.
   state persists; in-run gold/lives/weapons/reef still reset each run, preserving
   roguelike stakes. See `docs/superpowers/specs/2026-08-19-salvage-log-meta-progression-design.md`.
 
+## Deep-dive abyss + mini-sub (2026-08-19)
+A special zone (`zone==='abyss'`, mirrors the temple scaffold) reached from a
+violet "maw" entrance near the reef floor (~50% of reefs, coexists with other
+specials): a deep, loot- and Black-Pearl-rich trench where **air drains 150% on
+foot** (`ABYSS.airMult`, via `oxygenMultiplier(reef, zone, inSub)`). A **mini-sub**
+is buyable with gold at the maw (once per reef, `ABYSS.subCost`); dive in it
+(`inSub`) to cancel the pressure penalty, absorb the first hit (hull), and pilot a
+sub hull. Ascend to the exit to return. See
+`docs/superpowers/plans/2026-08-19-minisub-abyss.md`.
+
 ## Economy & control changes (2026-08-19)
 Banking is now a decision (boat auto-banks full; a dive bell banks on demand at a
 depth-scaled discount — bells always ≥ ⅔ deep). Auto-aim is gated behind the
