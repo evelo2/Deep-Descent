@@ -13,6 +13,8 @@
 // on top WITHOUT ever touching the guaranteed spine column(s) or the
 // spine-base -> exit floor walk, so it can never regress solvability.
 
+import { solvable } from './solver.js';
+
 const ROWS = 20;
 const COLS = 30;
 
@@ -199,7 +201,15 @@ export function generateRoom(opts = {}) {
     for (const ledge of ledges) {
       if (ledge.width < 4) continue;
       if (!chance(rng, 0.4)) continue;
-      const glyph = chance(rng, 0.5) ? 'x' : 'E';
+      // Only 'E' (patrol) movers on ledge tops: a patroller reverses at the
+      // platform edge (stage.js _updateMovers: `!groundAhead` flips dir), so it
+      // stays confined to its deck and can never roam onto the ladder spine or
+      // the floor walk. An 'x' (slide) mover, by contrast, slides along its
+      // whole row until a solid '#' — and ladder 'H' isn't solid — so it could
+      // wander across the spine, turning a safe descent into a timing gamble.
+      // Keeping movers deck-confined honors the "never on the required path"
+      // contract the solver relies on (it treats movers as open space).
+      const glyph = 'E';
       let moverCol = ledge.colStart;
       if (moverCol === ledge.lootCol) moverCol = ledge.colEnd;
       if (grid[ledge.row - 1][moverCol] === '.') setC(ledge.row - 1, moverCol, glyph);
@@ -207,4 +217,35 @@ export function generateRoom(opts = {}) {
   }
 
   return grid.map((row) => row.join(''));
+}
+
+// --- generate-and-test wrapper --------------------------------------------
+
+const MAX_TRIES = 40;
+
+// Generate an always-solvable set of `count` rooms for a stage.
+// - theme: a THEMES entry (src/stage/themes.js) — used ONLY for its hand-authored
+//   `theme.rooms` as guaranteed-solvable fallback seeds.
+// - reef: 1-based reef number → difficulty = min(reef, 3).
+// - rng: a ()=>float-in-[0,1) source (e.g. mulberry32(seed)).
+// - count: rooms to produce; defaults to theme.rooms.length.
+// The LAST room gets the cache ($); earlier rooms don't (mirrors the shipped
+// 5-room ship where only 5/5 has a cache). Each room: generateRoom → solvable;
+// keep if ok, else retry up to MAX_TRIES; if still unsolvable, fall back to a
+// hand-authored seed room theme.rooms[i % theme.rooms.length] (already proven
+// solvable in solver.test.mjs) so an unsolvable room is NEVER returned.
+export function makeStageRooms(theme, reef, rng, count = theme.rooms.length) {
+  const difficulty = Math.max(1, Math.min(reef | 0, 3));
+  const rooms = [];
+  for (let i = 0; i < count; i++) {
+    const hasCache = i === count - 1;
+    let room = null;
+    for (let t = 0; t < MAX_TRIES; t++) {
+      const candidate = generateRoom({ rng, difficulty, hasCache });
+      if (solvable(candidate).ok) { room = candidate; break; }
+    }
+    if (room == null) room = theme.rooms[i % theme.rooms.length];
+    rooms.push(room);
+  }
+  return rooms;
 }
