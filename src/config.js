@@ -421,6 +421,8 @@ export const PAL = {
   bellDark:    '#7c5f28',
   bellLight:   '#ffe9a6',
   bellGlass:   '#ffdf8f',
+  blackPearl:      '#241c33',
+  blackPearlSheen: '#b98cff',
 };
 
 export const KEYMAP = {
