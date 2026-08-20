@@ -34,7 +34,21 @@ import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
 const CONTROLS_KEY = 'deepdescent.controls';
-const { W, H, WW, WH, OPEN_BAND, CELL } = WORLD;
+// W/H are the VISIBLE logical viewport and flex to fill the device screen
+// (main.js sizes them on resize): the 900x600 core is always on screen and the
+// long axis is extended out to the edges. They're module-level `let` so all
+// HUD / menu / camera layout here — and input.js + render, which read WORLD.W/H
+// — follow the live size. WW/WH (the scrollable world) stay fixed.
+let { W, H } = WORLD;
+const { WW, WH, OPEN_BAND, CELL } = WORLD;
+
+// Called by main.js whenever the viewport resizes/rotates. Updates both the
+// module-level W/H used throughout this file and WORLD.W/H used by input.js and
+// the render modules, keeping every consumer on one live viewport size.
+export function setViewport(w, h) {
+  W = w; H = h;
+  WORLD.W = w; WORLD.H = h;
+}
 
 // Reef flavour: each reef gets a wacky procedural name and a light theme (a
 // tag emoji + a faint water tint + themed words mixed into the name).
