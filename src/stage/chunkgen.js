@@ -201,7 +201,15 @@ export function generateRoom(opts = {}) {
     for (const ledge of ledges) {
       if (ledge.width < 4) continue;
       if (!chance(rng, 0.4)) continue;
-      const glyph = chance(rng, 0.5) ? 'x' : 'E';
+      // Only 'E' (patrol) movers on ledge tops: a patroller reverses at the
+      // platform edge (stage.js _updateMovers: `!groundAhead` flips dir), so it
+      // stays confined to its deck and can never roam onto the ladder spine or
+      // the floor walk. An 'x' (slide) mover, by contrast, slides along its
+      // whole row until a solid '#' — and ladder 'H' isn't solid — so it could
+      // wander across the spine, turning a safe descent into a timing gamble.
+      // Keeping movers deck-confined honors the "never on the required path"
+      // contract the solver relies on (it treats movers as open space).
+      const glyph = 'E';
       let moverCol = ledge.colStart;
       if (moverCol === ledge.lootCol) moverCol = ledge.colEnd;
       if (grid[ledge.row - 1][moverCol] === '.') setC(ledge.row - 1, moverCol, glyph);
