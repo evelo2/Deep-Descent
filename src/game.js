@@ -1310,16 +1310,20 @@ export class Game {
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
       for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._enterStage(e); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.abyssEntrance) {
-        const nearMaw = Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius;
-        // Buy the mini-sub at the maw (once per reef) — the SHOP control here
-        // doesn't conflict with the boat/bell shop, which only opens `atStation`
-        // (a different location; the abyss entrance is not a station).
-        if (nearMaw && !this.hasSub && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
+        const distMaw = Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y);
+        const buyRing = distMaw < this.abyssEntrance.r + d.radius + 90;   // wider ring: buy here without diving
+        const atMaw = distMaw < this.abyssEntrance.r + d.radius;          // inner zone: swim in to dive
+        // Buy the mini-sub anywhere in the outer ring (once per reef), so you can
+        // purchase before you reach the dive-in zone. The SHOP control here doesn't
+        // conflict with the boat/bell shop, which only opens `atStation`.
+        if (buyRing && !this.hasSub && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
           if (this.gold >= ABYSS.subCost) {
             this.gold -= ABYSS.subCost; this.hasSub = true;
             this.puName = 'MINI-SUB READY'; this.puCol = PAL.gateGlow; this.puT = 1.8; this.audio.bank();
-          } else { this.shopDeny = 0.6; this.audio.gasp(); }
-        } else if (nearMaw) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
+          } else { this.puName = `NEED ⚙${ABYSS.subCost}`; this.puCol = PAL.danger; this.puT = 1.0; this.audio.gasp(); }
+          this.input.endFrame(); return;   // consume the press so we don't also dive this frame
+        }
+        if (atMaw) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
       }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
