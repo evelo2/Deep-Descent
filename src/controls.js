@@ -50,7 +50,7 @@ export function controlsHelpLines(scheme) {
 // The always-visible one-line strip (HTML #hint below the canvas + the menu).
 export function hintStrip(scheme) {
   const g = (a) => prompt(scheme, a);
-  return `${g('swim')} or drag to swim · ${g('fire')} / tap to fire (hold to aim) · ${g('swap')} swap weapon · ${g('shop')} shop · ${g('pause')} pause`;
+  return `${g('swim')} or drag to swim · ${g('fire')} / tap or 2nd-finger fire (hold to aim) · ${g('swap')} swap weapon · ${g('shop')} shop · ${g('pause')} pause`;
 }
 
 // The in-stage (platformer) control strip.

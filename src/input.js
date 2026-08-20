@@ -21,7 +21,6 @@ export class Input {
     this.touchButtons = [];       // [{id, x, y, w, h}] in logical (900×600) units
     this._btnHits = new Set();    // one-shot: buttons tapped this frame
     this._btnTouch = false;       // the active touch landed on a button
-    this._aimTouch = false;       // the active touch is holding the AIM button
     // Unified fire state (keyboard / mouse / gamepad / touch AIM hold). fireDown
     // = held this frame; firePress = rising edge; recomputed each poll().
     this._mouseDown = false; this._padFire = false; this._aimBtnActive = false;
@@ -37,33 +36,57 @@ export class Input {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
 
-    // Virtual joystick: touch anywhere, drag from the initial touch point.
-    // A quick tap (little drag) fires the harpoon instead of steering.
+    // Multi-touch controls: the FIRST free finger is a virtual joystick (touch
+    // anywhere, drag to steer; a quick tap fires once). A SECOND free finger is
+    // FIRE — held, it drives the same fire path as the Space key (tap = a quick
+    // shot so you keep swimming; hold = aim-lock), so you can swim and fire at
+    // once. Fingers are tracked by identifier so either can lift independently.
     this._tapFire = false;
+    this._touchFire = false;        // a second finger is held → fire
     const origin = { x: 0, y: 0, ts: 0, maxDrag: 0 };
+    let steerId = null, fireId = null, aimId = null, steerHadSecond = false;
     const onStart = (e) => {
-      const t = e.changedTouches[0];
-      const hit = this._hitButton(t.clientX, t.clientY);
-      if (hit === 'aim') { this._aimBtnActive = true; this._btnTouch = true; this._aimTouch = true; e.preventDefault(); return; }   // hold to aim
-      if (hit) { this._btnHits.add(hit); this._btnTouch = true; e.preventDefault(); return; }
-      origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
-      this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
+      for (const t of e.changedTouches) {
+        const hit = this._hitButton(t.clientX, t.clientY);
+        if (hit === 'aim') { this._aimBtnActive = true; this._btnTouch = true; aimId = t.identifier; continue; }   // hold to aim (tracked by id)
+        if (hit) { this._btnHits.add(hit); this._btnTouch = true; continue; }
+        if (steerId === null) {
+          steerId = t.identifier; steerHadSecond = false;
+          origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
+          this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
+        } else if (fireId === null) {
+          fireId = t.identifier; this._touchFire = true; steerHadSecond = true;
+        }
+      }
       e.preventDefault();
     };
     const onMove = (e) => {
-      if (!this.touch.active) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
-      origin.maxDrag = Math.max(origin.maxDrag, Math.hypot(dx, dy));
-      const R = 60;
-      this.touch.x = Math.max(-1, Math.min(1, dx / R));
-      this.touch.y = Math.max(-1, Math.min(1, dy / R));
+      for (const t of e.changedTouches) {
+        if (t.identifier !== steerId) continue;
+        const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
+        origin.maxDrag = Math.max(origin.maxDrag, Math.hypot(dx, dy));
+        const R = 60;
+        this.touch.x = Math.max(-1, Math.min(1, dx / R));
+        this.touch.y = Math.max(-1, Math.min(1, dy / R));
+      }
       e.preventDefault();
     };
     const onEnd = (e) => {
-      if (this._btnTouch) { if (this._aimTouch) { this._aimBtnActive = false; this._aimTouch = false; } this._btnTouch = false; e.preventDefault(); return; }
-      if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260) this._tapFire = true;
-      this.touch.active = false; this.touch.x = 0; this.touch.y = 0; e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === steerId) {
+          // A quick tap fires once — but only for a genuine single-finger tap
+          // (no second finger present during this press).
+          if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260 && !steerHadSecond) this._tapFire = true;
+          steerId = null; this.touch.active = false; this.touch.x = 0; this.touch.y = 0;
+        } else if (t.identifier === fireId) {
+          fireId = null; this._touchFire = false;
+        } else if (t.identifier === aimId) {   // the AIM-hold finger lifted (by id, so tapping other buttons can't cancel aim)
+          aimId = null; this._aimBtnActive = false;
+        }
+      }
+      // Menu-start suppression: no button touch is holding while no aim finger is down.
+      if (aimId === null) this._btnTouch = false;
+      e.preventDefault();
     };
     canvas.addEventListener('touchstart', onStart, { passive: false });
     canvas.addEventListener('touchmove', onMove, { passive: false });
@@ -132,7 +155,7 @@ export class Input {
     }
     // Unified fire state across keyboard / mouse / gamepad (+ touch AIM hold).
     const kb = this.keys.has('Space') || this.keys.has('KeyF') || this.keys.has('Enter');
-    const primary = kb || this._mouseDown || this._padFire;              // sources that also quick-fire on press
+    const primary = kb || this._mouseDown || this._padFire || this._touchFire;   // sources that also quick-fire on press (2nd-finger fire included)
     this.firePress = primary && !this._firePrev;
     this._firePrev = primary;
     this.fireDown = primary || this._aimBtnActive;                       // any hold engages aim
