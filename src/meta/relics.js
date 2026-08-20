@@ -14,7 +14,7 @@ export const RELICS = [
     apply: g => { g._relicBellFull = true; } },
   { id: 'sonar', name: 'Sonar', desc: 'Treasure & Black Pearls blip on the minimap.', cost: 170,
     apply: g => { g._relicSonar = true; } },
-  { id: 'barbs', name: 'Barbed Harpoon', desc: 'Harpoon hits deal +1 damage (chews through mini-bosses).', cost: 240,
+  { id: 'barbs', name: 'Barbed Harpoon', desc: 'Harpoon & charge hits deal +1 damage (chews through mini-bosses).', cost: 240,
     apply: g => { g._relicBarbs = true; } },
   { id: 'secondwind', name: 'Second Wind', desc: 'After a hit your air floors higher.', cost: 200,
     apply: g => { g._relicSecondWind = true; } },
