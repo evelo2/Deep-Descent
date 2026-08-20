@@ -6,7 +6,7 @@
 // costing a life. Run: node tests/game/whirlpool.test.mjs
 
 import { Game } from '../../src/game.js';
-import { WHIRL } from '../../src/config.js';
+import { WHIRL, whirlpoolReward } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -74,6 +74,52 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
   check('WHIRL.accel is positive (it actually ramps over time)', WHIRL.accel > 0);
   check('WHIRL.shaftHalfW / obstacleR are positive', WHIRL.shaftHalfW > 0 && WHIRL.obstacleR > 0);
   check('WHIRL.entranceChance is a valid probability', WHIRL.entranceChance > 0 && WHIRL.entranceChance <= 1);
+}
+
+// --- Phase 2: whirlpoolReward(tier) — the cumulative Salvage payout for
+// having reached a given speed-break tier. Must start at 0 and only grow,
+// and the marginal (per-tier) award it implies must always be positive so
+// every tier crossed in _updateWhirlpool actually pays out something. ---
+{
+  check('whirlpoolReward(0) === 0', whirlpoolReward(0) === 0);
+  const tiers = [0, 1, 2, 3, 4, 5, 6];
+  const vals = tiers.map(whirlpoolReward);
+  check('whirlpoolReward is monotonic increasing over tiers 0..6', vals.every((v, i) => i === 0 || v > vals[i - 1]));
+  check('the marginal per-tier award (reward(n) - reward(n-1)) is positive for every tier 1..6',
+    tiers.slice(1).every((n) => whirlpoolReward(n) - whirlpoolReward(n - 1) > 0));
+}
+
+// --- Phase 2 smoke test: _generateWhirlpool() also seeds collectibles down
+// the shaft — bubbles for air, loot + at least one Black Pearl for the
+// Salvage payoff cashed on exit (see _updateWhirlpool/_bankLoot). ---
+{
+  const s = { reef: 1, zone: 'whirlpool' };
+  Game.prototype._generateWhirlpool.call(s);
+  check('bubbles are seeded down the shaft', Array.isArray(s.whirlBubbles) && s.whirlBubbles.length > 0);
+  check('loot/pearls are seeded down the shaft', Array.isArray(s.whirlTreasures) && s.whirlTreasures.length > 0);
+  check('at least one Black Pearl is seeded', s.whirlTreasures.some((tr) => tr.pearl));
+  check('every bubble sits within the shaft half-width', s.whirlBubbles.every((b) => Math.abs(b.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
+  check('every treasure sits within the shaft half-width', s.whirlTreasures.every((tr) => Math.abs(tr.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
+}
+
+// --- Phase 2: _exitWhirlpool resets the new zone-local state (whirlTier,
+// whirlSalvageEarned, the collectible lists) just like the Phase 1 fields
+// (whirlSpeed/whirlScore) — no leak into the next run. ---
+{
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../../src/game.js', import.meta.url), 'utf8');
+  const m = /^  _exitWhirlpool\(/m.exec(src);
+  const braceStart = src.indexOf('{', m.index);
+  let depth = 0, i = braceStart;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  const exitBody = src.slice(m.index, i + 1);
+  check('_exitWhirlpool resets whirlTier', /this\.whirlTier\s*=\s*0/.test(exitBody));
+  check('_exitWhirlpool resets whirlSalvageEarned', /this\.whirlSalvageEarned\s*=\s*0/.test(exitBody));
+  check('_exitWhirlpool resets whirlBubbles', /this\.whirlBubbles\s*=\s*\[\]/.test(exitBody));
+  check('_exitWhirlpool resets whirlTreasures', /this\.whirlTreasures\s*=\s*\[\]/.test(exitBody));
 }
 
 console.log(`whirlpool: ${passed} passed, ${failed} failed`);
