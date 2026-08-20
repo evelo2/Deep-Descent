@@ -56,5 +56,5 @@ export function hintStrip(scheme) {
 // The in-stage (platformer) control strip.
 export function stageHintStrip(scheme) {
   const g = (a) => prompt(scheme, a);
-  return `${g('swim')} walk   ·   ${g('jump')} jump   ·   ${g('climb')} climb ladders   ·   ‹ door retreats`;
+  return `${g('swim')} walk   ·   ${g('jump')} jump   ·   ${g('climb')} climb ladders   ·   reach the › exit`;
 }

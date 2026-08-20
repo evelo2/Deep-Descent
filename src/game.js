@@ -1383,10 +1383,15 @@ export class Game {
       this._loseLife('killed');
       if (this.state === 'playing') this.stage.respawn();   // still alive → back to room start
     }
-    if (ev.exited) this._exitStage();
+    // No backing out: only reaching the forward exit completes the stage and
+    // returns you to the reef. (The engine never emits 'retreat' now — the rooms
+    // have no retreat door — but gate on 'complete' explicitly so a stage is
+    // strictly commit-and-finish: complete it, or keep trying until your lives
+    // run out.)
+    if (ev.exited === 'complete') this._exitStage();
   }
 
-  // Leave the stage (retreat or completion). Restores the reef and consumes the
+  // Leave the stage on completion. Restores the reef and consumes the
   // entrance (one-shot), mirroring _exitWhale filtering the entered whale.
   _exitStage() {
     this._restoreReef();

@@ -55,5 +55,5 @@ export function drawStageHud(ctx, stage, hud) {
   }
   // Controls hint (bottom) — scheme-aware string supplied by the game.
   ctx.textAlign = 'center'; ctx.fillStyle = '#9fc6e0'; ctx.font = '600 13px system-ui, sans-serif';
-  ctx.fillText(hud.hint || '← / → walk   ·   Space jump   ·   ↑ / ↓ climb ladders   ·   ‹ door retreats', W / 2, H - 24);
+  ctx.fillText(hud.hint || '← / → walk   ·   Space jump   ·   ↑ / ↓ climb ladders   ·   reach the › exit', W / 2, H - 24);
 }
