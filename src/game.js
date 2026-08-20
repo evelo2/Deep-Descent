@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, WHIRL, DIVER } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, WHIRL, whirlpoolReward, DIVER } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -134,7 +134,8 @@ export class Game {
     this.stageEntrances = []; this.stage = null; this._enteredEntrance = null;
     this.abyssEntrance = null; this.abyssExit = null;
     this.whirlEntrance = null; this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = [];
-    this.whirlSpeed = 0; this.whirlScore = 0;
+    this.whirlSpeed = 0; this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
+    this.whirlBubbles = []; this.whirlTreasures = [];
     this.hasSub = false; this.inSub = false; this._subHull = false;   // mini-sub: owned/piloting this reef
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
@@ -210,7 +211,8 @@ export class Game {
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.abyssExit = null;
     this.whirlEntrance = null; this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = [];
-    this.whirlSpeed = 0; this.whirlScore = 0;
+    this.whirlSpeed = 0; this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
+    this.whirlBubbles = []; this.whirlTreasures = [];
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
@@ -851,9 +853,8 @@ export class Game {
   // The whirlpool — a survival sweep, not an explorable cave: no Cave/miner
   // carving here, just a vertical SHAFT (a fixed-width column) the diver is
   // swept down at accelerating speed, seeded with obstacles to dodge (denser
-  // deeper) and an ascent exit near the top for an early bail. Phase 1 has no
-  // collectibles/creatures — the sweep + survival IS the level; those (plus
-  // Salvage speed-break rewards) are Phase 2. Reef-only fields are cleared
+  // deeper), collectibles to grab on the way (Phase 2 — see below), and an
+  // ascent exit near the top for an early bail. Reef-only fields are cleared
   // defensively, mirroring _generateAbyss/_generateTemple, even though the
   // whirlpool's own update/draw paths never touch them (see _updateWhirlpool).
   _generateWhirlpool() {
@@ -884,8 +885,43 @@ export class Game {
         this.whirlObstacles.push({ x, y, r });
       }
     }
+
+    // Collectibles down the shaft — bubbles for air, loot/pearls for the
+    // Salvage payoff cashed on exit (see _updateWhirlpool/_bankLoot). Kept
+    // out of the safe drop-in band, and clear of the obstacles so grabbing
+    // one doesn't force a hit. Lightweight plain objects for bubbles (rather
+    // than BigBubble, whose upward drift + short life fit a reef ceiling, not
+    // a diver being swept straight down a shaft); Treasure is reused as-is
+    // for loot/pearls since it's already a static, bob-in-place collectible.
+    const clearOfObstacles = (x, y, pad) => this.whirlObstacles.every((o) => Math.hypot(x - o.x, y - o.y) > o.r + pad);
+    const randX = (r) => cx + (Math.random() * 2 - 1) * (halfW - r - 10);
+
+    this.whirlBubbles = [];
+    for (let i = 0; i < 10; i++) {
+      const y = safeTop + Math.random() * (bottom - safeTop);
+      const x = randX(BUBBLE.r);
+      if (!clearOfObstacles(x, y, BUBBLE.r + 14)) continue;
+      this.whirlBubbles.push({ x, y, r: BUBBLE.r, taken: false, phase: Math.random() * Math.PI * 2 });
+    }
+
+    this.whirlTreasures = [];
+    for (let i = 0; i < 16; i++) {
+      const y = safeTop + Math.random() * (bottom - safeTop);
+      const x = randX(14);
+      if (!clearOfObstacles(x, y, 24)) continue;
+      this.whirlTreasures.push(new Treasure(x, y, Math.random() < 0.5 ? 'gem' : 'coin'));
+    }
+    // A Black Pearl or two, deep in the shaft — the run's rarest grab.
+    const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < pearlCount; i++) {
+      const y = bottom - Math.random() * (bottom - safeTop) * 0.35;   // lower third
+      const x = randX(11);
+      if (!clearOfObstacles(x, y, 22)) continue;
+      this.whirlTreasures.push(new Treasure(x, y, 'blackpearl'));
+    }
+
     // Ascend back out the top to bail early — a clean escape that still banks
-    // whatever survival score was earned (see _updateWhirlpool).
+    // whatever survival score/loot was earned (see _updateWhirlpool).
     this.whirlExit = { x: cx, y: OPEN_BAND - 6, r: 46 };
   }
 
@@ -1642,6 +1678,7 @@ export class Game {
     this.zone = 'reef';
     this.whaleExit = null; this.templeExit = null; this.abyssExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = []; this.whirlSpeed = 0; this.whirlScore = 0;
+    this.whirlTier = 0; this.whirlSalvageEarned = 0; this.whirlBubbles = []; this.whirlTreasures = [];
     this._placeDiver(s.returnX, s.returnY, 0);
     this.savedReef = null; this.zoneFade = 1;
     this.reentryT = 1.5;   // grace so we don't immediately re-enter what we just left
@@ -1715,18 +1752,20 @@ export class Game {
     this._generateWhirlpool();
     this._placeDiver(this.whirlExit.x, this.whirlExit.y + 90, 0);
     this.whirlSpeed = WHIRL.baseSpeed;
-    this.whirlScore = 0;
+    this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
     this.shake = 10; this.zoneFade = 1;
     this.audio.gasp();
   }
   // Leaving the whirlpool (hit an obstacle, ran out of air, or bailed at the
   // top exit) consumes its entrance — like the abyss, a plundered portal is
   // spent. NEVER call this in a way that also calls _loseLife: the whirlpool
-  // never costs a life. The caller banks whirlScore into this.score first.
+  // never costs a life. The caller banks whirlScore/loot into this.score
+  // first (see _updateWhirlpool's `bank()` closure).
   _exitWhirlpool() {
     this._restoreReef();
     this.whirlEntrance = null;
     this.whirlSpeed = 0; this.whirlScore = 0; this.whirlObstacles = []; this.whirlShaft = null;
+    this.whirlTier = 0; this.whirlSalvageEarned = 0; this.whirlBubbles = []; this.whirlTreasures = [];
   }
 
   // Enter a themed platformer stage through a reef entrance. Snapshots the reef,
@@ -1830,13 +1869,61 @@ export class Game {
     // Survival score: speed × time, so riding it faster/longer is worth more.
     this.whirlScore += this.whirlSpeed * dt * 0.12;
 
-    // Every exit banks whirlScore and hands back a small air floor before
-    // restoring the reef — "no life lost" has to hold in practice, not just
-    // here: the shared reef drain path (in the general update() flow) would
-    // otherwise see air<=0 the very next frame and cost a life there instead,
-    // quietly reintroducing the very thing this zone promises not to do.
-    // 20 is enough to swim for safety, nothing more.
-    const bank = () => { this.score += Math.round(this.whirlScore); this.air = Math.max(this.air, 20); };
+    // Collect while dodging: bubbles refill air, loot/pearls go to the same
+    // carried/carriedPearls piles the reef uses — cashed on exit by bank()
+    // below (via _bankLoot), same as banking at the boat.
+    for (const b of this.whirlBubbles) {
+      if (!b.taken && Math.hypot(d.x - b.x, d.y - b.y) < b.r + d.radius) {
+        b.taken = true;
+        this.air = Math.min(this.airMax, this.air + BUBBLE.air);
+        this.particles.sparkle(b.x, b.y, PAL.air, 12);
+        this.audio.refill();
+      }
+    }
+    for (const tr of this.whirlTreasures) {
+      if (tr.taken) continue;
+      tr.update(dt, this.t);
+      if (!tr.reached(d)) continue;
+      tr.taken = true;
+      if (tr.pearl) {
+        this.carriedPearls = (this.carriedPearls || 0) + 1;
+        this.particles.sparkle(tr.x, tr.y, PAL.blackPearlSheen, 22);
+        this.audio.blackpearl();
+      } else {
+        this.carried += tr.value;
+        this.particles.sparkle(tr.x, tr.y, tr.kind === 'gem' ? PAL.gem : PAL.gold, tr.kind === 'coin' ? 12 : 18);
+        tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
+      }
+    }
+
+    // Speed-break tiers: crossing a whirlSpeed threshold awards Salvage +
+    // score, once per tier — the `while` loop (rather than a single `if`)
+    // means a rare multi-tier jump in one frame (a dt spike) still awards
+    // each tier crossed exactly once, never doubled, never skipped.
+    const tier = Math.floor(this.whirlSpeed / WHIRL.tierStep);
+    while (tier > this.whirlTier) {
+      this.whirlTier += 1;
+      const r = whirlpoolReward(this.whirlTier) - whirlpoolReward(this.whirlTier - 1);   // marginal award for THIS tier
+      this.meta.salvage += r; saveSalvage(this.meta);
+      this.whirlSalvageEarned += r;
+      this.score += WHIRL.tierScore;
+      this.puName = `SPEED ${this.whirlTier} · +${r}⚙`; this.puCol = PAL.gateGlow; this.puT = 1.4;
+      this.audio.bank();
+    }
+
+    // Every exit banks whirlScore + collected loot and hands back a small air
+    // floor before restoring the reef — "no life lost" has to hold in
+    // practice, not just here: the shared reef drain path (in the general
+    // update() flow) would otherwise see air<=0 the very next frame and cost
+    // a life there instead, quietly reintroducing the very thing this zone
+    // promises not to do. 20 is enough to swim for safety, nothing more.
+    const bank = () => {
+      this.score += Math.round(this.whirlScore);
+      this.air = Math.max(this.air, 20);
+      const tierReached = this.whirlTier, earned = this.whirlSalvageEarned;
+      this._bankLoot(1);   // cash collected loot + pearls -> score/gold/Salvage, at full rate
+      this.puName = `SURVIVED · SPEED ${tierReached} · +${earned}⚙`; this.puCol = PAL.gateGlow; this.puT = 2.2;
+    };
 
     // Obstacle contact ends the run — no life lost, whirlScore banked.
     for (const o of this.whirlObstacles) {
@@ -2117,6 +2204,26 @@ export class Game {
       ctx.beginPath(); ctx.ellipse(W / 2, yy, shaft ? shaft.halfW * 0.7 : 150, 22, 0, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.restore();
+    // Collectibles — bubbles for air, loot/pearls for the Salvage payoff.
+    for (const b of this.whirlBubbles) {
+      if (b.taken) continue;
+      const bx = b.x - cx, by = b.y - cy;
+      if (bx < -60 || bx > W + 60 || by < -60 || by > H + 60) continue;
+      const wob = Math.sin(this.t * 2.5 + b.phase) * 1.5;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(190,235,255,0.8)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(150,220,255,0.18)';
+      ctx.beginPath(); ctx.ellipse(bx, by, b.r + wob, b.r - wob, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx - b.r * 0.32, by - b.r * 0.32, b.r * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
+      ctx.restore();
+    }
+    for (const tr of this.whirlTreasures) {
+      if (tr.taken) continue;
+      const tx = tr.x - cx, ty = tr.y - cy;
+      if (tx < -60 || tx > W + 60 || ty < -60 || ty > H + 60) continue;
+      tr.draw(ctx, cx, cy, this.t);
+    }
     // Obstacles.
     for (const o of this.whirlObstacles) {
       const ox = o.x - cx, oy = o.y - cy;
@@ -2137,6 +2244,7 @@ export class Game {
     ctx.restore();
 
     if (this.state === 'playing' || this.state === 'paused') this._whirlpoolHud();
+    if (this.puT > 0) this._puFlourish();   // speed-break / survival-summary flourish
     if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
     if (this.state === 'gameover') this._gameOverScreen();
     if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
@@ -2163,6 +2271,15 @@ export class Game {
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     this._text(`+${Math.round(this.whirlScore)} this ride`, W - 20, 46, 14, PAL.whirlRim, 'right', 'top');
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
+
+    // The payoff building: speed tier reached, Salvage earned at breaks this
+    // ride, and whatever loot/pearls are currently carried (cashed on exit).
+    this._text(`TIER ${this.whirlTier}`, W - 20, 68, 14, PAL.gateGlow, 'right', 'top');
+    this._text(`⚙ +${this.whirlSalvageEarned} this ride`, W - 20, 88, 13, PAL.whirlRim, 'right', 'top');
+    if (this.carried > 0 || this.carriedPearls > 0) {
+      const pearlBit = this.carriedPearls > 0 ? `  ◦${this.carriedPearls}` : '';
+      this._text(`LOOT +${this.carried}${pearlBit}`, W - 20, 108, 13, PAL.gold, 'right', 'top');
+    }
 
     this._text(`🌀 WHIRLPOOL — SPEED ${Math.round(this.whirlSpeed)} — survive! (no life lost)`, W / 2, H - 30, 15, PAL.whirlRim, 'center', 'middle', true);
     this._text('◀ ▶ steer — dodge the rocks, or ride back up to the maw to bail out', W / 2, H - 8, 12, 'rgba(200,240,235,0.75)', 'center', 'middle');
