@@ -11,7 +11,7 @@ import { CREATURES } from '../config.js';
 // final zone-themed rosters (Task 10); shallow/mid/deep are the generic
 // depth-band roster used by the main reef spawn loop.
 export const ZONE_FAUNA = {
-  shallow: [ {k:'jelly',w:3}, {k:'puffer',w:3}, {k:'shark',w:2,scale:'small'}, {k:'piranha',w:2,minReef:1} ],
+  shallow: [ {k:'jelly',w:3}, {k:'puffer',w:3}, {k:'shark',w:2,scale:'small'}, {k:'piranha',w:2,minReef:3} ],
   mid:     [ {k:'octopus',w:2}, {k:'shark',w:3,scale:'mid'}, {k:'puffer',w:2}, {k:'jelly',w:1}, {k:'piranha',w:1,minReef:2}, {k:'barracuda',w:2,minReef:2} ],
   deep:    [ {k:'shark',w:2,scale:'big'}, {k:'eel',w:2}, {k:'angler',w:2}, {k:'stonefish',w:1,minReef:2}, {k:'barracuda',w:1,minReef:3}, {k:'moray',w:1,minReef:3}, {k:'ray',w:1,minReef:3}, {k:'urchin',w:1,minReef:5}, {k:'squid',w:1,minReef:4} ],
   dark:    [ {k:'stonefish',w:3,minReef:1}, {k:'moray',w:2,minReef:2}, {k:'urchin',w:2,minReef:4} ],
