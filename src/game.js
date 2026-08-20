@@ -744,7 +744,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
     const value = (y) => 400 + Math.round((y / WH) * 500);
 
@@ -795,7 +795,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.door = null; this.key = null;
     const value = (y) => 450 + Math.round((y / WH) * 650);   // richer than the reef — the abyss's whole point
 
@@ -867,7 +867,7 @@ export class Game {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
-    this.templeGate = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
+    this.templeGate = null; this.abyssEntrance = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
 
