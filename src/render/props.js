@@ -281,6 +281,46 @@ export function drawAbyssMaw(ctx, t, r = 46) {
   ctx.restore();
 }
 
+// The whirlpool maw — a swirling teal vortex over jagged rock, distinct from
+// the abyss's violet trench. Used for both the reef-side entrance and the
+// whirlpool's own ascent (bail-out) exit, mirroring drawAbyssMaw.
+export function drawWhirlMaw(ctx, t, r = 46) {
+  ctx.save();
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, r * 1.6);
+  glow.addColorStop(0, PAL.whirlRim); glow.addColorStop(0.5, 'rgba(46,230,200,0.35)'); glow.addColorStop(1, 'rgba(10,40,40,0)');
+  ctx.globalAlpha = 0.55 + Math.sin(t * 2.6) * 0.15;
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // dark swirling throat
+  ctx.fillStyle = 'rgba(6,18,18,0.85)'; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.75, r, 0, 0, TAU); ctx.fill();
+  // jagged rock rim
+  ctx.fillStyle = PAL.whirlRock; ctx.strokeStyle = PAL.whirlDark; ctx.lineWidth = 2;
+  ctx.beginPath();
+  const teeth = 10;
+  for (let i = 0; i <= teeth; i++) {
+    const a = (i / teeth) * TAU;
+    const jag = i % 2 === 0 ? 1.14 : 0.98;
+    const rx = r * 0.75 * jag, ry = r * jag;
+    const x = Math.cos(a) * rx, y = Math.sin(a) * ry;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath(); ctx.stroke();
+  // spinning swirl arms — rotate opposite the abyss's static rings, so it
+  // reads as actively churning rather than just glowing.
+  for (let i = 3; i >= 1; i--) {
+    ctx.strokeStyle = `rgba(95,224,200,${0.22 * i})`; ctx.lineWidth = 2;
+    const spin = t * (1.4 + i * 0.4);
+    ctx.beginPath();
+    for (let a = 0; a < TAU; a += TAU / 24) {
+      const rr = r * (i / 3.6) * (0.9 + Math.sin(a * 3 + spin) * 0.12);
+      const x = Math.cos(a + spin) * rr, y = Math.sin(a + spin) * rr;
+      a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // The mini-sub hull — drawn around/behind the diver while piloting it (the
 // abyss's buyable vehicle). A stubby rounded pod ~1.6x the diver's radius
 // (15px), with a porthole and a small tail prop. `facing` mirrors it to match
