@@ -175,6 +175,9 @@ export class Game {
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
+    // Prospector's Chart: reveal a wider patch of fog around the reef's entry
+    // point (bigger than the normal per-frame radius-5 reveal at ~1125).
+    if (this._relicChart) this.cave.reveal(this.diver.x, this.diver.y, 14);
     this.audio.select();
   }
 
@@ -331,7 +334,7 @@ export class Game {
     // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself
     // is the risk, no guardian needed for v1. Banked (not just carried) to
     // convert to persistent Salvage.
-    const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0);
+    const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0) + (this._relicEye ? 1 : 0);
     for (let i = 0; i < pearlCount; i++) {
       const pc = C.randomOpen(WH * 0.55);
       if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
@@ -895,7 +898,7 @@ export class Game {
   // Apply one weapon hit to a creature: mini-bosses (with takeDamage) chip HP,
   // ordinary creatures die outright. Returns true if the creature just died.
   _damageCreature(cr) {
-    if (cr.takeDamage) { cr.takeDamage(1); return cr.dead; }
+    if (cr.takeDamage) { cr.takeDamage(this._relicBarbs ? 2 : 1); return cr.dead; }
     cr.dead = true; return true;
   }
 
@@ -1201,14 +1204,18 @@ export class Game {
         this.particles.sparkle(this.relic.x, this.relic.y, PAL.key, 30); this.audio.gem();
       }
     }
-    // Treasure magnet: pull nearby loot toward the diver.
-    if (this.magnetT > 0) {
-      const dv = this.diver, R = POWERUP.magnetRadius;
+    // Treasure magnet: pull nearby loot toward the diver. The powerup is a
+    // strong timed burst; the Magnet Core relic is a permanent, gentler pull
+    // that stays on even with no powerup active.
+    if (this.magnetT > 0 || this._relicMagnet) {
+      const dv = this.diver, powered = this.magnetT > 0;
+      const R = powered ? POWERUP.magnetRadius : POWERUP.magnetRadius * 0.5;
+      const maxPull = powered ? POWERUP.magnetPull : POWERUP.magnetPull * 0.5;
       for (const tr of this.treasures) {
         if (tr.locked && !this.hasKey) continue;
         const dx = dv.x - tr.x, dy = dv.y - tr.baseY, dist = Math.hypot(dx, dy);
         if (dist > 1 && dist < R) {
-          const speed = 130 + (POWERUP.magnetPull - 130) * (1 - dist / R);
+          const speed = 130 + (maxPull - 130) * (1 - dist / R);
           const step = Math.min(dist, speed * dt);
           tr.x += (dx / dist) * step; tr.baseY += (dy / dist) * step;
         }
@@ -1406,7 +1413,7 @@ export class Game {
   _loseLife(cause = 'air') {
     this.lives -= GAME.hitCost;
     if (this.lives <= 0) { this.deathCause = cause; this._gameOver(); return; }
-    this.air = Math.max(this.air, 35);
+    this.air = Math.max(this.air, this._relicSecondWind ? 60 : 35);
     this.diver.invuln = GAME.invulnAfterHit;
     this.diver.y = Math.max(WORLD.SURFACE + 40, this.diver.y - 70);
   }
@@ -1442,6 +1449,7 @@ export class Game {
   _newReef() {
     this._generateWorld();
     this.diver.reset();
+    if (this._relicChart) this.cave.reveal(this.diver.x, this.diver.y, 14);
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.air = this.airMax;
     this.state = 'playing';
@@ -2191,6 +2199,19 @@ export class Game {
     if (exit) {
       ctx.fillStyle = PAL.gateGlow;
       ctx.beginPath(); ctx.arc(wx(exit.x), wy(exit.y), 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+    // Sonar / Salvager's Eye: blip loot & Black Pearls (bounded by treasure count).
+    if (this._relicSonar || this._relicEye) {
+      for (const tr of this.treasures) {
+        if (tr.taken) continue;
+        if (tr.pearl) {
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.beginPath(); ctx.arc(wx(tr.x), wy(tr.baseY), 1.6, 0, Math.PI * 2); ctx.fill();
+        } else if (this._relicSonar) {
+          ctx.fillStyle = PAL.gold;
+          ctx.beginPath(); ctx.arc(wx(tr.x), wy(tr.baseY), 1.1, 0, Math.PI * 2); ctx.fill();
+        }
+      }
     }
     // diver (blinking)
     ctx.fillStyle = Math.floor(this.t * 4) % 2 ? '#eaffff' : '#7ff3ff';
