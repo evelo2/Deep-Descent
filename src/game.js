@@ -2000,7 +2000,9 @@ export class Game {
 
     const cx = this.camX, cy = this.camY;
     const depthT = Math.min(1, cy / WH);
-    this.bg.draw(ctx, cx, cy, this.t, depthT);
+    // Distant shoals + sunken-wreck silhouettes only in the open-ocean reef;
+    // enclosed zones (belly/temple/abyss) draw their own backdrops over this.
+    this.bg.draw(ctx, cx, cy, this.t, depthT, { reef: this.zone === 'reef' });
     // Faint theme tint so each reef has its own mood.
     if (this.zone === 'reef' && this.state !== 'menu' && this.reefTheme) {
       const [tr, tg, tb] = this.reefTheme.tint;
