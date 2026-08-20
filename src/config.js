@@ -305,6 +305,15 @@ export const STAGE = {
 // mini-sub (Phase 2). entranceChance: odds a given reef spawns an entrance.
 export const ABYSS = { airMult: 1.5, entranceChance: 0.5, subCost: 400 };
 
+// The whirlpool — a survival sweep off the reef, reached through its own maw
+// (independent roll, coexists with the abyss/temple/stage specials). The
+// diver is swept DOWN an accelerating shaft (baseSpeed → maxSpeed at accel
+// px/s^2) while steering laterally to dodge obstacles; a hit or air-out ends
+// the run with NO life lost (see game.js's _exitWhirlpool/_updateWhirlpool).
+// tierStep/rewards are Phase 2 (Salvage speed-break payouts); the rest is live
+// from Phase 1. shaftHalfW/obstacleR size the shaft and its debris.
+export const WHIRL = { entranceChance: 0.5, baseSpeed: 120, accel: 22, maxSpeed: 520, tierStep: 90, shaftHalfW: 220, obstacleR: 22 };
+
 // Points awarded for spearing each creature type.
 export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900, Parasite: 60, Sentinel: 300 };
 
@@ -433,6 +442,9 @@ export const PAL = {
   bellGlass:   '#ffdf8f',
   blackPearl:      '#241c33',
   blackPearlSheen: '#b98cff',
+  whirlRim:    '#2ee6c8',
+  whirlRock:   '#123a3a',
+  whirlDark:   '#081f1f',
 };
 
 export const KEYMAP = {
