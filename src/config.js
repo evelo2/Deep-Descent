@@ -298,6 +298,13 @@ export const STAGE = {
                       // straight back out through the adjacent retreat door
 };
 
+// The deep-dive abyss — a loot-rich trench off the reef, reached through its
+// own entrance (coexists with the reef's whale/kraken/temple/stage special).
+// airMult: air drains this much faster while on foot in the abyss (Phase 1;
+// the buyable mini-sub in Phase 2 negates it). subCost: gold price of the
+// mini-sub (Phase 2). entranceChance: odds a given reef spawns an entrance.
+export const ABYSS = { airMult: 1.5, entranceChance: 0.5, subCost: 400 };
+
 // Points awarded for spearing each creature type.
 export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900, Parasite: 60, Sentinel: 300 };
 
@@ -402,6 +409,9 @@ export const PAL = {
   templeRock:  '#6a5c46',
   templeDark:  '#37301f',
   templeRim:   '#a4906a',
+  abyssRock:   '#1a1430',
+  abyssDark:   '#080612',
+  abyssRim:    '#5c3fae',
   gateGlow:    '#8fe6ff',
   key:         '#ffd35c',
   keyDark:     '#c99a2b',
