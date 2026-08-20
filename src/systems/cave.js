@@ -243,6 +243,11 @@ export class Cave {
   // leaving a bright band exactly along each cave outline (no soft shadow).
   draw(ctx, camX, camY) {
     const { W, H } = WORLD, octx = this.octx, CARVE = this.CARVE, RIM = 5;
+    // The offscreen rock layer is screen-resolution; the visible viewport can
+    // flex (resize / orientation change), so match it here or the rock would
+    // stop short of the widened edge. Resizing also clears it — fine, we
+    // repaint the whole buffer below every frame.
+    if (this.oc.width !== W || this.oc.height !== H) { this.oc.width = W; this.oc.height = H; }
     octx.clearRect(0, 0, W, H);
     const depthT = Math.min(1, camY / WH);
     const b = this.biome;

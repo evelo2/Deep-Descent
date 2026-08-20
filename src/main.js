@@ -1,11 +1,11 @@
 // Entry point: sizes a fixed logical canvas to the viewport (crisp on HiDPI),
 // wires input/audio, and runs the fixed-timestep-ish RAF loop.
-import { WORLD } from './config.js';
+import { WORLD, computeViewport } from './config.js';
 import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { Particles } from './systems/particles.js';
 import { Background } from './render/background.js';
-import { Game } from './game.js';
+import { Game, setViewport } from './game.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -16,20 +16,30 @@ const particles = new Particles();
 const background = new Background();
 const game = new Game(ctx, input, audio, particles, background);
 
-// Fit the logical 900×600 field into the viewport, preserving aspect ratio,
-// and scale the backing store by devicePixelRatio for sharp rendering.
+// The visible logical viewport flexes to the screen aspect so the canvas FILLS
+// it (no letterbox bars) instead of sitting centred in a fixed 3:2 box — the
+// core is always visible, the long axis extends to the edges (see a little more
+// ocean, HUD & controls reach the real corners). Sizing math lives in
+// computeViewport (config.js, unit-tested); here we just apply it + scale the
+// backing store by devicePixelRatio for sharp rendering.
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const vw = window.innerWidth, vh = window.innerHeight;
-  const scale = Math.min(vw / WORLD.W, vh / WORLD.H);
-  const cssW = Math.round(WORLD.W * scale), cssH = Math.round(WORLD.H * scale);
+  const { w: lw, h: lh } = computeViewport(vw, vh);
+  setViewport(lw, lh);   // updates WORLD.W/H + the game's live viewport
+
+  // scale fills the viewport; equal on both axes when within the clamp, so no
+  // bars appear until the screen is more extreme than the clamp allows.
+  const scale = Math.min(vw / lw, vh / lh);
+  const cssW = Math.round(lw * scale), cssH = Math.round(lh * scale);
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
-  canvas.width = Math.round(WORLD.W * scale * dpr);
-  canvas.height = Math.round(WORLD.H * scale * dpr);
+  canvas.width = Math.round(lw * scale * dpr);
+  canvas.height = Math.round(lh * scale * dpr);
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0); // draw in logical units
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
 resize();
 
 // Menus/pause vs. firing. During play, Space/F/click fire the harpoon; on the
