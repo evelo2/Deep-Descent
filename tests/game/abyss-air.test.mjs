@@ -1,5 +1,6 @@
-// Tests for the deep-dive abyss (mini-sub Phase 1): the on-foot 150% air-drain
-// multiplier applies only in the abyss zone, and a smoke test that
+// Tests for the deep-dive abyss (mini-sub Phase 1+2): the on-foot 150%
+// air-drain multiplier applies only in the abyss zone and only without the
+// mini-sub (the `inSub` arg negates it), and a smoke test that
 // _generateAbyss() produces a usable zone (exit portal + treasure, including
 // extra Black Pearls). Run: node tests/game/abyss-air.test.mjs
 
@@ -42,6 +43,21 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 
   check('temple/belly/stage zones are unaffected by ABYSS.airMult', oxygenMultiplier(3, 'temple') === oxygenMultiplier(3, 'reef') &&
     oxygenMultiplier(3, 'belly') === oxygenMultiplier(3, 'reef') && oxygenMultiplier(3, 'stage') === oxygenMultiplier(3, 'reef'));
+}
+
+// --- Phase 2: the mini-sub's `inSub` arg negates the abyss penalty only in
+// the abyss; every other zone ignores it (there's nothing to negate). ---
+{
+  check('abyss on foot (inSub=false, the default): still x1.5', Math.abs(oxygenMultiplier(1, 'abyss') - ABYSS.airMult) < 1e-9);
+  check('abyss in the sub: same as the plain reef rate, no penalty', Math.abs(oxygenMultiplier(1, 'abyss', true) - oxygenMultiplier(1, 'reef')) < 1e-9);
+
+  const reef7Reef = oxygenMultiplier(7, 'reef');
+  check('abyss in the sub at a deeper reef: matches that reef\'s own rate, not x1.5 of it',
+    Math.abs(oxygenMultiplier(7, 'abyss', true) - reef7Reef) < 1e-9);
+
+  check('non-abyss zones ignore the inSub arg entirely', oxygenMultiplier(4, 'reef', true) === oxygenMultiplier(4, 'reef', false) &&
+    oxygenMultiplier(4, 'temple', true) === oxygenMultiplier(4, 'temple', false) &&
+    oxygenMultiplier(4, 'belly', true) === oxygenMultiplier(4, 'belly', false));
 }
 
 // --- Smoke test: _generateAbyss() builds a usable zone off a stub Game. ---

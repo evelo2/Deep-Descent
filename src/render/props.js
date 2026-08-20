@@ -281,6 +281,34 @@ export function drawAbyssMaw(ctx, t, r = 46) {
   ctx.restore();
 }
 
+// The mini-sub hull — drawn around/behind the diver while piloting it (the
+// abyss's buyable vehicle). A stubby rounded pod ~1.6x the diver's radius
+// (15px), with a porthole and a small tail prop. `facing` mirrors it to match
+// the diver sprite's own left/right flip.
+export function drawSub(ctx, x, y, facing = 1) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (facing < 0) ctx.scale(-1, 1);
+  const w = 24, h = 15;   // ~1.6x the 15px diver radius
+  // hull
+  const hull = ctx.createLinearGradient(0, -h, 0, h);
+  hull.addColorStop(0, '#a9bfce'); hull.addColorStop(1, '#4c5f6c');
+  ctx.fillStyle = hull;
+  ctx.beginPath(); ctx.roundRect(-w, -h, w * 2, h * 2, h); ctx.fill();
+  ctx.strokeStyle = '#232d34'; ctx.lineWidth = 2; ctx.stroke();
+  // porthole
+  ctx.fillStyle = 'rgba(150,225,255,0.85)';
+  ctx.beginPath(); ctx.arc(6, 0, 6, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#1a2126'; ctx.lineWidth = 1.5; ctx.stroke();
+  // tail prop
+  ctx.strokeStyle = '#232d34'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-w, 0); ctx.lineTo(-w - 8, -5);
+  ctx.moveTo(-w, 0); ctx.lineTo(-w - 8, 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // A golden key.
 export function drawKey(ctx, t) {
   ctx.save();
