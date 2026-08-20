@@ -434,6 +434,7 @@ export const KEYMAP = {
   weaponPrev: ['KeyQ', 'BracketLeft'],
   shop: ['KeyB'],
   help: ['KeyH'],
+  drydock: ['KeyR'],
   flare: ['KeyG'],
   torch: ['KeyT'],
   controls: ['KeyC'],
