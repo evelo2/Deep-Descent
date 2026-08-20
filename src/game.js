@@ -21,7 +21,7 @@ import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
 import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS } from './config.js';
-import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawKey, drawDoor, drawColumn } from './render/props.js';
+import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';
@@ -98,11 +98,12 @@ const PU_INFO = {
 
 // Pure: the effective air-drain multiplier for a given reef number + zone —
 // the reef's own depth penalty, times an extra 150% while on foot in the
-// abyss (Phase 1; the buyable mini-sub in Phase 2 negates the abyss factor).
+// abyss. Piloting the mini-sub (`inSub`) negates that abyss factor entirely,
+// so it drains at the plain reef rate even at extreme depth.
 // A single source of truth shared by update()'s drain path and unit tests.
-export function oxygenMultiplier(reef, zone) {
+export function oxygenMultiplier(reef, zone, inSub = false) {
   let m = 1 + GAME.oxygenPenaltyPerReef * Math.min(reef - 1, GAME.oxygenPenaltyCap);
-  if (zone === 'abyss') m *= ABYSS.airMult;
+  if (zone === 'abyss' && !inSub) m *= ABYSS.airMult;
   return m;
 }
 
@@ -132,6 +133,7 @@ export class Game {
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.stageEntrances = []; this.stage = null; this._enteredEntrance = null;
     this.abyssEntrance = null; this.abyssExit = null;
+    this.hasSub = false; this.inSub = false; this._subHull = false;   // mini-sub: owned/piloting this reef
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
@@ -187,6 +189,7 @@ export class Game {
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = 1;
+    this.hasSub = false; this.inSub = false;   // the mini-sub is bought per-reef
     this._newReefName();
     this.diver.reset();
     this.camX = WW / 2 - W / 2; this.camY = 0;
@@ -1236,8 +1239,9 @@ export class Game {
       if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
-      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty.
-      const oxyMult = oxygenMultiplier(this.reef, this.zone);
+      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty
+      // (negated while piloting the mini-sub).
+      const oxyMult = oxygenMultiplier(this.reef, this.zone, this.inSub);
       this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
@@ -1305,7 +1309,18 @@ export class Game {
       for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
       for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._enterStage(e); this.input.endFrame(); return; } }
-      if (this.reentryT <= 0 && this.abyssEntrance && Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
+      if (this.reentryT <= 0 && this.abyssEntrance) {
+        const nearMaw = Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius;
+        // Buy the mini-sub at the maw (once per reef) — the SHOP control here
+        // doesn't conflict with the boat/bell shop, which only opens `atStation`
+        // (a different location; the abyss entrance is not a station).
+        if (nearMaw && !this.hasSub && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
+          if (this.gold >= ABYSS.subCost) {
+            this.gold -= ABYSS.subCost; this.hasSub = true;
+            this.puName = 'MINI-SUB READY'; this.puCol = PAL.gateGlow; this.puT = 1.8; this.audio.bank();
+          } else { this.shopDeny = 0.6; this.audio.gasp(); }
+        } else if (nearMaw) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
+      }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
       if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
@@ -1479,6 +1494,13 @@ export class Game {
       this.audio.select && this.audio.select();
       return;
     }
+    // The mini-sub's hull absorbs the first contact hit each abyss dive (no
+    // life/loot lost), then must be re-boarded (a fresh _enterAbyss) to reset.
+    if (this.inSub && this._subHull) {
+      this._subHull = false;
+      this.puName = 'HULL HIT!'; this.puCol = PAL.air; this.puT = 1.0;
+      return;
+    }
     this.diver.hit(); this.flash = 1; this.shake = 12;
     this.audio.hit();
     // A hit spills some of your un-banked haul — deep, loaded runs are now risky.
@@ -1522,11 +1544,13 @@ export class Game {
   // Board the boat and set sail for a fresh reef (score & lives carry over).
   _setSail() {
     this.state = 'sailing'; this.sailT = 0; this.reef += 1; this.dockHold = 0;
+    this.hasSub = false; this.inSub = false;   // the mini-sub is bought per-reef
     this._newReefName();   // name the destination so the sail screen can show it
     this.audio.select();
   }
   _newReef() {
     this._generateWorld();
+    this.hasSub = false; this.inSub = false;   // per-reef: buy it again on the new reef
     this.diver.reset();
     if (this._relicChart) this.cave.reveal(this.diver.x, this.diver.y, 14);
     this.camX = WW / 2 - W / 2; this.camY = 0;
@@ -1601,12 +1625,17 @@ export class Game {
     this.zone = 'abyss';
     this._generateAbyss();
     this._placeDiver(this.abyssExit.x, this.abyssExit.y + 90, 0);
+    // Board the sub if owned — negates the air penalty (oxygenMultiplier) and
+    // absorbs one hit (_hit) this dive; otherwise you're diving on foot.
+    this.inSub = this.hasSub;
+    this._subHull = this.inSub;
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
   }
   // Leaving the abyss consumes its entrance — like the temple, a plundered
   // special zone's portal is spent, so it won't re-trigger at the return spot.
-  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; }
+  // Disembarking the sub happens here too — ascending out is how you get off.
+  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; }
 
   // Enter a themed platformer stage through a reef entrance. Snapshots the reef,
   // builds the stage, seals the air. Mirrors _enterWhale/_enterTemple.
@@ -1774,6 +1803,8 @@ export class Game {
     }
 
     this.particles.draw(ctx, cx, cy);
+    // The mini-sub hull, drawn behind the diver so it reads as piloting it.
+    if (this.state !== 'menu' && this.inSub) drawSub(ctx, this.diver.x - cx, this.diver.y - cy, this.diver.facing);
     if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
     // Shield bubble (blinks as it runs out).
     if (this.shieldT > 0 && this.state !== 'menu') {
@@ -2095,6 +2126,8 @@ export class Game {
     if (this.zone === 'reef') {
       const rel = this.relicBanked ? '⚓ RELIC ✓' : this.carryingRelic ? '⚓ RELIC — bank it!' : `⚓ ${this.reefBanked}/${this.reefGoal}`;
       this._text(this.canSail ? '⚓ SAIL READY' : rel, W - 20, 102, 12, this.canSail ? PAL.air : PAL.key, 'right', 'top');
+    } else if (this.zone === 'abyss') {
+      this._text(this.inSub ? '🛥 IN SUB' : '⚠ 150% AIR', W - 20, 102, 12, this.inSub ? PAL.air : PAL.danger, 'right', 'top');
     }
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
@@ -2150,7 +2183,10 @@ export class Game {
         }
       }
       if (!hinted && this.abyssEntrance && Math.hypot(this.diver.x - this.abyssEntrance.x, this.diver.y - this.abyssEntrance.y) < 320) {
-        this._text('🌀 A crushing trench — dive in (air drains fast!)', W / 2, H - 30, 14, PAL.abyssRim, 'center', 'middle');
+        const msg = this.hasSub
+          ? '🛥 Sub ready — dive the maw to descend safely.'
+          : `🛥 Buy the MINI-SUB (⚙${ABYSS.subCost}g) — press ${this._key('shop')} — or dive on foot (air burns fast!)`;
+        this._text(msg, W / 2, H - 30, 14, PAL.abyssRim, 'center', 'middle');
       }
     }
     // Shop hint at any station once loot is banked.
