@@ -101,6 +101,11 @@ export const CURRENT = { accel: 360 };   // push acceleration (px/s^2)
 // score points plus gold (a fraction of the value) to spend on gear.
 export const GOLD = { rate: 0.2 };       // gold earned per point of loot banked
 
+// Salvage: the persistent meta-progression currency (The Salvage Log). Earned
+// at the end of every run — win OR death — from milestones. Starting values;
+// a later balance pass tunes these.
+export const SALVAGE = { perReef: 8, perBoss: 40, perRelic: 15, perPearl: 30, startSlots: 2, maxSlots: 5, slotCostBase: 200 };
+
 // Dark caves: pitch-black chambers that only light up around a burning flare.
 // They hide rich loot, so a flare is the price of admission.
 export const DARKZONE = {

@@ -27,6 +27,7 @@ import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
+import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
@@ -103,6 +104,7 @@ export class Game {
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
     this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
+    this.meta = loadSalvage();
     // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
     // wins; otherwise we start on Keyboard and auto-switch to pad prompts once a
     // gamepad shows up (until the player picks manually).
@@ -134,6 +136,8 @@ export class Game {
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = GAME.firstLifeScore; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
+    // Per-run Salvage milestone counters (Salvage Log payout at run end).
+    this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
     // Weapons: harpoon owned from the start; the rest are bought at the shop.
     // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
     // it. weaponLevel tracks per-weapon upgrade tier (1..maxWeaponLevel).
@@ -561,7 +565,7 @@ export class Game {
     const g = Math.round(value * GOLD.rate);
     this.reefBanked += value; this.score += value; this.gold += g;
     this.carried = 0; this.bankPulse = 1; this.audio.bank();
-    if (this.carryingRelic) { this.relicBanked = true; this.carryingRelic = false; }
+    if (this.carryingRelic) { this.relicBanked = true; this.carryingRelic = false; this.relicsBanked = (this.relicsBanked || 0) + 1; }
   }
 
   _applyPowerUp(type) {
@@ -1187,6 +1191,7 @@ export class Game {
           if (k.hp === 0) {
             this.score += KRAKEN.killBonus; this.shake = 16; this.flash = 0.6;
             this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank();
+            this.bossesFelled = (this.bossesFelled || 0) + 1;
             for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem'));
           }
           break;
@@ -1236,7 +1241,7 @@ export class Game {
     for (const k of this.krakens) {
       if (k.hp > 0 && Math.hypot(k.x - ch.x, k.y - ch.y) < R + k.radius) {
         k.takeDamage(2); this.score += KRAKEN.hitPoints * 2;
-        if (k.hp === 0) { this.score += KRAKEN.killBonus; this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank(); for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem')); }
+        if (k.hp === 0) { this.score += KRAKEN.killBonus; this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank(); this.bossesFelled = (this.bossesFelled || 0) + 1; for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem')); }
       }
     }
   }
@@ -1261,6 +1266,9 @@ export class Game {
   }
 
   _gameOver() {
+    if (this.state === 'gameover') return;   // re-entrancy guard: a same-frame
+    // second death (e.g. air runs out AND a creature touches you) must not award
+    // the Salvage payout twice — the payout is a non-idempotent side effect.
     this.state = 'gameover';
     this.audio.gasp();
     if (this.score > this.hi) {
@@ -1268,6 +1276,9 @@ export class Game {
       localStorage.setItem(HI_KEY, String(this.hi));
       localStorage.setItem(HI_REEF_KEY, String(this.hiReef));
     } else this.newHi = false;
+    this.lastPayout = runPayout({ deepestReef: this.reef, bosses: this.bossesFelled, relicsBanked: this.relicsBanked, pearls: this.blackPearlsBanked });
+    this.meta.salvage += this.lastPayout;
+    saveSalvage(this.meta);
   }
 
   _win() {
@@ -2088,6 +2099,7 @@ export class Game {
     this._text(`DEEPEST ${Math.round(this.depthReached / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
     if (this.newHi) this._text(`★ NEW BEST · REEF ${this.reef} ★`, cx, 360, 20, PAL.glow, 'center', 'middle', true);
     else this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
+    if (this.lastPayout != null) this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked`, cx, 394, 15, PAL.gold, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
     const ctx = this.ctx;
