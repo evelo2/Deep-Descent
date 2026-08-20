@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -28,7 +28,7 @@ import { THEMES } from './stage/themes.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
-import { applyLoadout } from './meta/relics.js';
+import { applyLoadout, RELICS } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
@@ -524,6 +524,85 @@ export class Game {
     this._text(hint, W / 2, this._shopRow(items.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
   }
 
+  // ---- dry dock (spend Salvage between runs: unlock relics, equip them into
+  // slots, buy more slots) — mirrors the in-run shop's UI/nav closely. -----
+  _dryDockRows() {
+    const rows = [];
+    for (const r of RELICS) {
+      if (this.meta.unlocked.includes(r.id)) {
+        rows.push({ kind: 'relic', id: r.id, label: `${r.name} — ${r.desc}`, cost: 0, equipped: this.meta.loadout.includes(r.id) });
+      } else {
+        rows.push({ kind: 'buy', id: r.id, label: `🔒 ${r.name} — ${r.desc}`, cost: r.cost });
+      }
+    }
+    if (this.meta.slots < SALVAGE.maxSlots) {
+      rows.push({ kind: 'slot', id: 'slot', label: `➕ Loadout slot (${this.meta.slots} → ${this.meta.slots + 1})`, cost: this._dblCost(SALVAGE.slotCostBase, this.meta.slots - SALVAGE.startSlots) });
+    }
+    rows.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
+    return rows;
+  }
+
+  // Row geometry mirrors _shopRow — a touch wider to fit relic descriptions.
+  _ddRow(i) {
+    const n = this._dryDockRows().length;
+    const top = 194, bottom = 556, w = 620, x = (W - w) / 2;
+    const step = Math.min(46, (bottom - top) / Math.max(1, n));
+    return { x, y: top + i * step, w, h: Math.min(40, step - 6) };
+  }
+
+  _openDryDock(from) { this.ddReturn = from; this.state = 'drydock'; this.ddSel = 0; this.ddDeny = 0; this.audio.select(); }
+  _closeDryDock() { this.state = this.ddReturn || 'menu'; }
+  _dryDockMove(dir) { const n = this._dryDockRows().length; this.ddSel = (this.ddSel + dir + n) % n; this.audio.pickup(); }
+
+  _dryDockAct() {
+    const rows = this._dryDockRows();
+    const row = rows[this.ddSel]; if (!row) return;
+    if (row.kind === 'close') { this._closeDryDock(); return; }
+    if (row.kind === 'buy') {
+      if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
+      this.meta.salvage -= row.cost; this.meta.unlocked.push(row.id); saveSalvage(this.meta); this.audio.bank();
+    } else if (row.kind === 'slot') {
+      if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
+      this.meta.salvage -= row.cost; this.meta.slots += 1; saveSalvage(this.meta); this.audio.bank();
+    } else if (row.kind === 'relic') {
+      if (row.equipped) {
+        this.meta.loadout = this.meta.loadout.filter((id) => id !== row.id);
+      } else if (this.meta.loadout.length < this.meta.slots) {
+        this.meta.loadout.push(row.id);
+      } else {
+        this.ddDeny = 0.6; this.audio.gasp(); return;   // loadout full
+      }
+      saveSalvage(this.meta); this.audio.pickup();
+    }
+    const n = this._dryDockRows().length;
+    if (this.ddSel >= n) this.ddSel = n - 1;
+  }
+
+  _dryDockScreen() {
+    const ctx = this.ctx;
+    this._panel(0.74);
+    this._text('🛠 DRY DOCK', W / 2, 108, 34, PAL.gold, 'center', 'middle', true);
+    this._text(`⚙ SALVAGE: ${this.meta.salvage}`, W / 2, 144, 16, this.ddDeny > 0 ? PAL.danger : PAL.hudText, 'center', 'middle', true);
+    this._text(`SLOTS: ${this.meta.loadout.length}/${this.meta.slots}`, W / 2, 166, 13, '#9fc6e0', 'center', 'middle');
+    const rows = this._dryDockRows();
+    if (this.ddSel >= rows.length) this.ddSel = rows.length - 1;
+    rows.forEach((row, i) => {
+      const r = this._ddRow(i), sel = i === this.ddSel;
+      const afford = row.kind === 'close' || row.kind === 'relic' || this.meta.salvage >= row.cost;
+      ctx.fillStyle = sel ? 'rgba(30,84,124,0.92)' : 'rgba(8,26,44,0.82)';
+      ctx.strokeStyle = sel ? PAL.gold : 'rgba(120,200,255,0.22)'; ctx.lineWidth = sel ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill(); ctx.stroke();
+      this._text(row.label, r.x + 16, r.y + r.h / 2, 15, afford ? PAL.hudText : 'rgba(210,130,130,0.85)', 'left', 'middle', sel);
+      if (row.kind === 'buy' || row.kind === 'slot') {
+        this._text(`⚙${row.cost}`, r.x + r.w - 16, r.y + r.h / 2, 14, afford ? PAL.gold : '#c88', 'right', 'middle', true);
+      } else if (row.kind === 'relic') {
+        this._text(row.equipped ? '[EQUIPPED]' : '[equip]', r.x + r.w - 16, r.y + r.h / 2, 13, row.equipped ? PAL.gold : '#9fc6e0', 'right', 'middle', true);
+      }
+    });
+    const hint = this.input.isTouch ? 'Tap a row to unlock/equip · tap Close to leave' : '↑ / ↓ select   ·   Space / A buy/equip   ·   R / Esc close';
+    this._text(hint, W / 2, this._ddRow(rows.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
+  }
+
   // ---- help / how-to-play ---------------------------------------------
   _helpRects() {
     return {
@@ -714,6 +793,7 @@ export class Game {
     else if (this.state === 'paused') { this.state = 'playing'; this._fireGrace = 0.3; }
     else if (this.state === 'playing') this.state = 'paused';
     else if (this.state === 'shop') this._shopBuy();
+    else if (this.state === 'drydock') this._dryDockAct();
   }
 
   get weapon() { return this.weapons[this.weaponIdx]; }
@@ -890,12 +970,15 @@ export class Game {
     // Open help from the menu, pause or game-over screens (H or the ? button).
     if (this.state !== 'playing' && (this.input.pressed('help') || this.input.consumeButton('help'))) { this._openHelp(this.state); this.input.endFrame(); return; }
 
+    // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
+    if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._openDryDock(this.state); this.input.endFrame(); return; }
+
     // Change the on-screen control legend (C / a menu tap; ← → on the menus).
     if (cycleControls) this._cycleScheme();
     else if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('right') || this.input.consumeButton('schemeNext'))) this._cycleScheme();
     else if ((this.state === 'menu' || this.state === 'gameover') && this.input.pressed('left')) this._setScheme(prevScheme(this.controlScheme));
 
-    if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else this.onAction(); }
+    if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else if (this.state === 'drydock') this._closeDryDock(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
 
     // Shop: a frozen overlay while docked — navigate, buy, then close.
@@ -906,6 +989,16 @@ export class Game {
       const items = this._shopItems();
       for (let i = 0; i < items.length; i++) if (this.input.consumeButton('shop' + i)) { this.shopSel = i; this._shopBuy(); break; }
       this.shopDeny = Math.max(0, this.shopDeny - dt);
+      this.input.endFrame(); return;
+    }
+    // Dry Dock: a frozen overlay off the menu/game-over — navigate, buy/equip, close.
+    if (this.state === 'drydock') {
+      if (startEdge) this._dryDockAct();
+      if (this.input.pressed('up')) this._dryDockMove(-1);
+      if (this.input.pressed('down')) this._dryDockMove(1);
+      const rows = this._dryDockRows();
+      for (let i = 0; i < rows.length; i++) if (this.input.consumeButton('dd' + i)) { this.ddSel = i; this._dryDockAct(); break; }
+      this.ddDeny = Math.max(0, this.ddDeny - dt);
       this.input.endFrame(); return;
     }
     if (startEdge && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
@@ -1643,6 +1736,7 @@ export class Game {
     if (this.state === 'menu') this._menu();
     if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
     if (this.state === 'shop') this._shopScreen();
+    if (this.state === 'drydock') this._dryDockScreen();
     if (this.state === 'help') this._helpScreen();
     if (this.state === 'gameover') this._gameOverScreen();
   }
@@ -1704,8 +1798,17 @@ export class Game {
         const items = this._shopItems();
         items.forEach((it, i) => { const r = this._shopRow(i); btns.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
       }
-      // Help: a "?" on the menus, and nav/close inside the help screen.
-      if (this.state === 'menu' || this.state === 'gameover' || this.state === 'paused') btns.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
+      // In the Dry Dock: one tappable button per row.
+      if (this.state === 'drydock') {
+        const rows = this._dryDockRows();
+        rows.forEach((row, i) => { const r = this._ddRow(i); btns.push({ id: 'dd' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
+      }
+      // Help: a "?" on the menus, and nav/close inside the help screen. On the
+      // menu/game-over screens it sits beside the Dry Dock button.
+      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'help', x: W / 2 - 140, y: 516, w: 132, h: 34 });
+      else if (this.state === 'paused') btns.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
+      // Dry Dock: a "🛠" on the menu/game-over screens.
+      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'drydock', x: W / 2 + 8, y: 516, w: 132, h: 34 });
       // Control-scheme selector: a tap target over the menu/gameover selector row.
       if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
       if (this.state === 'help') {
@@ -1745,6 +1848,8 @@ export class Game {
       this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'help') {
       this._text('❔ HELP', cx, cy + 1, 14, PAL.hudText, 'center', 'middle', true);
+    } else if (b.id === 'drydock') {
+      this._text('🛠 DRY DOCK', cx, cy + 1, 13, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'aim') {
       this._text('🎯', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
       this._text('HOLD', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
@@ -2095,11 +2200,14 @@ export class Game {
     this._text(this.input.isTouch ? 'tap to change' : 'C / ← →', cx + 120, 450, 12, '#7fb0d0', 'left', 'middle');
     this._text(`Swim ${this._key('swim')}   ·   Fire ${this._key('fire')} (hold to aim)   ·   Swap ${this._key('swap')}   ·   Shop ${this._key('shop')}`, cx, 474, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 494, 14, '#bfe6ff', 'center', 'middle');
-    // Help button / prompt.
+    // Help / Dry Dock buttons + prompt.
     const ctx = this.ctx;
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(cx - 66, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
-    this._text('❔ HOW TO PLAY  (H)', cx, 533, 14, PAL.hudText, 'center', 'middle', true);
+    ctx.beginPath(); ctx.roundRect(cx - 140, 516, 132, 34, 8); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx + 8, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text('❔ HOW TO PLAY  (H)', cx - 74, 533, 14, PAL.hudText, 'center', 'middle', true);
+    this._text('🛠 DRY DOCK  (R)', cx + 74, 533, 14, PAL.gold, 'center', 'middle', true);
+    this._text(this.input.isTouch ? 'Tap 🛠 for the DRY DOCK — spend Salvage on relics' : 'Press R / tap 🛠 for the DRY DOCK', cx, 505, 11, '#9fc6e0', 'center', 'middle');
   }
 
   _gameOverScreen() {
@@ -2118,10 +2226,13 @@ export class Game {
     if (this.lastPayout != null) this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked`, cx, 394, 15, PAL.gold, 'center', 'middle');
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
+    this._text(this.input.isTouch ? 'Tap 🛠 for the DRY DOCK — spend Salvage on relics' : 'Press R / tap 🛠 for the DRY DOCK', cx, 466, 12, '#9fc6e0', 'center', 'middle');
     const ctx = this.ctx;
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(cx - 66, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
-    this._text('❔ HOW TO PLAY  (H)', cx, 533, 14, PAL.hudText, 'center', 'middle', true);
+    ctx.beginPath(); ctx.roundRect(cx - 140, 516, 132, 34, 8); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx + 8, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text('❔ HOW TO PLAY  (H)', cx - 74, 533, 14, PAL.hudText, 'center', 'middle', true);
+    this._text('🛠 DRY DOCK  (R)', cx + 74, 533, 14, PAL.gold, 'center', 'middle', true);
   }
 
   _overlay(title, sub) {
