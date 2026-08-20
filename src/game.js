@@ -914,10 +914,13 @@ export class Game {
     // A Black Pearl or two, deep in the shaft — the run's rarest grab.
     const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0);
     for (let i = 0; i < pearlCount; i++) {
-      const y = bottom - Math.random() * (bottom - safeTop) * 0.35;   // lower third
-      const x = randX(11);
-      if (!clearOfObstacles(x, y, 22)) continue;
-      this.whirlTreasures.push(new Treasure(x, y, 'blackpearl'));
+      // Retry to reliably seat each pearl in a clear spot — a single attempt that
+      // landed near an obstacle used to drop the (rare) pearl entirely.
+      for (let tries = 0; tries < 24; tries++) {
+        const y = bottom - Math.random() * (bottom - safeTop) * 0.35;   // lower third
+        const x = randX(11);
+        if (clearOfObstacles(x, y, 22)) { this.whirlTreasures.push(new Treasure(x, y, 'blackpearl')); break; }
+      }
     }
 
     // Ascend back out the top to bail early — a clean escape that still banks
@@ -1900,7 +1903,9 @@ export class Game {
     // score, once per tier — the `while` loop (rather than a single `if`)
     // means a rare multi-tier jump in one frame (a dt spike) still awards
     // each tier crossed exactly once, never doubled, never skipped.
-    const tier = Math.floor(this.whirlSpeed / WHIRL.tierStep);
+    // Tiers count speed gained ABOVE the base sweep, so tier 1 requires actually
+    // accelerating into the vortex (not a freebie on the first frame).
+    const tier = this.whirlSpeed <= WHIRL.baseSpeed ? 0 : Math.floor((this.whirlSpeed - WHIRL.baseSpeed) / WHIRL.tierStep) + 1;
     while (tier > this.whirlTier) {
       this.whirlTier += 1;
       const r = whirlpoolReward(this.whirlTier) - whirlpoolReward(this.whirlTier - 1);   // marginal award for THIS tier

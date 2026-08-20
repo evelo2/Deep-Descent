@@ -39,6 +39,15 @@ is buyable with gold at the maw (once per reef, `ABYSS.subCost`); dive in it
 sub hull. Ascend to the exit to return. See
 `docs/superpowers/plans/2026-08-19-minisub-abyss.md`.
 
+## Whirlpool — survival level (2026-08-19)
+A special zone (`zone==='whirlpool'`) reached from a teal vortex maw: the diver is
+swept down an accelerating shaft, steering to dodge rock obstacles and grab bubbles
+(air) + loot + Black Pearls. Hitting a rock, running out of air, or bailing up top
+ends the run and returns to the reef with **no life lost**, banking a survival score
++ the collected haul. Crossing `whirlSpeed` **speed-break tiers** (counted above the
+base sweep) awards Salvage-Log Salvage + score, so surviving deeper pays the meta
+layer. See `docs/superpowers/plans/2026-08-19-whirlpool.md`.
+
 ## Economy & control changes (2026-08-19)
 Banking is now a decision (boat auto-banks full; a dive bell banks on demand at a
 depth-scaled discount — bells always ≥ ⅔ deep). Auto-aim is gated behind the
