@@ -144,6 +144,7 @@ export class Game {
     this.depthReached = 0; this.fireCd = 0;
     // Per-run Salvage milestone counters (Salvage Log payout at run end).
     this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
+    this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
     // Weapons: harpoon owned from the start; the rest are bought at the shop.
     // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
     // it. weaponLevel tracks per-weapon upgrade tier (1..maxWeaponLevel).
@@ -326,6 +327,16 @@ export class Game {
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
     const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
+
+    // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself
+    // is the risk, no guardian needed for v1. Banked (not just carried) to
+    // convert to persistent Salvage.
+    const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < pearlCount; i++) {
+      const pc = C.randomOpen(WH * 0.55);
+      if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
+    }
+
     this._clearCreaturesNearPortals();
   }
 
@@ -406,10 +417,12 @@ export class Game {
     const items = [];
     // At a dive bell with an un-banked haul: banking is the first shop choice,
     // at the bell's depth-scaled rate (the boat always banks in full, elsewhere).
-    if (this.shopWhere === 'bell' && this.carried > 0) {
+    if (this.shopWhere === 'bell' && (this.carried > 0 || this.carriedPearls > 0)) {
       const rate = this._relicBellFull ? 1 : (this.atBell ? bellBankRate(this.atBell.y) : 1);
       const value = Math.round(this.carried * rate);
-      items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank haul here — ${this.carried} → ${value}  (${Math.round(rate * 100)}%)`, cost: 0 });
+      const pearlBit = this.carriedPearls > 0 ? `  + ${this.carriedPearls}◦ pearls` : '';
+      const lootBit = this.carried > 0 ? `${this.carried} → ${value}  (${Math.round(rate * 100)}%)` : 'Black Pearls';
+      items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank here — ${lootBit}${pearlBit}`, cost: 0 });
     }
     for (const w of WEAPON_ORDER) {
       const info = WEAPON_INFO[w];
@@ -651,6 +664,15 @@ export class Game {
     this.reefBanked += value; this.score += value; this.gold += g;
     this.carried = 0; this.bankPulse = 1; this.audio.bank();
     if (this.carryingRelic) { this.relicBanked = true; this.carryingRelic = false; this.relicsBanked = (this.relicsBanked || 0) + 1; }
+    // Black Pearls convert to Salvage immediately on banking — a persistent
+    // currency gain the moment they're safe, not deferred to the run-end payout.
+    if (this.carriedPearls > 0) {
+      this.meta.salvage += this.carriedPearls * SALVAGE.perPearl;
+      this.blackPearlsBanked += this.carriedPearls;
+      saveSalvage(this.meta);
+      this.puName = `+${this.carriedPearls * SALVAGE.perPearl} SALVAGE`; this.puCol = PAL.blackPearlSheen; this.puT = 1.6;
+      this.carriedPearls = 0;
+    }
   }
 
   _applyPowerUp(type) {
@@ -1127,7 +1149,7 @@ export class Game {
       // The boat is home — it auto-banks the haul at full value. A dive bell only
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.
-      if (atBoat && this.carried > 0) this._bankLoot();
+      if (atBoat && (this.carried > 0 || this.carriedPearls > 0)) this._bankLoot();
       // Pressure Plating recharges once you're back home at the boat.
       if (atBoat && this._relicPlating) this._platingReady = true;
       // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
@@ -1237,7 +1259,7 @@ export class Game {
     // Extra lives at escalating score thresholds, capped so they can't snowball.
     while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
 
-    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
+    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.carriedPearls === 0 && this.diver.atSurface) this._win();
 
     this.input.endFrame();
   }
@@ -1247,9 +1269,18 @@ export class Game {
     for (const tr of this.treasures) {
       if (tr.locked && !this.hasKey) continue;   // vault loot needs the key
       if (!tr.taken && tr.reached(d)) {
-        tr.taken = true; this.carried += tr.value;
-        this.particles.sparkle(tr.x, tr.y, tr.kind === 'gem' ? PAL.gem : PAL.gold, tr.kind === 'coin' ? 12 : 18);
-        tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
+        tr.taken = true;
+        if (tr.pearl) {
+          // Black Pearl: carried at risk like loot, but tracked separately —
+          // it converts to Salvage on banking, not to in-run `carried` value.
+          this.carriedPearls = (this.carriedPearls || 0) + 1;
+          this.particles.sparkle(tr.x, tr.y, PAL.blackPearlSheen, 22);
+          this.audio.blackpearl();
+        } else {
+          this.carried += tr.value;
+          this.particles.sparkle(tr.x, tr.y, tr.kind === 'gem' ? PAL.gem : PAL.gold, tr.kind === 'coin' ? 12 : 18);
+          tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
+        }
       }
     }
     // Shells (clams & chests): grab loot while open, get bitten when they shut.
@@ -1391,7 +1422,7 @@ export class Game {
       localStorage.setItem(HI_KEY, String(this.hi));
       localStorage.setItem(HI_REEF_KEY, String(this.hiReef));
     } else this.newHi = false;
-    this.lastPayout = runPayout({ deepestReef: this.reef, bosses: this.bossesFelled, relicsBanked: this.relicsBanked, pearls: this.blackPearlsBanked });
+    this.lastPayout = runPayout({ deepestReef: this.reef, bosses: this.bossesFelled, relicsBanked: this.relicsBanked });
     this.meta.salvage += this.lastPayout;
     saveSalvage(this.meta);
   }
@@ -1949,7 +1980,8 @@ export class Game {
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
-    this._text(`CARRYING ${this.carried}`, W - 20, 46, 14, cp, 'right', 'top');
+    const pearlSuffix = this.carriedPearls > 0 ? `   ◦ ${this.carriedPearls}` : '';
+    this._text(`CARRYING ${this.carried}${pearlSuffix}`, W - 20, 46, 14, cp, 'right', 'top');
     this._text(`DEPTH ${Math.round(this.depthReached / 10)} m`, W - 20, 66, 13, '#bfe6ff', 'right', 'top');
     const t3 = this.reefTheme.tint;
     const zoneTag = this.zone === 'belly' ? '🐋 THE BELLY' : this.zone === 'temple' ? '🏛 THE TEMPLE' : `${this.reefTheme.tag} ${this.reefName}`;
@@ -2229,7 +2261,10 @@ export class Game {
     this._text(`DEEPEST ${Math.round(this.depthReached / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
     if (this.newHi) this._text(`★ NEW BEST · REEF ${this.reef} ★`, cx, 360, 20, PAL.glow, 'center', 'middle', true);
     else this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
-    if (this.lastPayout != null) this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked`, cx, 394, 15, PAL.gold, 'center', 'middle');
+    if (this.lastPayout != null) {
+      const pearlNote = this.blackPearlsBanked > 0 ? `  ·  ${this.blackPearlsBanked} pearl${this.blackPearlsBanked === 1 ? '' : 's'}` : '';
+      this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked${pearlNote}`, cx, 394, 15, PAL.gold, 'center', 'middle');
+    }
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
     this._text(this.input.isTouch ? 'Tap 🛠 for the DRY DOCK — spend Salvage on relics' : 'Press R / tap 🛠 for the DRY DOCK', cx, 466, 12, '#9fc6e0', 'center', 'middle');
