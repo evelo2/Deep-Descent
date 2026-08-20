@@ -712,9 +712,15 @@ export class Game {
     const dc = C.randomOpen(WH * 0.6) || { x: WW / 2, y: WH * 0.7 };
     const dFloor = C.surfaceBelow(dc.x, dc.y, 200);
     this.door = { x: dc.x, y: dFloor - 90, w: 74, h: 180, open: 0 };
+    // Vault loot sits in the OPEN chamber around the door (above the floor —
+    // placing it below dFloor buried it in solid rock, so the vault came up
+    // empty). Retry to reliably seat all 8 in open cells the diver can reach
+    // once the key opens the door (`t.locked` gates collection, not placement).
     for (let i = 0; i < 8; i++) {
-      const vx = dc.x + (Math.random() - 0.5) * 180, vy = dFloor + 20 + Math.random() * 80;
-      if (!C.isSolid(vx, vy)) { const t = new Treasure(vx, vy, Math.random() < 0.6 ? 'gem' : 'chest'); t.locked = true; this.treasures.push(t); }
+      for (let tries = 0; tries < 30; tries++) {
+        const vx = dc.x + (Math.random() - 0.5) * 220, vy = dFloor - 12 - Math.random() * 140;
+        if (!C.isSolid(vx, vy)) { const t = new Treasure(vx, vy, Math.random() < 0.6 ? 'gem' : 'chest'); t.locked = true; this.treasures.push(t); break; }
+      }
     }
     this.flora = new Flora([]);
     this._makeCurrents(2);
