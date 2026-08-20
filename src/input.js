@@ -21,7 +21,6 @@ export class Input {
     this.touchButtons = [];       // [{id, x, y, w, h}] in logical (900×600) units
     this._btnHits = new Set();    // one-shot: buttons tapped this frame
     this._btnTouch = false;       // the active touch landed on a button
-    this._aimTouch = false;       // the active touch is holding the AIM button
     // Unified fire state (keyboard / mouse / gamepad / touch AIM hold). fireDown
     // = held this frame; firePress = rising edge; recomputed each poll().
     this._mouseDown = false; this._padFire = false; this._aimBtnActive = false;
@@ -45,18 +44,18 @@ export class Input {
     this._tapFire = false;
     this._touchFire = false;        // a second finger is held → fire
     const origin = { x: 0, y: 0, ts: 0, maxDrag: 0 };
-    let steerId = null, fireId = null;
+    let steerId = null, fireId = null, aimId = null, steerHadSecond = false;
     const onStart = (e) => {
       for (const t of e.changedTouches) {
         const hit = this._hitButton(t.clientX, t.clientY);
-        if (hit === 'aim') { this._aimBtnActive = true; this._btnTouch = true; this._aimTouch = true; continue; }   // hold to aim
+        if (hit === 'aim') { this._aimBtnActive = true; this._btnTouch = true; aimId = t.identifier; continue; }   // hold to aim (tracked by id)
         if (hit) { this._btnHits.add(hit); this._btnTouch = true; continue; }
         if (steerId === null) {
-          steerId = t.identifier;
+          steerId = t.identifier; steerHadSecond = false;
           origin.x = t.clientX; origin.y = t.clientY; origin.ts = e.timeStamp; origin.maxDrag = 0;
           this.touch.active = true; this.touch.x = 0; this.touch.y = 0;
         } else if (fireId === null) {
-          fireId = t.identifier; this._touchFire = true;
+          fireId = t.identifier; this._touchFire = true; steerHadSecond = true;
         }
       }
       e.preventDefault();
@@ -75,16 +74,18 @@ export class Input {
     const onEnd = (e) => {
       for (const t of e.changedTouches) {
         if (t.identifier === steerId) {
-          // A quick tap with no second finger down fires once.
-          if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260 && fireId === null) this._tapFire = true;
+          // A quick tap fires once — but only for a genuine single-finger tap
+          // (no second finger present during this press).
+          if (origin.maxDrag < 14 && e.timeStamp - origin.ts < 260 && !steerHadSecond) this._tapFire = true;
           steerId = null; this.touch.active = false; this.touch.x = 0; this.touch.y = 0;
         } else if (t.identifier === fireId) {
           fireId = null; this._touchFire = false;
-        } else {   // a button (aim/one-shot) finger lifted
-          if (this._aimTouch) { this._aimBtnActive = false; this._aimTouch = false; }
-          this._btnTouch = false;
+        } else if (t.identifier === aimId) {   // the AIM-hold finger lifted (by id, so tapping other buttons can't cancel aim)
+          aimId = null; this._aimBtnActive = false;
         }
       }
+      // Menu-start suppression: no button touch is holding while no aim finger is down.
+      if (aimId === null) this._btnTouch = false;
       e.preventDefault();
     };
     canvas.addEventListener('touchstart', onStart, { passive: false });
