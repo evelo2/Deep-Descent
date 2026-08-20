@@ -62,11 +62,13 @@ export function saveSalvage(state, store) {
   }
 }
 
-export function runPayout({ deepestReef = 1, bosses = 0, relicsBanked = 0, pearls = 0 } = {}) {
+// Black Pearls grant Salvage immediately on banking (see Game#_bankLoot), not
+// here — they are deliberately NOT counted in the milestone payout to avoid
+// double-counting a currency that already persisted mid-run.
+export function runPayout({ deepestReef = 1, bosses = 0, relicsBanked = 0 } = {}) {
   return Math.round(
     deepestReef * SALVAGE.perReef +
     bosses * SALVAGE.perBoss +
-    relicsBanked * SALVAGE.perRelic +
-    pearls * SALVAGE.perPearl
+    relicsBanked * SALVAGE.perRelic
   );
 }

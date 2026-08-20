@@ -19,14 +19,17 @@ const store = (init = null) => {
 
 // --- runPayout: pure milestone math. ------------------------------------------
 {
-  const p = runPayout({ deepestReef: 3, bosses: 1, relicsBanked: 2, pearls: 0 });
+  const p = runPayout({ deepestReef: 3, bosses: 1, relicsBanked: 2 });
   const expected = 3 * SALVAGE.perReef + 1 * SALVAGE.perBoss + 2 * SALVAGE.perRelic;
   check('runPayout: sums reef/boss/relic milestones', p === expected);
 }
 {
-  const p = runPayout({ deepestReef: 5, bosses: 2, relicsBanked: 1, pearls: 3 });
-  const expected = Math.round(5 * SALVAGE.perReef + 2 * SALVAGE.perBoss + 1 * SALVAGE.perRelic + 3 * SALVAGE.perPearl);
-  check('runPayout: includes pearls', p === expected);
+  // Black Pearls now grant Salvage immediately on banking (see _bankLoot),
+  // not at the run-end milestone — a stray `pearls` field must be ignored,
+  // never double-counted.
+  const p = runPayout({ deepestReef: 2, bosses: 1, relicsBanked: 0, pearls: 99 });
+  const expected = 2 * SALVAGE.perReef + 1 * SALVAGE.perBoss;
+  check('runPayout: no longer counts pearls (stray pearls field ignored)', p === expected);
 }
 {
   const p = runPayout({});
@@ -115,6 +118,39 @@ const store = (init = null) => {
   check('first _gameOver awards the milestone payout', after1 === expected && after1 > 0);
   gameOver.call(stub);   // second death in the same frame — must be a no-op
   check('second _gameOver does NOT re-award Salvage (idempotent)', stub.meta.salvage === after1);
+}
+
+// --- _bankLoot converts carried Black Pearls to Salvage immediately. -----------
+{
+  const bankLoot = Game.prototype._bankLoot;
+  const stub = {
+    carried: 0, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
+    carryingRelic: false, relicBanked: false, relicsBanked: 0,
+    carriedPearls: 3, blackPearlsBanked: 0,
+    meta: { salvage: 0, unlocked: [], slots: 2, loadout: [] },
+    audio: { bank() {} },
+    puName: '', puCol: '', puT: 0,
+  };
+  bankLoot.call(stub);
+  check('_bankLoot: converts carriedPearls to Salvage at SALVAGE.perPearl',
+    stub.meta.salvage === 3 * SALVAGE.perPearl);
+  check('_bankLoot: clears carriedPearls after banking', stub.carriedPearls === 0);
+  check('_bankLoot: increments blackPearlsBanked run counter', stub.blackPearlsBanked === 3);
+}
+{
+  // Empty case: no pearls collected banks exactly as before — no Salvage change.
+  const bankLoot = Game.prototype._bankLoot;
+  const stub = {
+    carried: 100, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
+    carryingRelic: false, relicBanked: false, relicsBanked: 0,
+    carriedPearls: 0, blackPearlsBanked: 0,
+    meta: { salvage: 5, unlocked: [], slots: 2, loadout: [] },
+    audio: { bank() {} },
+    puName: '', puCol: '', puT: 0,
+  };
+  bankLoot.call(stub);
+  check('_bankLoot: no pearls carried leaves Salvage unchanged', stub.meta.salvage === 5);
+  check('_bankLoot: no pearls carried leaves blackPearlsBanked at 0', stub.blackPearlsBanked === 0);
 }
 
 console.log(`salvage: ${passed} passed, ${failed} failed`);
