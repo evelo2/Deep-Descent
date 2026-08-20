@@ -25,6 +25,7 @@ import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, d
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';
+import { makeStageRooms, mulberry32 } from './stage/chunkgen.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
@@ -1777,7 +1778,12 @@ export class Game {
     this._snapshotReef(entrance.x, entrance.y + STAGE.entranceR + 10);
     this._enteredEntrance = entrance;
     this.zone = 'stage';
-    this.stage = new Stage(entrance.theme);
+    const seed = (Math.random() * 0x100000000) >>> 0;
+    const rooms = makeStageRooms(entrance.theme, this.reef, mulberry32(seed));
+    // generated rooms carry no hand-authored decor (its coords are tied to the
+    // old room layouts); render reads theme.decor?.[i] || [] so an absent
+    // decor is safe.
+    this.stage = new Stage({ ...entrance.theme, rooms, decor: undefined });
     this.camX = 0; this.camY = 0;   // fixed single-screen camera in-stage
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
