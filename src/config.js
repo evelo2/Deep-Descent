@@ -312,7 +312,19 @@ export const ABYSS = { airMult: 1.5, entranceChance: 0.5, subCost: 400 };
 // the run with NO life lost (see game.js's _exitWhirlpool/_updateWhirlpool).
 // tierStep/rewards are Phase 2 (Salvage speed-break payouts); the rest is live
 // from Phase 1. shaftHalfW/obstacleR size the shaft and its debris.
-export const WHIRL = { entranceChance: 0.5, baseSpeed: 120, accel: 22, maxSpeed: 520, tierStep: 90, shaftHalfW: 220, obstacleR: 22 };
+// tierSalvageBase/tierScore drive the speed-break payout (see whirlpoolReward
+// below): each whirlSpeed tier crossed awards Salvage + score, once, in
+// game.js's _updateWhirlpool.
+export const WHIRL = { entranceChance: 0.5, baseSpeed: 120, accel: 22, maxSpeed: 520, tierStep: 90, shaftHalfW: 220, obstacleR: 22, tierSalvageBase: 12, tierScore: 250 };
+
+// Cumulative Salvage reward for having reached `tier` whirlSpeed breaks —
+// monotonic increasing, tier 0 → 0. Pure/exported so it's Node-testable.
+// The marginal award for crossing INTO a given tier is
+// whirlpoolReward(tier) - whirlpoolReward(tier - 1) = tierSalvageBase * tier,
+// so later tiers pay out more (the deeper/faster you survive, the bigger the
+// payout) — see game.js's _updateWhirlpool for where that marginal award is
+// actually granted, one tier at a time.
+export function whirlpoolReward(tier) { return Math.round(WHIRL.tierSalvageBase * tier * (tier + 1) / 2); }
 
 // Points awarded for spearing each creature type.
 export const KILL_POINTS = { Shark: 300, Octopus: 200, Puffer: 150, Jelly: 100, Eel: 250, Angler: 400, Piranha: 40, Stonefish: 180, Barracuda: 260, Moray: 240, ElectricRay: 320, Grouper: 300, Urchin: 120, GiantSquid: 900, Parasite: 60, Sentinel: 300 };
