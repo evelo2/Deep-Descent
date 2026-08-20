@@ -28,6 +28,7 @@ import { THEMES } from './stage/themes.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
+import { applyLoadout } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
@@ -133,6 +134,11 @@ export class Game {
     this.state = 'playing';
     this.score = 0; this.carried = 0; this.gold = 0; this.lives = GAME.startLives; this.atBell = null;
     this.airMax = AIR.max; this.air = this.airMax; this.multiFireT = 0;
+    // Salvage Log: apply the equipped loadout's relic flags for this run (resets
+    // per-run relic state first, so an empty loadout = no behavior change), then
+    // fold the Reinforced Lungs bonus into the base air tank.
+    applyLoadout(this, this.meta.loadout);
+    this.airMax = AIR.max + this._relicAirBonus; this.air = this.airMax;
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
     this.nextLifeScore = GAME.firstLifeScore; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
@@ -401,7 +407,7 @@ export class Game {
     // At a dive bell with an un-banked haul: banking is the first shop choice,
     // at the bell's depth-scaled rate (the boat always banks in full, elsewhere).
     if (this.shopWhere === 'bell' && this.carried > 0) {
-      const rate = this.atBell ? bellBankRate(this.atBell.y) : 1;
+      const rate = this._relicBellFull ? 1 : (this.atBell ? bellBankRate(this.atBell.y) : 1);
       const value = Math.round(this.carried * rate);
       items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank haul here — ${this.carried} → ${value}  (${Math.round(rate * 100)}%)`, cost: 0 });
     }
@@ -458,7 +464,7 @@ export class Game {
     const it = items[this.shopSel]; if (!it) return;
     if (it.kind === 'close') { this._closeShop(); return; }
     if (it.kind === 'bank') {
-      this._bankLoot(this.atBell ? bellBankRate(this.atBell.y) : 1);   // plays the bank sfx
+      this._bankLoot(this._relicBellFull ? 1 : (this.atBell ? bellBankRate(this.atBell.y) : 1));   // plays the bank sfx
       this.shopSel = 0;   // the bank row is gone now — reselect the top
       return;
     }
@@ -976,7 +982,7 @@ export class Game {
     this.aiming = !!threat; this.aimTarget = threat;
     if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; this._didAim = true; }   // hold position
 
-    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), this.speedT > 0 ? POWERUP.speedMult : 1);
+    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult);
 
     if (this.aiming) {
       // Swing the aim onto the target; fire only once lined up (no pre-shot).
@@ -1023,6 +1029,8 @@ export class Game {
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.
       if (atBoat && this.carried > 0) this._bankLoot();
+      // Pressure Plating recharges once you're back home at the boat.
+      if (atBoat && this._relicPlating) this._platingReady = true;
       // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
       if (atBoat && this.carried === 0 && this.canSail && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
       else this.dockHold = 0;
@@ -1247,6 +1255,14 @@ export class Game {
   }
 
   _hit() {
+    // Pressure Plating negates the first hit each dive (no life lost, no loot
+    // spill), then must recharge at the boat before it protects again.
+    if (this._platingReady) {
+      this._platingReady = false;
+      this.puName = 'PLATING HELD!'; this.puCol = PAL.air; this.puT = 1.2;
+      this.audio.select && this.audio.select();
+      return;
+    }
     this.diver.hit(); this.flash = 1; this.shake = 12;
     this.audio.hit();
     // A hit spills some of your un-banked haul — deep, loaded runs are now risky.
