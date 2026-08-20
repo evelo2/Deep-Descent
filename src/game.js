@@ -28,7 +28,7 @@ import { THEMES } from './stage/themes.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
-import { applyLoadout, RELICS } from './meta/relics.js';
+import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
@@ -145,6 +145,11 @@ export class Game {
     // Per-run Salvage milestone counters (Salvage Log payout at run end).
     this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
     this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
+    // Flash the equipped relics so the player sees their Salvage Log build is live.
+    if (this.meta.loadout.length) {
+      const names = this.meta.loadout.map((id) => (getRelic(id) ? getRelic(id).name : id)).join('  ·  ');
+      this.puName = `⚙ ${names}`; this.puCol = PAL.gateGlow; this.puT = 2.6;
+    }
     // Weapons: harpoon owned from the start; the rest are bought at the shop.
     // weapons[] is the equippable (owned) list in cycle order; weaponIdx cycles
     // it. weaponLevel tracks per-weapon upgrade tier (1..maxWeaponLevel).

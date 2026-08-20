@@ -11,6 +11,31 @@ the browser gives zero-install play, URL sharing, desktop + touch, and instant
 iteration. A Rust/native binary would add build + distribution friction for no
 gameplay gain. Vanilla ES modules — no build step, no dependencies.
 
+## Salvage Log — meta-progression (2026-08-19)
+A persistent layer so a run leaves something behind (roguelite "character that
+remains"), delivered through unlockable **relics** rather than stat inflation.
+- **Salvage** (`src/meta/salvage.js`, localStorage `deepdescent.salvage.v1`,
+  versioned + defaults on malformed): earned each run from milestones (deepest
+  reef, bosses felled, relics banked) — shown on the game-over payout — plus
+  **Black Pearls**, a rare deep collectible (`carriedPearls`, at risk like loot)
+  that banks to Salvage immediately at boat/bell.
+- **Relics** (`src/meta/relics.js`): ~10 utility-leaning passives applied at run
+  start via tiny flag hooks — Reinforced Lungs, Ballast Fins, Pressure Plating,
+  Bell Rigging, Sonar, Barbed Harpoon, Second Wind, Salvager's Eye, Prospector's
+  Chart, Magnet Core. Equipped into limited **loadout slots** (start 2, unlock to
+  5 with Salvage) — the power lever.
+- **Dry Dock** (`state='drydock'`, off the menu / game-over, R key or 🛠 button):
+  spend Salvage to unlock relics, equip into slots, buy slots. Only `src/meta`
+  state persists; in-run gold/lives/weapons/reef still reset each run, preserving
+  roguelike stakes. See `docs/superpowers/specs/2026-08-19-salvage-log-meta-progression-design.md`.
+
+## Economy & control changes (2026-08-19)
+Banking is now a decision (boat auto-banks full; a dive bell banks on demand at a
+depth-scaled discount — bells always ≥ ⅔ deep). Auto-aim is gated behind the
+Targeting upgrade. Piranha shoals share HP and die as a group. Platformer stages
+are forward-only (no back-out; complete or lose lives) with walkable ladder tops.
+Touch is multi-touch: one finger steers, a second fires.
+
 ## Preserved gameplay (faithful to 1983)
 - Dive from a surface **boat** down through the ocean.
 - Collect **pearls from giant clams** (open/close cycle — grab when open, get
