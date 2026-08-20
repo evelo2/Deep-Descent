@@ -5,6 +5,7 @@
 
 import { loadSalvage, saveSalvage, runPayout, defaultSalvage } from '../../src/meta/salvage.js';
 import { SALVAGE } from '../../src/config.js';
+import { Game } from '../../src/game.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -97,6 +98,23 @@ const store = (init = null) => {
   const s = store(JSON.stringify({ salvage: -50, unlocked: [], slots: 2, loadout: [] }));
   const r = loadSalvage(s);
   check('salvage sanity: negative salvage clamps to 0', r.salvage === 0);
+}
+
+// --- _gameOver is idempotent: a same-frame double death awards Salvage once. --
+{
+  const gameOver = Game.prototype._gameOver;
+  const stub = {
+    state: 'playing', score: 0, hi: 100, hiReef: 1,   // score<hi so no localStorage hi-write
+    reef: 3, bossesFelled: 1, relicsBanked: 0, blackPearlsBanked: 0,
+    meta: { salvage: 0, unlocked: [], slots: 2, loadout: [] },
+    lastPayout: null, newHi: false, audio: { gasp() {} },
+  };
+  gameOver.call(stub);
+  const after1 = stub.meta.salvage;
+  const expected = 3 * SALVAGE.perReef + 1 * SALVAGE.perBoss;   // deepestReef 3, 1 boss
+  check('first _gameOver awards the milestone payout', after1 === expected && after1 > 0);
+  gameOver.call(stub);   // second death in the same frame — must be a no-op
+  check('second _gameOver does NOT re-award Salvage (idempotent)', stub.meta.salvage === after1);
 }
 
 console.log(`salvage: ${passed} passed, ${failed} failed`);

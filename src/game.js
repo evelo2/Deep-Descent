@@ -1266,6 +1266,9 @@ export class Game {
   }
 
   _gameOver() {
+    if (this.state === 'gameover') return;   // re-entrancy guard: a same-frame
+    // second death (e.g. air runs out AND a creature touches you) must not award
+    // the Salvage payout twice — the payout is a non-idempotent side effect.
     this.state = 'gameover';
     this.audio.gasp();
     if (this.score > this.hi) {
