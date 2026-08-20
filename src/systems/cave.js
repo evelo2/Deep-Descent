@@ -9,7 +9,7 @@ const BIG = 9999;
 
 export class Cave {
   constructor(biome = 'reef') {
-    this.biome = biome;   // 'reef' (rock) | 'belly' (fleshy)
+    this.biome = biome;   // 'reef' (rock) | 'belly' (fleshy) | 'temple' (stone) | 'abyss' (dark trench)
     this.GW = Math.ceil(WW / CELL);
     this.GH = Math.ceil(WH / CELL);
     this.CARVE = CAVE.carve;
@@ -246,9 +246,9 @@ export class Cave {
     octx.clearRect(0, 0, W, H);
     const depthT = Math.min(1, camY / WH);
     const b = this.biome;
-    const C1 = b === 'belly' ? PAL.fleshRock : b === 'temple' ? PAL.templeRock : PAL.rock;
-    const C2 = b === 'belly' ? PAL.fleshDark : b === 'temple' ? PAL.templeDark : PAL.rockDark;
-    const RIMC = b === 'belly' ? PAL.membrane : b === 'temple' ? PAL.templeRim : PAL.rockLight;
+    const C1 = b === 'belly' ? PAL.fleshRock : b === 'temple' ? PAL.templeRock : b === 'abyss' ? PAL.abyssRock : PAL.rock;
+    const C2 = b === 'belly' ? PAL.fleshDark : b === 'temple' ? PAL.templeDark : b === 'abyss' ? PAL.abyssDark : PAL.rockDark;
+    const RIMC = b === 'belly' ? PAL.membrane : b === 'temple' ? PAL.templeRim : b === 'abyss' ? PAL.abyssRim : PAL.rockLight;
 
     // Body, darker with depth.
     const g = octx.createLinearGradient(0, 0, 0, H);

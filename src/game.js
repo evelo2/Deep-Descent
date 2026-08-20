@@ -20,8 +20,8 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE } from './config.js';
-import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawKey, drawDoor, drawColumn } from './render/props.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS } from './config.js';
+import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';
@@ -96,6 +96,16 @@ const PU_INFO = {
   life:      { name: 'EXTRA LIFE!',      col: PAL.diver },
 };
 
+// Pure: the effective air-drain multiplier for a given reef number + zone —
+// the reef's own depth penalty, times an extra 150% while on foot in the
+// abyss (Phase 1; the buyable mini-sub in Phase 2 negates the abyss factor).
+// A single source of truth shared by update()'s drain path and unit tests.
+export function oxygenMultiplier(reef, zone) {
+  let m = 1 + GAME.oxygenPenaltyPerReef * Math.min(reef - 1, GAME.oxygenPenaltyCap);
+  if (zone === 'abyss') m *= ABYSS.airMult;
+  return m;
+}
+
 export class Game {
   constructor(ctx, input, audio, particles, background) {
     this.ctx = ctx; this.input = input; this.audio = audio;
@@ -121,6 +131,7 @@ export class Game {
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.stageEntrances = []; this.stage = null; this._enteredEntrance = null;
+    this.abyssEntrance = null; this.abyssExit = null;
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
@@ -192,7 +203,7 @@ export class Game {
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
-    this.stageEntrances = [];
+    this.stageEntrances = []; this.abyssEntrance = null; this.abyssExit = null;
     const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
@@ -324,6 +335,18 @@ export class Game {
       }
     }
 
+    // The abyss entrance: an independent extra portal (like the stage
+    // entrances) that coexists with whatever special the reef rolled above —
+    // a deep trench off to the side, near the floor, gated by its own chance.
+    this.abyssEntrance = null;
+    {
+      const floorSpots = C.floors().filter((f) => f.y > WH * 0.55);
+      if (floorSpots.length && Math.random() < ABYSS.entranceChance) {
+        const af = floorSpots[(Math.random() * floorSpots.length) | 0];
+        this.abyssEntrance = { x: af.x, y: af.y - 50, r: 46 };
+      }
+    }
+
     // A power-up or two floating in the reef.
     this._makePowerups(1 + (Math.random() < 0.5 ? 1 : 0));
 
@@ -359,10 +382,13 @@ export class Game {
       if (this.templeGate) portals.push({ x: this.templeGate.x, y: this.templeGate.y, r: this.templeGate.r });
       for (const w of this.whales) { const m = w.mouthZone(); portals.push({ x: m.x, y: m.y, r: 70 }); }
       for (const e of this.stageEntrances) portals.push({ x: e.x, y: e.y, r: STAGE.entranceR });
+      if (this.abyssEntrance) portals.push({ x: this.abyssEntrance.x, y: this.abyssEntrance.y, r: this.abyssEntrance.r });
     } else if (this.zone === 'belly' && this.whaleExit) {
       portals.push({ x: this.whaleExit.x, y: this.whaleExit.y, r: this.whaleExit.r });
     } else if (this.zone === 'temple' && this.templeExit) {
       portals.push({ x: this.templeExit.x, y: this.templeExit.y, r: this.templeExit.r });
+    } else if (this.zone === 'abyss' && this.abyssExit) {
+      portals.push({ x: this.abyssExit.x, y: this.abyssExit.y, r: this.abyssExit.r });
     }
     if (!portals.length) return;
     const clear = 90;   // gap kept beyond the portal's own interaction radius
@@ -756,6 +782,49 @@ export class Game {
     this._makeCurrents(2);
     this._makePowerups(1);
     this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._clearCreaturesNearPortals();
+  }
+
+  // The deep-dive abyss — a dark, loot-rich trench off the reef. No boat/bell
+  // here: it's a risky in-and-out dive (air drains 150% on foot, see the drain
+  // path). Denser, higher-value treasure than the reef, plus extra Black
+  // Pearls — the reward for the risk. An ascent exit near the top returns
+  // you to the reef, mirroring _generateTemple.
+  _generateAbyss() {
+    const C = this.cave = new Cave('abyss');
+    this.shells = []; this.treasures = []; this.creatures = [];
+    this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
+    this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
+    this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
+    this.stageEntrances = []; this.abyssEntrance = null; this.door = null; this.key = null;
+    const value = (y) => 450 + Math.round((y / WH) * 650);   // richer than the reef — the abyss's whole point
+
+    // Dense loot: chests on every ledge, gems & coins thick in open water.
+    for (const f of spread(C.floors(), 14, 170)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
+    for (let i = 0; i < 40; i++) { const c = C.randomOpen(); if (c) this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.5 ? 'gem' : 'coin')); }
+    for (const w of spread(C.walls(), 6, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
+
+    // Extra Black Pearls — the abyss is the pearl-hunt hotspot, so it seeds
+    // more (2-3) than a normal reef's 1-2 (see the reef's pearlCount above).
+    const pearlCount = 2 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < pearlCount; i++) {
+      const pc = C.randomOpen();
+      if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
+    }
+
+    // Guardians — reuse the reef's deep-band roster (sharks, eels, anglers,
+    // morays…), a bit denser than the temple's since this is the riskiest zone.
+    for (let i = 0; i < 8; i++) {
+      const c = C.randomOpen(OPEN_BAND + 300); if (!c) continue;
+      const entry = pickFauna('deep', this.reef); if (!entry) continue;
+      const spawned = spawnCreature(entry, c.x, c.y, this.reef);
+      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+    }
+
+    this.flora = new Flora([]);
+    this._makeCurrents(3);   // a churning trench
+    this._makePowerups(1);
+    this.abyssExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
     this._clearCreaturesNearPortals();
   }
 
@@ -1167,7 +1236,8 @@ export class Game {
       if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
-      const oxyMult = 1 + GAME.oxygenPenaltyPerReef * Math.min(this.reef - 1, GAME.oxygenPenaltyCap);   // deeper reefs = less air
+      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty.
+      const oxyMult = oxygenMultiplier(this.reef, this.zone);
       this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
@@ -1235,9 +1305,13 @@ export class Game {
       for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
       for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._enterStage(e); this.input.endFrame(); return; } }
+      if (this.reentryT <= 0 && this.abyssEntrance && Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
       if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
+    } else if (this.zone === 'abyss' && this.abyssExit) {
+      const e = this.abyssExit;
+      if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitAbyss(); this.input.endFrame(); return; }
     } else if (this.zone === 'temple') {
       // Key: grab it to unlock the door and the vault.
       if (this.key && !this.key.taken && Math.hypot(d.x - this.key.x, d.y - this.key.y) < this.key.r + d.radius) {
@@ -1466,17 +1540,17 @@ export class Game {
   get canSail() { return this.relicBanked || this.reefBanked >= this.reefGoal; }
 
   _snapshotReef(returnX, returnY) {
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance'];
     const snap = { returnX, returnY };
     for (const k of keys) snap[k] = this[k];
     this.savedReef = snap;
   }
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
-    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances'];
+    const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
-    this.whaleExit = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
+    this.whaleExit = null; this.templeExit = null; this.abyssExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this._placeDiver(s.returnX, s.returnY, 0);
     this.savedReef = null; this.zoneFade = 1;
     this.reentryT = 1.5;   // grace so we don't immediately re-enter what we just left
@@ -1518,6 +1592,21 @@ export class Game {
   // Leaving the temple consumes its gate — you've plundered it, so it won't
   // re-trigger (and won't sit there re-swallowing you at the return point).
   _exitTemple() { this._restoreReef(); this.templeGate = null; }
+
+  // Dive the abyss entrance — a deep, dark trench off the reef. Mirrors
+  // _enterTemple: snapshot the reef, generate the abyss, drop the diver in
+  // just inside the exit so the way back up is right there.
+  _enterAbyss(entrance) {
+    this._snapshotReef(entrance.x, entrance.y + 50);
+    this.zone = 'abyss';
+    this._generateAbyss();
+    this._placeDiver(this.abyssExit.x, this.abyssExit.y + 90, 0);
+    this.shake = 8; this.zoneFade = 1;
+    this.audio.select();
+  }
+  // Leaving the abyss consumes its entrance — like the temple, a plundered
+  // special zone's portal is spent, so it won't re-trigger at the return spot.
+  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; }
 
   // Enter a themed platformer stage through a reef entrance. Snapshots the reef,
   // builds the stage, seals the air. Mirrors _enterWhale/_enterTemple.
@@ -1656,9 +1745,11 @@ export class Game {
       // Temple gate (reef) / door, key & exit (temple).
       if (this.templeGate) { ctx.save(); ctx.translate(this.templeGate.x - cx, this.templeGate.y - cy); drawTempleGate(ctx, this.t, this.templeGate.r); ctx.restore(); }
       for (const e of this.stageEntrances) e.draw(ctx, cx, cy, this.t);
+      if (this.abyssEntrance) { ctx.save(); ctx.translate(this.abyssEntrance.x - cx, this.abyssEntrance.y - cy); drawAbyssMaw(ctx, this.t, this.abyssEntrance.r); ctx.restore(); }
       if (this.door) { ctx.save(); ctx.translate(this.door.x + this.door.w / 2 - cx, this.door.y + this.door.h / 2 - cy); drawDoor(ctx, this.door.open, this.door.w, this.door.h); ctx.restore(); }
       if (this.key && !this.key.taken) { ctx.save(); ctx.translate(this.key.x - cx, this.key.y - cy); drawKey(ctx, this.t); ctx.restore(); }
       if (this.templeExit) { ctx.save(); ctx.translate(this.templeExit.x - cx, this.templeExit.y - cy); drawTempleGate(ctx, this.t, this.templeExit.r); ctx.restore(); }
+      if (this.abyssExit) { ctx.save(); ctx.translate(this.abyssExit.x - cx, this.abyssExit.y - cy); drawAbyssMaw(ctx, this.t, this.abyssExit.r); ctx.restore(); }
       if (this.relic && !this.relic.taken) this.relic.draw(ctx, cx, cy, this.t);
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
@@ -2015,6 +2106,8 @@ export class Game {
       const msg = this.hasKey ? '🔑 Vault unlocked! Grab the loot, then follow ▲ EXIT up to the gate to leave'
         : '🏛 Find the KEY for the vault — or follow ▲ EXIT up to the gate to leave now';
       this._text(msg, W / 2, H - 30, 15, this.hasKey ? PAL.key : PAL.gateGlow, 'center', 'middle');
+    } else if (this.zone === 'abyss') {
+      this._text('🌀 THE ABYSS — air draining fast on foot! Grab loot & pearls, then follow ▲ EXIT up to leave', W / 2, H - 30, 15, PAL.abyssRim, 'center', 'middle');
     } else if (this.boat.contains(this.diver)) {
       if (this.carried > 0) {
         this._text('◆ DOCKED — refilling air & banking treasure', W / 2, H - 30, 15, PAL.air, 'center', 'middle');
@@ -2047,13 +2140,17 @@ export class Game {
       }
       if (!hinted && this.templeGate && Math.hypot(this.diver.x - this.templeGate.x, this.diver.y - this.templeGate.y) < 320) {
         this._text('🏛 An ancient gate — swim in to enter the sunken temple', W / 2, H - 30, 14, PAL.gateGlow, 'center', 'middle');
+        hinted = true;
       }
       if (!hinted) for (const e of this.stageEntrances) {
         if (Math.hypot(this.diver.x - e.x, this.diver.y - e.y) < 260) {
           const msg = e.theme.entrance === 'wreck' ? '🚢 A great shipwreck — swim in to explore the decks' : '🕳 A dark cave mouth — swim in to enter the lair';
           this._text(msg, W / 2, H - 30, 14, PAL.gateGlow, 'center', 'middle');
-          break;
+          hinted = true; break;
         }
+      }
+      if (!hinted && this.abyssEntrance && Math.hypot(this.diver.x - this.abyssEntrance.x, this.diver.y - this.abyssEntrance.y) < 320) {
+        this._text('🌀 A crushing trench — dive in (air drains fast!)', W / 2, H - 30, 14, PAL.abyssRim, 'center', 'middle');
       }
     }
     // Shop hint at any station once loot is banked.
@@ -2080,6 +2177,7 @@ export class Game {
     // Point the way to the exit in the special zones (they're easy to lose).
     if (this.zone === 'temple' && this.templeExit) this._exitLocator(this.templeExit.x, this.templeExit.y, 'EXIT');
     else if (this.zone === 'belly' && this.whaleExit) this._exitLocator(this.whaleExit.x, this.whaleExit.y, 'ESCAPE');
+    else if (this.zone === 'abyss' && this.abyssExit) this._exitLocator(this.abyssExit.x, this.abyssExit.y, 'EXIT');
 
     // 1-UP flourish.
     if (this.oneUpT > 0) {
@@ -2200,7 +2298,7 @@ export class Game {
       }
     }
     // exit marker in the special zones (fixed, known location — always shown)
-    const exit = this.zone === 'temple' ? this.templeExit : this.zone === 'belly' ? this.whaleExit : null;
+    const exit = this.zone === 'temple' ? this.templeExit : this.zone === 'belly' ? this.whaleExit : this.zone === 'abyss' ? this.abyssExit : null;
     if (exit) {
       ctx.fillStyle = PAL.gateGlow;
       ctx.beginPath(); ctx.arc(wx(exit.x), wy(exit.y), 2.6, 0, Math.PI * 2); ctx.fill();

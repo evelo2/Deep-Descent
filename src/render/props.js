@@ -249,6 +249,38 @@ export function drawTempleGate(ctx, t, r = 46) {
   ctx.restore();
 }
 
+// The abyss maw — a jagged rock opening over a glowing violet trench. Used
+// for both the reef-side entrance and the abyss's own ascent exit, mirroring
+// how drawTempleGate serves the temple's gate and exit alike.
+export function drawAbyssMaw(ctx, t, r = 46) {
+  ctx.save();
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, r * 1.6);
+  glow.addColorStop(0, PAL.abyssRim); glow.addColorStop(0.5, 'rgba(92,63,174,0.35)'); glow.addColorStop(1, 'rgba(20,10,40,0)');
+  ctx.globalAlpha = 0.55 + Math.sin(t * 2.2) * 0.15;
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // dark maw
+  ctx.fillStyle = 'rgba(8,6,18,0.85)'; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.75, r, 0, 0, TAU); ctx.fill();
+  // jagged rock rim
+  ctx.fillStyle = PAL.abyssRock; ctx.strokeStyle = PAL.abyssDark; ctx.lineWidth = 2;
+  ctx.beginPath();
+  const teeth = 10;
+  for (let i = 0; i <= teeth; i++) {
+    const a = (i / teeth) * TAU;
+    const jag = i % 2 === 0 ? 1.14 : 0.98;
+    const rx = r * 0.75 * jag, ry = r * jag;
+    const x = Math.cos(a) * rx, y = Math.sin(a) * ry;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath(); ctx.stroke();
+  // swirl rings hinting at the drop
+  for (let i = 3; i >= 1; i--) {
+    ctx.strokeStyle = `rgba(185,140,255,${0.2 * i})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, r * (i / 3.6) * (0.9 + Math.sin(t * 1.8 + i) * 0.05), 0, TAU); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // A golden key.
 export function drawKey(ctx, t) {
   ctx.save();
