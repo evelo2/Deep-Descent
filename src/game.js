@@ -1256,8 +1256,12 @@ export class Game {
     // A charge detonates only on a *fresh* trigger: drop the lock the moment the
     // fire control is no longer held (covers both touch taps and key/mouse holds).
     if (!this.input.fireHeld()) this._chargeLock = false;
-    const tapped = this.input.consumeTapFire();
-    if (!graced && tapped) this.fire();
+    // The steering finger is now steer-only: a brief steer touch used to read as
+    // a "tap fire" and loose off accidental harpoons. Consume the tap so it
+    // can't leak into another state, but DON'T fire — firing on touch is the
+    // 🎯/FIRE button (tap = shot, hold = aim) and the second finger. (No effect
+    // on keyboard/mouse/gamepad, which never set the tap-fire flag.)
+    this.input.consumeTapFire();
     this.fireCd = Math.max(0, this.fireCd - dt);
     // Speargun burst: fire the queued shots out over a few frames.
     if (this.burst > 0) {
@@ -2350,7 +2354,9 @@ export class Game {
         btns.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
       }
       if (this.state === 'playing') {
-        btns.push({ id: 'aim', x: W - 124, y: H - 74, w: 52, h: 44 });   // hold to aim
+        // Primary FIRE button — enlarged for thumb reach at the bottom-right,
+        // left of the weapon/flare/torch column. Tap = shot, hold = aim.
+        btns.push({ id: 'aim', x: W - 142, y: H - 96, w: 72, h: 64 });
         if (this.weapons.length > 1) btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
         if (this.flares > 0) btns.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
         if (this.hasTorch) btns.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
@@ -2422,8 +2428,9 @@ export class Game {
     } else if (b.id === 'drydock') {
       this._text('🛠 DRY DOCK', cx, cy + 1, 13, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'aim') {
-      this._text('🎯', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
-      this._text('HOLD', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
+      this._text('🎯', cx, cy - 10, 22, PAL.hudText, 'center', 'middle');
+      this._text('FIRE', cx, cy + 12, 12, PAL.harpoonTip, 'center', 'middle', true);
+      this._text('hold = aim', cx, cy + 25, 8, 'rgba(180,215,240,0.7)', 'center', 'middle');
     } else if (b.id === 'flare') {
       this._text('🔥', cx, cy - 4, 17, PAL.hudText, 'center', 'middle');
       this._text('FLARE', cx, cy + 12, 8, 'rgba(255,190,140,0.9)', 'center', 'middle', true);
