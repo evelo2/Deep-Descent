@@ -244,6 +244,39 @@ export function drawTreasure(ctx, kind, t) {
   ctx.restore();
 }
 
+// Black Pearl — the rare, deep-seeded meta-currency collectible. Dark orb with
+// a slow iridescent sheen sweeping across it, clearly distinct from the coin/
+// gem/chest loot (which stays in-run value; this one banks to Salvage).
+export function drawBlackPearl(ctx, t) {
+  ctx.save();
+  glow(ctx, 20, PAL.blackPearlSheen, 0.22 + Math.sin(t * 2.2) * 0.1);
+  const r = 9 + Math.sin(t * 2) * 0.6;
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 0.5, 0, 0, r);
+  g.addColorStop(0, '#4a3f66');
+  g.addColorStop(0.55, PAL.blackPearl);
+  g.addColorStop(1, '#0c0916');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+  // iridescent sheen band, sweeping slowly across the surface
+  const sa = t * 0.8;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.clip();
+  ctx.rotate(sa);
+  const sheen = ctx.createLinearGradient(-r, 0, r, 0);
+  sheen.addColorStop(0, 'rgba(185,140,255,0)');
+  sheen.addColorStop(0.5, 'rgba(185,140,255,0.5)');
+  sheen.addColorStop(1, 'rgba(97,220,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(-r, -r, r * 2, r * 2);
+  ctx.restore();
+  // bright highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.arc(-r * 0.32, -r * 0.32, r * 0.22, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(185,140,255,0.5)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
 // Anglerfish — deep-sea hunter with a bioluminescent lure on a stalk.
 export function drawAngler(ctx, t, hurt) {
   ctx.save();
