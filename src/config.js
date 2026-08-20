@@ -1,15 +1,34 @@
 // Tuning constants + palette for Deep Descent.
-// The playfield is a fixed logical size; the canvas scales to fit the viewport.
+// The playfield has a fixed 900×600 "core"; the VISIBLE logical viewport flexes
+// to the device aspect so the canvas fills the screen (see computeViewport).
 
 export const WORLD = {
-  W: 900,          // viewport (screen) width — logical units
-  H: 600,          // viewport (screen) height
+  W: 900,          // viewport (screen) width — logical units (live; see computeViewport)
+  H: 600,          // viewport (screen) height (live)
   WW: 2760,        // full world width  (scrolls in x)
   WH: 4200,        // full world height (scrolls in y)
   SURFACE: 90,     // y of the sea surface line
   OPEN_BAND: 250,  // fully-open sea water down to this y; caves begin below
   CELL: 60,        // cave grid cell size
 };
+
+// The 900×600 core is the design reference; the visible logical viewport is
+// extended along the LONG axis to match the device aspect so the canvas fills
+// the screen instead of letterboxing inside a fixed 3:2 box. The core is always
+// fully visible; extension is clamped so the view never gets extreme (an extreme
+// portrait phone keeps gentle top/bottom bars rather than an absurdly tall view).
+// Pure + DOM-free so it's unit-testable; main.js feeds it window.inner{Width,Height}.
+export const VIEWPORT = { coreW: 900, coreH: 600, maxW: 1500, maxH: 1050 };
+export function computeViewport(vw, vh, cfg = VIEWPORT) {
+  const { coreW, coreH, maxW, maxH } = cfg;
+  const aspect = vw / vh;
+  if (aspect >= coreW / coreH) {
+    // wider than 3:2 → keep the core height, extend the width to fill
+    return { w: Math.round(Math.min(Math.max(coreH * aspect, coreW), maxW)), h: coreH };
+  }
+  // taller than 3:2 → keep the core width, extend the height to fill
+  return { w: coreW, h: Math.round(Math.min(Math.max(coreW / aspect, coreH), maxH)) };
+}
 
 export const DIVER = {
   accel: 640,      // px/s^2 thrust from input
