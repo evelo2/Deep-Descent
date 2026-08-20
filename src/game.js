@@ -417,10 +417,12 @@ export class Game {
     const items = [];
     // At a dive bell with an un-banked haul: banking is the first shop choice,
     // at the bell's depth-scaled rate (the boat always banks in full, elsewhere).
-    if (this.shopWhere === 'bell' && this.carried > 0) {
+    if (this.shopWhere === 'bell' && (this.carried > 0 || this.carriedPearls > 0)) {
       const rate = this._relicBellFull ? 1 : (this.atBell ? bellBankRate(this.atBell.y) : 1);
       const value = Math.round(this.carried * rate);
-      items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank haul here — ${this.carried} → ${value}  (${Math.round(rate * 100)}%)`, cost: 0 });
+      const pearlBit = this.carriedPearls > 0 ? `  + ${this.carriedPearls}◦ pearls` : '';
+      const lootBit = this.carried > 0 ? `${this.carried} → ${value}  (${Math.round(rate * 100)}%)` : 'Black Pearls';
+      items.push({ kind: 'bank', id: 'bank', label: `🔔 Bank here — ${lootBit}${pearlBit}`, cost: 0 });
     }
     for (const w of WEAPON_ORDER) {
       const info = WEAPON_INFO[w];
@@ -1147,7 +1149,7 @@ export class Game {
       // The boat is home — it auto-banks the haul at full value. A dive bell only
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.
-      if (atBoat && this.carried > 0) this._bankLoot();
+      if (atBoat && (this.carried > 0 || this.carriedPearls > 0)) this._bankLoot();
       // Pressure Plating recharges once you're back home at the boat.
       if (atBoat && this._relicPlating) this._platingReady = true;
       // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
@@ -1257,7 +1259,7 @@ export class Game {
     // Extra lives at escalating score thresholds, capped so they can't snowball.
     while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
 
-    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.diver.atSurface) this._win();
+    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.carriedPearls === 0 && this.diver.atSurface) this._win();
 
     this.input.endFrame();
   }
