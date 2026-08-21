@@ -2887,11 +2887,26 @@ export class Game {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(C.mini, mx, my, mw, mh);
     const wx = (x) => mx + (x / WW) * mw, wy = (y) => my + (y / WH) * mh;
+    // Has the diver revealed the cell at a world point? The Prospector's Chart
+    // reveals a wider radius, so it naturally surfaces more vents/bells below.
+    const revealed = (x, y) => !!C.seen[Math.floor(y / CELL) * C.GW + Math.floor(x / CELL)];
+    // Air vents — the map's most useful landmark: a cyan ring at every DISCOVERED
+    // vent, in every cave zone, so you can always find your way back to air.
+    for (const v of this.vents) {
+      if (!revealed(v.x, v.y)) continue;
+      ctx.strokeStyle = PAL.air; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(wx(v.x), wy(v.y), 2.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(95,224,200,0.5)'; ctx.beginPath(); ctx.arc(wx(v.x), wy(v.y), 1, 0, Math.PI * 2); ctx.fill();
+    }
     // boat + relic markers (reef only, relic once seen)
     if (this.zone === 'reef') {
       ctx.fillStyle = '#e07a4a'; ctx.fillRect(wx(this.boat.x) - 2, wy(WORLD.SURFACE) - 1, 4, 3);
-      // dive bells (fixed, known checkpoints)
-      for (const b of this.bells) { ctx.fillStyle = PAL.bell; ctx.beginPath(); ctx.arc(wx(b.x), wy(b.y), 2.2, 0, Math.PI * 2); ctx.fill(); }
+      // dive bells — banking checkpoints, shown once DISCOVERED (their area revealed)
+      for (const b of this.bells) {
+        if (!revealed(b.x, b.y)) continue;
+        ctx.fillStyle = PAL.bell; ctx.beginPath(); ctx.arc(wx(b.x), wy(b.y), 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#04121f'; ctx.lineWidth = 1; ctx.stroke();
+      }
       if (this.relic && !this.relic.taken) {
         const rgx = Math.floor(this.relic.x / CELL), rgy = Math.floor(this.relic.y / CELL);
         if (C.seen[rgy * C.GW + rgx]) { ctx.fillStyle = PAL.key; ctx.beginPath(); ctx.arc(wx(this.relic.x), wy(this.relic.y), 2.6, 0, Math.PI * 2); ctx.fill(); }
