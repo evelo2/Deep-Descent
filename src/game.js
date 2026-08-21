@@ -1363,13 +1363,20 @@ export class Game {
       const rate = AIM.aimRateBase + AIM.aimRatePerLevel * (this.aimLevel - AIM.unlockLevel);
       this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
       this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
-    } else {
-      this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);   // keep synced for a smooth engage
+    } else if (!(released && this._prevAiming)) {
+      // Sync the reticle to facing — EXCEPT on the frame we release out of an
+      // aim, so the aimed angle survives to fire at the target below.
+      this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);
     }
-    // Release fires one shot along the reticle (aimed if it locked, or a snap
-    // shot in the facing direction for a quick tap). fire()'s own cooldown gates
-    // the fire RATE. `!graced` swallows the press that entered the zone/game.
-    if (released && !graced) this.fire();
+    // Release fires one shot ALONG THE RETICLE. diver.update() re-points the
+    // diver's aim at its travel each frame, so we overwrite aimX/aimY from
+    // aimAngle right before firing — otherwise a released aim shot flies straight
+    // instead of at the target. `!graced` swallows the zone/game-entry press.
+    if (released && !graced) {
+      this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
+      this.fire();
+    }
+    this._prevAiming = this.aiming;
     this._prevHolding = holding;
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
