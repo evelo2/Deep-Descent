@@ -3,7 +3,7 @@
 import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL } from './config.js';
 import { Diver } from './entities/diver.js';
 import { Boat } from './entities/boat.js';
-import { Clam, Chest } from './entities/shell.js';
+import { Clam, Chest, GiantClam } from './entities/shell.js';
 import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
 import { spawnCreature, pickFauna } from './entities/spawn.js';
@@ -246,6 +246,12 @@ export class Game {
     for (const f of spread(C.floors(), 34, 150)) {
       if (f.y > pearlMinDepth && Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
       else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
+    }
+    // A rare deep GIANT clam with a golden pearl — a trophy worth score+gold and
+    // a chunk of Salvage. At most one, only in the deep, well clear of others.
+    if (Math.random() < SHELL.giantChance) {
+      const deep = C.floors(WH * SHELL.giantMinDepthFrac);
+      if (deep.length) { const g = deep[(Math.random() * deep.length) | 0]; this.shells.push(new GiantClam(g.x, g.y - SHELL.giantRadius * 0.35)); }
     }
     // Scattered coins & gems drift in open water.
     for (let i = 0; i < 40; i++) {
@@ -1586,9 +1592,15 @@ export class Game {
     // Shells (clams & chests): grab loot while open, get bitten when they shut.
     for (const s of this.shells) {
       if (s.canTakeLoot(d)) {
-        this.carried += s.takeLoot();
-        this.particles.sparkle(s.x, s.y, s.lootColor, 24);
-        this.audio.pearl();
+        const val = s.takeLoot(); this.carried += val;
+        this.particles.sparkle(s.x, s.y, s.lootColor, s.salvage ? 42 : 24);
+        if (s.salvage) {   // the giant clam's golden pearl: score+gold AND Salvage
+          this.meta.salvage += s.salvage; saveSalvage(this.meta);
+          this.puName = `GOLDEN PEARL · +${val} · +${s.salvage}⚙`; this.puCol = PAL.gold; this.puT = 2.6;
+          this.audio.blackpearl();
+        } else {
+          this.audio.pearl();
+        }
       } else if (s.bites(d) && d.invuln <= 0) {
         this._hit();
       }
