@@ -19,16 +19,14 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
   const s = { reef: 1, zone: 'whirlpool' };
   Game.prototype._generateWhirlpool.call(s);
   check('a whirlpool shaft is defined', !!s.whirlShaft && typeof s.whirlShaft.cx === 'number' && typeof s.whirlShaft.halfW === 'number');
+  check('the shaft is endless (no fixed bottom)', s.whirlShaft.bottom === undefined);
   check('a bail-out exit is placed', !!s.whirlExit && typeof s.whirlExit.x === 'number' && typeof s.whirlExit.y === 'number');
-  check('obstacles are seeded down the shaft', Array.isArray(s.whirlObstacles) && s.whirlObstacles.length > 0);
-  check('every obstacle sits within the shaft half-width', s.whirlObstacles.every((o) => Math.abs(o.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
-  check('the drop-in area (just below the exit) stays clear of obstacles', s.whirlObstacles.every((o) => o.y > s.whirlShaft.top + 200));
-  check('obstacles get denser with depth (second half has more than the first)', (() => {
-    const mid = (s.whirlShaft.top + s.whirlShaft.bottom) / 2;
-    const shallow = s.whirlObstacles.filter((o) => o.y < mid).length;
-    const deep = s.whirlObstacles.filter((o) => o.y >= mid).length;
-    return deep > shallow;
-  })());
+  // Endless model: nothing is seeded at generate — obstacles/collectibles stream
+  // in at run time (see _updateWhirlpool). Generate just arms the cursors.
+  check('obstacles/bubbles/treasures start EMPTY (streamed at run time)',
+    s.whirlObstacles.length === 0 && s.whirlBubbles.length === 0 && s.whirlTreasures.length === 0);
+  check('the density timer + streaming cursors are armed',
+    s.whirlT === 0 && s.whirlNextObstacleY > s.whirlShaft.top && s.whirlNextBubbleY > s.whirlShaft.top && s.whirlNextTreasureY > s.whirlShaft.top);
   check('reef-only special-zone fields are cleared while generating the whirlpool',
     s.templeGate === null && s.whirlEntrance === null && s.door === null && s.key === null && s.abyssEntrance === null);
 }
@@ -89,17 +87,23 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
     tiers.slice(1).every((n) => whirlpoolReward(n) - whirlpoolReward(n - 1) > 0));
 }
 
-// --- Phase 2 smoke test: _generateWhirlpool() also seeds collectibles down
-// the shaft — bubbles for air, loot + at least one Black Pearl for the
-// Salvage payoff cashed on exit (see _updateWhirlpool/_bankLoot). ---
+// --- Endless streaming: _whirlSpawnRow starts LOW-density (1 obstacle at
+// ramp 0) and adds more toward the peak; obstacles are random among the three
+// kinds (landmine/jellyfish/starfish) and stay within the shaft. ---
 {
   const s = { reef: 1, zone: 'whirlpool' };
   Game.prototype._generateWhirlpool.call(s);
-  check('bubbles are seeded down the shaft', Array.isArray(s.whirlBubbles) && s.whirlBubbles.length > 0);
-  check('loot/pearls are seeded down the shaft', Array.isArray(s.whirlTreasures) && s.whirlTreasures.length > 0);
-  check('at least one Black Pearl is seeded', s.whirlTreasures.some((tr) => tr.pearl));
-  check('every bubble sits within the shaft half-width', s.whirlBubbles.every((b) => Math.abs(b.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
-  check('every treasure sits within the shaft half-width', s.whirlTreasures.every((tr) => Math.abs(tr.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
+  Game.prototype._whirlSpawnRow.call(s, 1000, 0);
+  check('low starting density: a row at ramp 0 spawns exactly 1 obstacle', s.whirlObstacles.length === 1);
+  check('the first obstacle has a valid kind', ['mine', 'jelly', 'star'].includes(s.whirlObstacles[0].kind));
+
+  s.whirlObstacles = [];
+  for (let i = 0; i < 40; i++) Game.prototype._whirlSpawnRow.call(s, 1000 + i * 120, 1);
+  check('peak density spawns more obstacles per row than the start', s.whirlObstacles.length > 40);
+  check('every obstacle has a valid kind (mine/jelly/star)', s.whirlObstacles.every((o) => ['mine', 'jelly', 'star'].includes(o.kind)));
+  check('every obstacle sits within the shaft half-width', s.whirlObstacles.every((o) => Math.abs(o.x - s.whirlShaft.cx) <= s.whirlShaft.halfW));
+  const kinds = new Set(s.whirlObstacles.map((o) => o.kind));
+  check('all three obstacle kinds appear across a large sample', kinds.has('mine') && kinds.has('jelly') && kinds.has('star'));
 }
 
 // --- Phase 2: _exitWhirlpool resets the new zone-local state (whirlTier,
