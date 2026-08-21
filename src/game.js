@@ -1081,10 +1081,10 @@ export class Game {
       return;
     }
     if (this.fireCd > 0) return;
-    if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }   // out of harpoons
-    if (id === 'speargun' && this.speargunAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; } // out of spears
-    if (id === 'charge' && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.gasp(); return; }     // out of charges
-    if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.gasp(); return; }   // battery flat
+    if (id === 'harpoon' && this.harpoonAmmo <= 0) { this.fireCd = 0.2; this.audio.click(); this._ammoFlash = 0.7; return; }   // out of harpoons
+    if (id === 'speargun' && this.speargunAmmo <= 0) { this.fireCd = 0.2; this.audio.click(); this._ammoFlash = 0.7; return; } // out of spears
+    if (id === 'charge' && this.chargeAmmo <= 0) { this.fireCd = 0.2; this.audio.click(); this._ammoFlash = 0.7; return; }     // out of charges
+    if (id === 'shock' && this.shockBattery < SHOCK.cost) { this.fireCd = 0.2; this.audio.click(); this._ammoFlash = 0.7; return; }   // battery flat
     const fireMult = Math.pow(AIM.fireMultPerLevel, this.aimLevel);   // Targeting System → faster fire
     this.fireCd = Math.max(info.minCd || 0, info.cd * (1 - 0.08 * (lvl - 1)) * fireMult);
     switch (id) {
@@ -1319,6 +1319,16 @@ export class Game {
     this.speedT = Math.max(0, this.speedT - dt);
     this.magnetT = Math.max(0, this.magnetT - dt);
     this.shockT = Math.max(0, this.shockT - dt);
+    this._ammoFlash = Math.max(0, (this._ammoFlash || 0) - dt);   // out-of-ammo indicator blink
+    // Ominous heartbeat when air runs low (< 25%): the interval tightens the
+    // lower it gets, so the pulse quickens as you approach suffocation.
+    const airFrac = this.air / this.airMax;
+    if (airFrac < 0.25 && airFrac > 0) {
+      this._heartT = (this._heartT || 0) - dt;
+      if (this._heartT <= 0) { this.audio.heartbeat(); this._heartT = 0.55 + airFrac * 3.0; }   // ~1.3s at 25% → ~0.55s near empty
+    } else {
+      this._heartT = 0;
+    }
     if (this.torchOn) {
       // Torch burns the shared battery; it cuts out (and stays off) when flat.
       this.shockBattery = Math.max(0, this.shockBattery - TORCH.drain * dt);
@@ -1459,6 +1469,17 @@ export class Game {
           const speed = 130 + (maxPull - 130) * (1 - dist / R);
           const step = Math.min(dist, speed * dt);
           tr.x += (dx / dist) * step; tr.baseY += (dy / dist) * step;
+        }
+      }
+      // The magnet also reaches into OPEN CHESTS within range and pulls their
+      // loot to you — but NOT clams: their pearls you still earn by swimming in.
+      for (const s of this.shells) {
+        if (s instanceof Clam) continue;
+        if (!s.hasLoot || s.open <= SHELL.openGrab) continue;
+        if (Math.hypot(dv.x - s.x, dv.y - s.y) < R) {
+          this.carried += s.takeLoot();
+          this.particles.sparkle(s.x, s.y, s.lootColor, 20);
+          this.audio.pearl();
         }
       }
     }
@@ -2571,14 +2592,17 @@ export class Game {
 
     // Gold purse + harpoon ammo (a resource — the net gun is your unlimited fallback).
     this._text(`💰 ${this.gold}`, bx + 8, by + bh + 46, 15, PAL.gold, 'left', 'middle', true);
+    // Out-of-ammo alarm: a fast bright blink on the empty weapon's counter when
+    // the player just tried to fire it dry (paired with the audio.click).
+    const deadFlash = this._ammoFlash > 0 && Math.floor(this.t * 12) % 2 === 0;
     const lowAmmo = this.harpoonAmmo <= 3;
     this._text(`➤ ${this.harpoonAmmo}/${this.harpoonMax}`, bx + 104, by + bh + 46, 14,
-      lowAmmo && Math.floor(this.t * 5) % 2 === 0 ? PAL.danger : (lowAmmo ? '#ff9a6b' : '#cfe0ee'), 'left', 'middle', true);
+      this.harpoonAmmo <= 0 && deadFlash ? '#ff3b30' : (lowAmmo && Math.floor(this.t * 5) % 2 === 0 ? PAL.danger : (lowAmmo ? '#ff9a6b' : '#cfe0ee')), 'left', 'middle', true);
     if (this.owned.has('charge'))
-      this._text(`💣 ${this.chargeAmmo}/${this.chargeMax}`, bx + 184, by + bh + 46, 14, this.chargeAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
+      this._text(`💣 ${this.chargeAmmo}/${this.chargeMax}`, bx + 184, by + bh + 46, 14, this.chargeAmmo <= 0 && deadFlash ? '#ff3b30' : (this.chargeAmmo <= 0 ? '#ff9a6b' : '#cfe0ee'), 'left', 'middle', true);
     this._text(`🔥 ${this.flares}`, bx + 264, by + bh + 46, 14, this.flares <= 0 ? '#ff9a6b' : '#ffb27a', 'left', 'middle', true);
     if (this.owned.has('speargun'))
-      this._text(`⋙ ${this.speargunAmmo}/${SPEARGUN.ammoMax}`, bx + 344, by + bh + 46, 14, this.speargunAmmo <= 0 ? '#ff9a6b' : '#cfe0ee', 'left', 'middle', true);
+      this._text(`⋙ ${this.speargunAmmo}/${SPEARGUN.ammoMax}`, bx + 344, by + bh + 46, 14, this.speargunAmmo <= 0 && deadFlash ? '#ff3b30' : (this.speargunAmmo <= 0 ? '#ff9a6b' : '#cfe0ee'), 'left', 'middle', true);
 
     // Shared battery gauge (shown when you own the shock rod or the torch) —
     // drains on zaps / torchlight, recharges slowly while idle.

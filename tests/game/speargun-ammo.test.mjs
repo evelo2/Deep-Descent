@@ -16,7 +16,7 @@ function makeStub(ammo, lvl = 1) {
     armedCharge: null,
     speargunAmmo: ammo, harpoonAmmo: 0, chargeAmmo: 0, shockBattery: 0,
     aimLevel: 0, burst: 0, burstT: 99,
-    audio: { fire() {}, gasp() {} },
+    audio: { fire() {}, gasp() {}, click() {} },
   };
 }
 const fire = Game.prototype.fire;
