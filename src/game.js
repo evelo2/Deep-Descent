@@ -1714,7 +1714,11 @@ export class Game {
     this._snapshotReef(m.x + whale.facing * 34, m.y);
     this.zone = 'belly';
     this._generateBelly();
-    const c = this.cave.randomOpen(WH * 0.55) || { x: WW / 2, y: WH * 0.6 };
+    // Spawn at the throat exit (top of the main shaft), like the temple/abyss:
+    // full air with the exit right there, then descend into the belly for loot
+    // and climb back to leave. The old deep-random spawn could strand the diver
+    // in a pocket with no reachable air vent — a suffocation soft-lock.
+    const c = this.cave.nearestOpen(this.whaleExit.x, this.whaleExit.y + 90) || { x: WW / 2, y: OPEN_BAND + 60 };
     this._placeDiver(c.x, c.y, 0);
     this.shake = 10; this.zoneFade = 1;
     this.audio.gasp();
