@@ -67,6 +67,7 @@ export const GAME = {
   oxygenPenaltyPerReef: 0.15,
   oxygenPenaltyCap: 8,
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
+  exitAirRefillFrac: 0.5,    // leaving ANY special level tops up air by up to this fraction of the tank
 };
 
 // 2D cave system. A grid is carved by "miner" agents into tunnels, drop-offs
@@ -419,6 +420,8 @@ export const ABYSS = {
 // drag), but a higher top speed than the nimble diver. Plus its headlights.
 export const SUB = {
   accel: 300, drag: 0.9, buoyancy: 4, maxSpeed: 340,
+  armor: 4,             // contact hits the hull absorbs before it's breached;
+                        // the next hit after that EJECTS the diver (trench haul lost)
   ambient: 104,         // bright glow radius around the hull (the core lit bubble)
   halo: 260,            // soft outer halo — light bleeds this far into the dark, gently
   glowWarm: 0.20,       // strength of the warm additive bloom around the hull
