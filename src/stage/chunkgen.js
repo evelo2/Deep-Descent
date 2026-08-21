@@ -249,3 +249,66 @@ export function makeStageRooms(theme, reef, rng, count = theme.rooms.length) {
   }
   return rooms;
 }
+
+// --- procedural decor -------------------------------------------------
+// Non-interactive props for generated rooms. Physics never reads decor (the
+// contract in themes.js): each item lives in an empty '.' cell, so placement
+// can never regress solvability. We still anchor every prop to nearby solid so
+// it reads as belonging to the room, keep clear of the ladder spine, and never
+// clutter the bottom exit-walk. Pure/seeded — decor is stable for a given seed.
+//
+// Props grouped by how they attach: 'floor' sits on a '#' below, 'ceiling'
+// hangs from a '#' above (chains/lanterns), 'wall' mounts beside a '#'.
+const DECOR_ANCHOR = {
+  crate: 'floor', cannon: 'floor', wheel: 'floor', compass: 'floor', timber: 'floor', mast: 'floor',
+  porthole: 'wall', conduit: 'wall',
+  chain: 'ceiling', lantern: 'ceiling',
+};
+// Per-theme prop palettes (keys map to drawDecor cases in render/stageart.js).
+const DECOR_BY_THEME = {
+  ship: ['crate', 'porthole', 'cannon', 'compass', 'wheel', 'chain', 'lantern'],
+  lair: ['timber', 'conduit', 'chain', 'lantern'],
+};
+
+const isSolid = (rows, r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS && rows[r][c] === '#';
+const isEmpty = (rows, r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS && rows[r][c] === '.';
+
+function anchorOk(rows, anchor, r, c) {
+  if (anchor === 'floor') return isSolid(rows, r + 1, c);
+  if (anchor === 'ceiling') return isSolid(rows, r - 1, c) && isEmpty(rows, r + 1, c);
+  if (anchor === 'wall') return isSolid(rows, r, c - 1) || isSolid(rows, r, c + 1);
+  return true;
+}
+// Keep decor off the ladder spine and its rungs so it never hides the climb.
+function nearLadder(rows, r, c) {
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    const rr = r + dr, cc = c + dc;
+    if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && rows[rr][cc] === 'H') return true;
+  }
+  return false;
+}
+
+// One decor array per room, in the same order as `rooms`. `range` is [min,max]
+// props attempted per room. Returns e.g. [[{k,c,r},…], …].
+export function makeStageDecor(theme, rooms, rng, range = [3, 6]) {
+  const kinds = DECOR_BY_THEME[theme && theme.key] || DECOR_BY_THEME.ship;
+  const lo = range[0], hi = range[1];
+  return rooms.map((rows) => {
+    const items = [], used = new Set();
+    const target = randInt(rng, lo, hi);
+    for (let tries = 0; tries < 240 && items.length < target; tries++) {
+      const k = kinds[Math.floor(rng() * kinds.length)];
+      const anchor = DECOR_ANCHOR[k];
+      const r = randInt(rng, 1, ROWS - 2), c = randInt(rng, 1, COLS - 2);
+      const key = r * COLS + c;
+      if (used.has(key)) continue;
+      if (!isEmpty(rows, r, c)) continue;
+      if (anchor === 'floor' && r >= ROWS - 2) continue;   // spare the exit-walk floor
+      if (nearLadder(rows, r, c)) continue;
+      if (!anchorOk(rows, anchor, r, c)) continue;
+      used.add(key);
+      items.push({ k, c, r });
+    }
+    return items;
+  });
+}
