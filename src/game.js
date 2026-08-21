@@ -1277,6 +1277,8 @@ export class Game {
     if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
     if (this.input.pressed('weaponPrev')) this._cycleWeapon(-1);
     this.weaponSwapT = Math.max(0, this.weaponSwapT - dt);
+    // Ease the weapon carousel toward the selected slot (the slide animation).
+    this._carouselPos = (this._carouselPos ?? this.weaponIdx) + (this.weaponIdx - (this._carouselPos ?? this.weaponIdx)) * Math.min(1, dt * 12);
     // Light a flare (illuminates dark caves).
     if ((this.input.pressed('flare') || this.input.consumeButton('flare')) && this.flares > 0 && this.flareT <= 0.2) {
       this.flares -= 1; this.flareT = FLARE.duration; this.audio.pickup(); this.particles.sparkle(this.diver.x, this.diver.y, '#ff7a3c', 24);
@@ -2301,6 +2303,7 @@ export class Game {
     ctx.restore();
 
     if (this.state === 'playing' || this.state === 'paused') this._hud();
+    if ((this.state === 'playing' || this.state === 'paused') && this.weaponSwapT > 0) this._weaponCarousel();
     if (this.state === 'menu') this._menu();
     if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
     if (this.state === 'shop') this._shopScreen();
@@ -2756,6 +2759,40 @@ export class Game {
 
     this._minimap();
     if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
+    ctx.restore();
+  }
+
+  // Weapon carousel: on a swap, a row of weapon chips (glyph graphics) slides in
+  // at the bottom and animates so the selected weapon centres and enlarges. Only
+  // shown briefly (weaponSwapT); the slide is eased via _carouselPos in update().
+  _weaponCarousel() {
+    const n = this.weapons.length;
+    if (n <= 1) return;
+    const ctx = this.ctx;
+    const alpha = Math.min(1, this.weaponSwapT * 2.2);   // ease out as the timer runs down
+    const spacing = 74, chipW = 58, chipH = 58;
+    const cx = W / 2, cy = H - 124;   // sit above the bottom hint strip
+    const pos = this._carouselPos ?? this.weaponIdx;
+    ctx.save();
+    // soft backdrop strip
+    const panelW = Math.min(W * 0.92, spacing * n + 80);
+    ctx.globalAlpha = alpha * 0.5; ctx.fillStyle = 'rgba(4,12,22,0.7)';
+    ctx.beginPath(); ctx.roundRect(cx - panelW / 2, cy - chipH * 0.78, panelW, chipH * 1.5, 16); ctx.fill();
+    for (let i = 0; i < n; i++) {
+      const dx = (i - pos) * spacing, x = cx + dx;
+      if (Math.abs(dx) > W / 2 + chipW) continue;
+      const sel = i === this.weaponIdx;
+      const s = sel ? 1.15 : 0.84;
+      const near = 1 - Math.min(1, Math.abs(dx) / (spacing * 2.4)) * 0.55;
+      ctx.globalAlpha = alpha * near;
+      const hw = chipW * s / 2, hh = chipH * s / 2;
+      ctx.fillStyle = sel ? 'rgba(28,76,116,0.95)' : 'rgba(10,26,40,0.8)';
+      ctx.strokeStyle = sel ? PAL.air : 'rgba(120,180,240,0.4)'; ctx.lineWidth = sel ? 2.6 : 1.2;
+      ctx.beginPath(); ctx.roundRect(x - hw, cy - hh, hw * 2, hh * 2, 12); ctx.fill(); ctx.stroke();
+      this._text(WEAPON_INFO[this.weapons[i]].glyph, x, cy - 2, sel ? 30 : 22, sel ? PAL.harpoonTip : '#cfe0ee', 'center', 'middle');
+    }
+    ctx.globalAlpha = alpha;
+    this._text(WEAPON_INFO[this.weapon].name, cx, cy + chipH * 0.74, 13, PAL.air, 'center', 'middle', true);
     ctx.restore();
   }
 
