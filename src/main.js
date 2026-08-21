@@ -56,8 +56,13 @@ window.addEventListener('keydown', (e) => {
     if (game.state !== 'playing') action();
   }
 });
-canvas.addEventListener('mousedown', () => {
+canvas.addEventListener('mousedown', (e) => {
   audio.ensure(); audio.resume();
+  // Click an on-screen UI button (menu/help/shop/dry-dock/scheme) — the game
+  // consumes it next frame. Only fall back to the start/confirm action when the
+  // click missed every button, so clicking HELP no longer just starts the game.
+  const hit = input.hitButtonAt(e.clientX, e.clientY);
+  if (hit) { input.pressButton(hit); return; }
   if (game.state !== 'playing') game.onAction();
 });
 // Touch: tap-to-fire is detected inside Input; a tap on the menus starts the game.
