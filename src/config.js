@@ -297,8 +297,8 @@ export const AIM = {
   // from FIRE SPEED (how often you can shoot, fireMultPerLevel below). You hold
   // to aim and RELEASE to fire, so the swing rate sets how long you must hold to
   // lock, while fireMultPerLevel sets the shot cooldown.
-  aimRateBase: 0.9,       // rad/s the reticle swings at level 1 (deliberately slow — hold to lock)
-  aimRatePerLevel: 0.9,   // extra rad/s per Targeting level above unlock (upgrades track much faster)
+  aimRateBase: 1.5,       // rad/s the reticle swings at level 1 (slower than the old 2.3 — hold to lock)
+  aimRatePerLevel: 0.7,   // extra rad/s per Targeting level above unlock (L2 2.2, L3 2.9)
   fireMultPerLevel: 0.78, // fire COOLDOWN ×= this per targeting level (faster fire) — independent of aim
   lockTol: 0.17,          // radians within which the reticle reads as 'locked' (visual cue)
   range: 720,             // only auto-target threats within this range
