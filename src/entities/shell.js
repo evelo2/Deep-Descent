@@ -16,6 +16,8 @@ class Shell {
     this.phaseOffset = Math.random();
     this.open = 0; this.prevOpen = 0; this.shake = 0;
     this.hasLoot = true; this.emptyT = 0;
+    this.facing = 1;   // +1 opens/faces right; -1 mirror. Set by placement so a
+                       // shell against a side wall opens toward the open water.
   }
 
   update(dt, t, emitBig) {
@@ -44,7 +46,7 @@ export class Clam extends Shell {
   draw(ctx, camX, camY, t) {
     ctx.save();
     ctx.translate(this.x - camX, this.y - camY);
-    ctx.scale(this.scale, this.scale);
+    ctx.scale(this.scale * this.facing, this.scale);   // flip to open away from a wall
     drawClam(ctx, this.open, this.hasLoot, t, this.shake);
     ctx.restore();
   }

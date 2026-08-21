@@ -69,6 +69,7 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
     // drives the actual generation logic, not a reimplementation of it.
     _makeCurrents: Game.prototype._makeCurrents,
     _makePowerups: Game.prototype._makePowerups,
+    _orientShells: Game.prototype._orientShells,
     _clearCreaturesNearPortals: Game.prototype._clearCreaturesNearPortals,
   };
   Game.prototype._generateAbyss.call(s);
