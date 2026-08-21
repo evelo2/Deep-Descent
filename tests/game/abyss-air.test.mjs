@@ -73,7 +73,7 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
     _clearCreaturesNearPortals: Game.prototype._clearCreaturesNearPortals,
   };
   Game.prototype._generateAbyss.call(s);
-  check('an abyss exit portal is placed', !!s.abyssExit && typeof s.abyssExit.x === 'number' && typeof s.abyssExit.y === 'number');
+  check('abyss exit hatches are placed', Array.isArray(s.abyssExits) && s.abyssExits.length > 0 && typeof s.abyssExits[0].x === 'number' && typeof s.abyssExits[0].bonus === 'number');
   check('the abyss seeds treasure', Array.isArray(s.treasures) && s.treasures.length > 0);
   const pearlCount = s.treasures.filter((t) => t.kind === 'blackpearl').length;
   check('the abyss seeds 2-3 extra Black Pearls (denser than a normal reef)', pearlCount >= 2 && pearlCount <= 3);

@@ -360,7 +360,26 @@ export const STAGE = {
 // airMult: air drains this much faster while on foot in the abyss (Phase 1;
 // the buyable mini-sub in Phase 2 negates it). subCost: gold price of the
 // mini-sub (Phase 2). entranceChance: odds a given reef spawns an entrance.
-export const ABYSS = { airMult: 1.5, entranceChance: 0.5, subCost: 400 };
+// "The Deep" — a dark trench you enter by boarding a submarine that rests on a
+// deep reef floor (free to board — the sub IS the entrance). Inside you pilot the
+// sub (headlights only) from a random safe spawn to one of several exit hatches;
+// deeper exits pay a bigger Salvage bonus. airMult kept for legacy zones.
+export const ABYSS = {
+  airMult: 1.5, entranceChance: 0.5,
+  entranceMinDepthFrac: 0.6,   // the sub only appears on floors below this depth
+  exits: 3,                    // exit hatches to find (deeper ones pay more)
+  exitBonusBase: 15,           // Salvage per exit, scaled by its depth fraction
+};
+
+// Sub piloting physics: heavy — slow to accelerate, lots of glide/inertia (low
+// drag), but a higher top speed than the nimble diver. Plus its headlights.
+export const SUB = {
+  accel: 300, drag: 0.9, buoyancy: 4, maxSpeed: 340,
+  ambient: 92,          // small glow radius around the hull
+  coneRange: 360,       // headlight throw
+  coneHalfAngle: 0.5,   // headlight cone half-angle (rad)
+  darkAlpha: 0.95,      // how black the unlit trench is
+};
 
 // The whirlpool — a survival sweep off the reef, reached through its own maw
 // (independent roll, coexists with the abyss/temple/stage specials). The
