@@ -130,6 +130,10 @@ export const SHELL = {
   chestRadius: 36, chestCycle: 6.5,
   openGrab: 0.55,    // openness above which loot can be grabbed
   biteShut: 0.30,    // openness below which a closing shell bites
+  // Rare deep GIANT clam with a golden pearl — a trophy worth score+gold AND a
+  // chunk of Salvage. ~one per deep reef (giantChance), only below giantMinDepthFrac.
+  giantRadius: 64, giantValue: 1600, giantSalvage: 40,
+  giantChance: 0.4, giantMinDepthFrac: 0.62,
 };
 
 // Big collectible air bubbles released when a shell opens.
