@@ -64,18 +64,18 @@ export function drawDiver(ctx, t, kick, hurt, aimA = null) {
 // Giant clam — a scallop whose two shells HINGE at the back-left edge and open
 // like a mouth (not a middle pivot). `open` 0..1; `shake` rattles it while a
 // bubble forms just before it opens. Pearl sits inside, revealed when open.
-export function drawClam(ctx, open, hasPearl, t, shake = 0) {
+export function drawClam(ctx, open, hasPearl, t, shake = 0, pearlCol = PAL.pearl, pearlGlow = PAL.glow) {
   ctx.save();
   if (shake > 0.02) ctx.translate(Math.sin(t * 38) * 1.4 * shake, Math.sin(t * 51) * 0.7 * shake);
   const hinge = -26;              // hinge at the back-left corner
   const gape = open * 1.0;        // opening angle of each half
 
-  // pearl inside, revealed as it opens
+  // pearl inside, revealed as it opens (golden for a giant clam via pearlCol)
   if (hasPearl && open > 0.12) {
     ctx.save(); ctx.translate(hinge + 20, -1);
-    glow(ctx, 15, PAL.glow, (0.3 + Math.sin(t * 3) * 0.1) * Math.min(1, open * 1.6));
+    glow(ctx, 15, pearlGlow, (0.3 + Math.sin(t * 3) * 0.1) * Math.min(1, open * 1.6));
     const pg = ctx.createRadialGradient(-3, -3, 1, 0, 0, 9);
-    pg.addColorStop(0, '#ffffff'); pg.addColorStop(1, PAL.pearl);
+    pg.addColorStop(0, '#ffffff'); pg.addColorStop(1, pearlCol);
     ctx.globalAlpha = Math.min(1, open * 1.6);
     ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
     ctx.restore();

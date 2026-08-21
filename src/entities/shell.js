@@ -52,6 +52,27 @@ export class Clam extends Shell {
   }
 }
 
+// A rare, oversized deep clam holding a GOLDEN pearl — worth a big score/gold
+// haul AND a chunk of Salvage (awarded in Game's shell-collection when `salvage`
+// is set). Same open/close/bite rhythm as a clam, just bigger and gilded.
+export class GiantClam extends Clam {
+  constructor(x, y) {
+    super(x, y);
+    this.radius = SHELL.giantRadius;
+    this.scale = SHELL.giantRadius / 26;   // drawClam is authored ~26px half-wide
+    this.lootValue = SHELL.giantValue;     // score/gold on grab
+    this.lootColor = PAL.gold;
+    this.salvage = SHELL.giantSalvage;     // meta Salvage on grab (Game reads shell.salvage)
+  }
+  draw(ctx, camX, camY, t) {
+    ctx.save();
+    ctx.translate(this.x - camX, this.y - camY);
+    ctx.scale(this.scale * this.facing, this.scale);
+    drawClam(ctx, this.open, this.hasLoot, t, this.shake, PAL.gold, PAL.coralGold || PAL.gold);
+    ctx.restore();
+  }
+}
+
 export class Chest extends Shell {
   constructor(x, y, value) {
     super(x, y, SHELL.chestRadius, SHELL.chestCycle);
