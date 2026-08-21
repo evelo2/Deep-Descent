@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -155,7 +155,7 @@ export class Game {
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.stageEntrances = []; this.stage = null; this._enteredEntrance = null;
-    this.abyssEntrance = null; this.abyssExit = null;
+    this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null; this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = [];
     this.whirlSpeed = 0; this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
     this.whirlBubbles = []; this.whirlTreasures = [];
@@ -242,7 +242,7 @@ export class Game {
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
-    this.stageEntrances = []; this.abyssEntrance = null; this.abyssExit = null;
+    this.stageEntrances = []; this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null; this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = [];
     this.whirlSpeed = 0; this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
     this.whirlBubbles = []; this.whirlTreasures = [];
@@ -389,12 +389,21 @@ export class Game {
     // The abyss entrance: an independent extra portal (like the stage
     // entrances) that coexists with whatever special the reef rolled above —
     // a deep trench off to the side, near the floor, gated by its own chance.
+    // A submarine resting on a DEEP floor is the entrance to The Deep — board it
+    // to pilot it down the dark trench. Placed in a guaranteed-OPEN spot clear of
+    // clams/chests, so it's never buried in a wall or on a biting shell.
     this.abyssEntrance = null;
     {
-      const floorSpots = C.floors().filter((f) => f.y > WH * 0.55);
-      if (floorSpots.length && Math.random() < ABYSS.entranceChance) {
-        const af = floorSpots[(Math.random() * floorSpots.length) | 0];
-        this.abyssEntrance = { x: af.x, y: af.y - 50, r: 46 };
+      const deep = C.floors(WH * ABYSS.entranceMinDepthFrac);
+      if (deep.length && Math.random() < ABYSS.entranceChance) {
+        for (let tries = 0; tries < 40; tries++) {
+          const f = deep[(Math.random() * deep.length) | 0];
+          const spot = C.nearestOpen(f.x, f.y - 40) || { x: f.x, y: f.y - 40 };
+          if (!C.isSolid(spot.x, spot.y) && this.shells.every((s) => Math.hypot(s.x - spot.x, s.y - spot.y) > s.radius + 74)) {
+            this.abyssEntrance = { x: spot.x, y: spot.y, r: 46 };
+            break;
+          }
+        }
       }
     }
 
@@ -467,8 +476,8 @@ export class Game {
       portals.push({ x: this.whaleExit.x, y: this.whaleExit.y, r: this.whaleExit.r });
     } else if (this.zone === 'temple' && this.templeExit) {
       portals.push({ x: this.templeExit.x, y: this.templeExit.y, r: this.templeExit.r });
-    } else if (this.zone === 'abyss' && this.abyssExit) {
-      portals.push({ x: this.abyssExit.x, y: this.abyssExit.y, r: this.abyssExit.r });
+    } else if (this.zone === 'abyss') {
+      for (const e of this.abyssExits) portals.push({ x: e.x, y: e.y, r: e.r });
     }
     if (!portals.length) return;
     const clear = 90;   // gap kept beyond the portal's own interaction radius
@@ -905,7 +914,14 @@ export class Game {
     this.flora = new Flora([]);
     this._makeCurrents(3);   // a churning trench
     this._makePowerups(1);
-    this.abyssExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    // Several exit hatches scattered through the trench — deeper ones pay a
+    // bigger Salvage bonus on the way out (see the exit check in update()).
+    this.abyssExits = [];
+    for (const spot of spread(C.chambers(OPEN_BAND + 200), ABYSS.exits, 700)) {
+      const depthFrac = spot.y / WH;
+      this.abyssExits.push({ x: spot.x, y: spot.y, r: 40, bonus: Math.round(ABYSS.exitBonusBase * (0.6 + depthFrac)) });
+    }
+    if (!this.abyssExits.length) { const c = C.randomOpen(WH * 0.5) || { x: WW / 2, y: WH * 0.5 }; this.abyssExits.push({ x: c.x, y: c.y, r: 40, bonus: ABYSS.exitBonusBase }); }
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -1372,7 +1388,7 @@ export class Game {
     this.aiming = !!threat; this.aimTarget = threat;
     if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position while aiming
 
-    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult);
+    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult, this.inSub ? SUB : DIVER);
 
     if (this.aiming) {
       // Swing the reticle onto the target — but do NOT fire here; release fires.
@@ -1527,21 +1543,9 @@ export class Game {
       for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
       for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._enterStage(e); this.input.endFrame(); return; } }
-      if (this.reentryT <= 0 && this.abyssEntrance) {
-        const distMaw = Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y);
-        const buyRing = distMaw < this.abyssEntrance.r + d.radius + 90;   // wider ring: buy here without diving
-        const atMaw = distMaw < this.abyssEntrance.r + d.radius;          // inner zone: swim in to dive
-        // Buy the mini-sub anywhere in the outer ring (once per reef), so you can
-        // purchase before you reach the dive-in zone. The SHOP control here doesn't
-        // conflict with the boat/bell shop, which only opens `atStation`.
-        if (buyRing && !this.hasSub && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
-          if (this.gold >= ABYSS.subCost) {
-            this.gold -= ABYSS.subCost; this.hasSub = true;
-            this.puName = 'MINI-SUB READY'; this.puCol = PAL.gateGlow; this.puT = 1.8; this.audio.bank();
-          } else { this.puName = `NEED ⚙${ABYSS.subCost}`; this.puCol = PAL.danger; this.puT = 1.0; this.audio.gasp(); }
-          this.input.endFrame(); return;   // consume the press so we don't also dive this frame
-        }
-        if (atMaw) { this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return; }
+      if (this.reentryT <= 0 && this.abyssEntrance &&
+          Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) {
+        this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return;   // board the sub (free)
       }
       if (this.reentryT <= 0 && this.whirlEntrance && Math.hypot(d.x - this.whirlEntrance.x, d.y - this.whirlEntrance.y) < this.whirlEntrance.r + d.radius) {
         this._enterWhirlpool(this.whirlEntrance); this.input.endFrame(); return;
@@ -1549,9 +1553,13 @@ export class Game {
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
       if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
-    } else if (this.zone === 'abyss' && this.abyssExit) {
-      const e = this.abyssExit;
-      if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitAbyss(); this.input.endFrame(); return; }
+    } else if (this.zone === 'abyss') {
+      for (const e of this.abyssExits) {
+        if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) {
+          if (e.bonus) { this.meta.salvage += e.bonus; saveSalvage(this.meta); this.puName = `SURFACED · +${e.bonus}⚙`; this.puCol = PAL.gateGlow; this.puT = 2.2; }
+          this._exitAbyss(); this.input.endFrame(); return;
+        }
+      }
     } else if (this.zone === 'temple') {
       // Key: grab it to unlock the door and the vault.
       if (this.key && !this.key.taken && Math.hypot(d.x - this.key.x, d.y - this.key.y) < this.key.r + d.radius) {
@@ -1817,7 +1825,7 @@ export class Game {
     const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance', 'whirlEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
-    this.whaleExit = null; this.templeExit = null; this.abyssExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
+    this.whaleExit = null; this.templeExit = null; this.abyssExits = []; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = []; this.whirlSpeed = 0; this.whirlScore = 0;
     this.whirlTier = 0; this.whirlSalvageEarned = 0; this.whirlBubbles = []; this.whirlTreasures = [];
     this._placeDiver(s.returnX, s.returnY, 0);
@@ -1873,18 +1881,25 @@ export class Game {
     this._snapshotReef(entrance.x, entrance.y + 50);
     this.zone = 'abyss';
     this._generateAbyss();
-    this._placeDiver(this.abyssExit.x, this.abyssExit.y + 90, 0);
-    // Board the sub if owned — negates the air penalty (oxygenMultiplier) and
-    // absorbs one hit (_hit) this dive; otherwise you're diving on foot.
-    this.inSub = this.hasSub;
-    this._subHull = this.inSub;
+    // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
+    // trench by headlight to find one of the exit hatches. inSub is always on
+    // here now (the sub IS the entrance); _subHull absorbs the first contact hit.
+    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: WH * 0.62 };
+    this._placeDiver(c.x, c.y, 0);
+    this.inSub = true; this._subHull = true;
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
   }
   // Leaving the abyss consumes its entrance — like the temple, a plundered
   // special zone's portal is spent, so it won't re-trigger at the return spot.
   // Disembarking the sub happens here too — ascending out is how you get off.
-  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; }
+  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; this._subHull = false; }
+
+  _nearestExit() {
+    let best = null, bd = Infinity;
+    for (const e of this.abyssExits) { const dd = Math.hypot(this.diver.x - e.x, this.diver.y - e.y); if (dd < bd) { bd = dd; best = e; } }
+    return best;
+  }
 
   // Dive the whirlpool maw — a survival sweep down an accelerating shaft.
   // Mirrors _enterAbyss: snapshot the reef, generate the shaft, drop the
@@ -2210,24 +2225,20 @@ export class Game {
       if (this.templeGate) { ctx.save(); ctx.translate(this.templeGate.x - cx, this.templeGate.y - cy); drawTempleGate(ctx, this.t, this.templeGate.r); ctx.restore(); }
       for (const e of this.stageEntrances) e.draw(ctx, cx, cy, this.t);
       if (this.abyssEntrance) {
-        ctx.save(); ctx.translate(this.abyssEntrance.x - cx, this.abyssEntrance.y - cy); drawAbyssMaw(ctx, this.t, this.abyssEntrance.r); ctx.restore();
-        // A visible mini-sub parked beside the maw — BUY it (press shop) before
-        // diving, or you plunge on foot at 150% air. Bobs gently; dimmed and
-        // priced when you can't yet afford it. Hidden once bought (it's yours).
-        if (!this.hasSub) {
-          const afford = this.gold >= ABYSS.subCost;
-          const sx = this.abyssEntrance.x - cx - (this.abyssEntrance.r + 48);
-          const sy = this.abyssEntrance.y - cy - 8 + Math.sin(this.t * 2) * 3;
-          ctx.save(); ctx.translate(sx, sy); ctx.scale(2, 2);
-          ctx.globalAlpha = afford ? 1 : 0.5; drawSub(ctx, 0, 0, 1); ctx.restore();
-          this._text(`⚙${ABYSS.subCost}`, sx, sy - 26, 13, afford ? PAL.gold : PAL.danger, 'center', 'middle', true);
-        }
+        // The entrance IS a submarine resting on the deep floor — swim up to it to
+        // board and pilot it down into The Deep. Bobs gently; a soft glow marks it.
+        const sx = this.abyssEntrance.x - cx, sy = this.abyssEntrance.y - cy + Math.sin(this.t * 2) * 3;
+        ctx.save();
+        const gl = ctx.createRadialGradient(sx, sy, 6, sx, sy, 64);
+        gl.addColorStop(0, 'rgba(120,225,255,0.22)'); gl.addColorStop(1, 'rgba(120,225,255,0)');
+        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(sx, sy, 64, 0, Math.PI * 2); ctx.fill();
+        ctx.translate(sx, sy); ctx.scale(2.1, 2.1); drawSub(ctx, 0, 0, 1); ctx.restore();
       }
       if (this.whirlEntrance) { ctx.save(); ctx.translate(this.whirlEntrance.x - cx, this.whirlEntrance.y - cy); drawWhirlMaw(ctx, this.t, this.whirlEntrance.r); ctx.restore(); }
       if (this.door) { ctx.save(); ctx.translate(this.door.x + this.door.w / 2 - cx, this.door.y + this.door.h / 2 - cy); drawDoor(ctx, this.door.open, this.door.w, this.door.h); ctx.restore(); }
       if (this.key && !this.key.taken) { ctx.save(); ctx.translate(this.key.x - cx, this.key.y - cy); drawKey(ctx, this.t); ctx.restore(); }
       if (this.templeExit) { ctx.save(); ctx.translate(this.templeExit.x - cx, this.templeExit.y - cy); drawTempleGate(ctx, this.t, this.templeExit.r); ctx.restore(); }
-      if (this.abyssExit) { ctx.save(); ctx.translate(this.abyssExit.x - cx, this.abyssExit.y - cy); drawAbyssMaw(ctx, this.t, this.abyssExit.r); ctx.restore(); }
+      for (const e of this.abyssExits) { ctx.save(); ctx.translate(e.x - cx, e.y - cy); drawAbyssMaw(ctx, this.t, e.r); ctx.restore(); }
       if (this.relic && !this.relic.taken) this.relic.draw(ctx, cx, cy, this.t);
       for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
       for (const h of this.harpoons) h.draw(ctx, cx, cy);
@@ -2255,6 +2266,7 @@ export class Game {
     // The mini-sub hull, drawn behind the diver so it reads as piloting it.
     if (this.state !== 'menu' && this.inSub) drawSub(ctx, this.diver.x - cx, this.diver.y - cy, this.diver.facing);
     if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
+    if (this.zone === 'abyss') this._subLighting(ctx, cx, cy);   // dark trench + headlights
     // Shield bubble (blinks as it runs out).
     if (this.shieldT > 0 && this.state !== 'menu') {
       const a = this.shieldT < 1.5 && Math.floor(this.shieldT * 8) % 2 ? 0.15 : 0.42;
@@ -2761,10 +2773,7 @@ export class Game {
         }
       }
       if (!hinted && this.abyssEntrance && Math.hypot(this.diver.x - this.abyssEntrance.x, this.diver.y - this.abyssEntrance.y) < 320) {
-        const msg = this.hasSub
-          ? '🛥 Sub ready — dive the maw to descend safely.'
-          : `🛥 Buy the MINI-SUB (⚙${ABYSS.subCost}g) — press ${this._key('shop')} — or dive on foot (air burns fast!)`;
-        this._text(msg, W / 2, H - 30, 14, PAL.abyssRim, 'center', 'middle');
+        this._text('🛥 A submarine — swim into it to board and dive The Deep (a dark trench of rich loot)', W / 2, H - 30, 14, PAL.abyssRim, 'center', 'middle');
         hinted = true;
       }
       if (!hinted && this.whirlEntrance && Math.hypot(this.diver.x - this.whirlEntrance.x, this.diver.y - this.whirlEntrance.y) < 320) {
@@ -2795,7 +2804,7 @@ export class Game {
     // Point the way to the exit in the special zones (they're easy to lose).
     if (this.zone === 'temple' && this.templeExit) this._exitLocator(this.templeExit.x, this.templeExit.y, 'EXIT');
     else if (this.zone === 'belly' && this.whaleExit) this._exitLocator(this.whaleExit.x, this.whaleExit.y, 'ESCAPE');
-    else if (this.zone === 'abyss' && this.abyssExit) this._exitLocator(this.abyssExit.x, this.abyssExit.y, 'EXIT');
+    else if (this.zone === 'abyss' && this.abyssExits.length) { const e = this._nearestExit(); if (e) this._exitLocator(e.x, e.y, 'EXIT'); }
 
     // 1-UP flourish.
     if (this.oneUpT > 0) {
@@ -2917,6 +2926,44 @@ export class Game {
     ctx.restore();
   }
 
+  // The Deep's lighting: a near-black overlay everywhere, with the sub's
+  // headlights (a forward cone in its heading + a downward cone) and a small
+  // ambient hull glow punched out — so you only see what the sub lights. Built
+  // on an offscreen mask (fill black, erase the lit shapes, composite over).
+  _subLighting(ctx, cx, cy) {
+    const dc = this._subDark || (this._subDark = document.createElement('canvas'));
+    if (dc.width !== W || dc.height !== H) { dc.width = W; dc.height = H; }
+    const g = dc.getContext('2d');
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = `rgba(1,3,9,${SUB.darkAlpha})`; g.fillRect(0, 0, W, H);
+    const sx = this.diver.x - cx, sy = this.diver.y - cy;
+    g.globalCompositeOperation = 'destination-out';
+    const amb = g.createRadialGradient(sx, sy, 3, sx, sy, SUB.ambient);
+    amb.addColorStop(0, 'rgba(0,0,0,1)'); amb.addColorStop(0.55, 'rgba(0,0,0,0.85)'); amb.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = amb; g.beginPath(); g.arc(sx, sy, SUB.ambient, 0, Math.PI * 2); g.fill();
+    const moving = Math.hypot(this.diver.vx, this.diver.vy) > 12;
+    const fwd = moving ? Math.atan2(this.diver.vy, this.diver.vx) : (this.diver.facing >= 0 ? 0 : Math.PI);
+    const cone = (ang, range, half) => {
+      g.save();
+      g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, range, ang - half, ang + half); g.closePath(); g.clip();
+      const rg = g.createRadialGradient(sx, sy, 4, sx, sy, range);
+      rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(0.72, 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = rg; g.fillRect(sx - range, sy - range, range * 2, range * 2);
+      g.restore();
+    };
+    cone(fwd, SUB.coneRange, SUB.coneHalfAngle);                       // forward beam
+    cone(Math.PI / 2, SUB.coneRange * 0.7, SUB.coneHalfAngle * 0.9);   // downward beam
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(dc, 0, 0);
+    // A faint warm tint inside the forward beam so it reads as headlights.
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, SUB.coneRange, fwd - SUB.coneHalfAngle, fwd + SUB.coneHalfAngle); ctx.closePath();
+    const wg = ctx.createRadialGradient(sx, sy, 6, sx, sy, SUB.coneRange);
+    wg.addColorStop(0, 'rgba(200,225,255,0.10)'); wg.addColorStop(1, 'rgba(200,225,255,0)');
+    ctx.fillStyle = wg; ctx.fill(); ctx.restore();
+  }
+
   // Fog-of-war minimap in the top-right corner.
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
@@ -2964,9 +3011,11 @@ export class Game {
         if (C.seen[rgy * C.GW + rgx]) { ctx.fillStyle = PAL.key; ctx.beginPath(); ctx.arc(wx(this.relic.x), wy(this.relic.y), 2.6, 0, Math.PI * 2); ctx.fill(); }
       }
     }
-    // exit marker in the special zones (fixed, known location — always shown)
-    const exit = this.zone === 'temple' ? this.templeExit : this.zone === 'belly' ? this.whaleExit : this.zone === 'abyss' ? this.abyssExit : null;
-    if (exit) {
+    // exit markers in the special zones (fixed, known locations — always shown)
+    const exits = this.zone === 'temple' ? (this.templeExit ? [this.templeExit] : [])
+      : this.zone === 'belly' ? (this.whaleExit ? [this.whaleExit] : [])
+      : this.zone === 'abyss' ? this.abyssExits : [];
+    for (const exit of exits) {
       ctx.fillStyle = PAL.gateGlow;
       ctx.beginPath(); ctx.arc(wx(exit.x), wy(exit.y), 2.6, 0, Math.PI * 2); ctx.fill();
     }
