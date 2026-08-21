@@ -119,6 +119,11 @@ export class Input {
     return false;
   }
 
+  // Mouse support for on-screen buttons: which button (if any) is under a client
+  // point, and register a click on it (the game consumes it via consumeButton).
+  hitButtonAt(clientX, clientY) { return this._hitButton(clientX, clientY); }
+  pressButton(id) { this._btnHits.add(id); }
+
   _any(action) { return KEYMAP[action].some((c) => this.keys.has(c)); }
 
   // Poll the first connected gamepad. Called once per frame by the game.

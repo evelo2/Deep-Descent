@@ -2494,59 +2494,67 @@ export class Game {
   // rects to Input for hit-testing. Only ever populated on touch devices, so
   // desktop/gamepad play is untouched. Rects are fixed; visibility is by state.
   _syncTouchButtons() {
-    const btns = [];
+    // In-play, on-screen controls — TOUCH ONLY (desktop/gamepad use the keys).
+    // These are the only buttons _touchBtn draws; menu / shop / dry-dock / help
+    // SCREEN buttons draw their own chrome, so they live in `screen` below and
+    // are added for hit-testing only (which is what makes them mouse-clickable).
+    const gameplay = [];
     if (this.input.isTouch) {
       if (this.state === 'playing' || this.state === 'paused') {
-        btns.push({ id: 'pause', x: 300, y: 8, w: 46, h: 34 });
-        btns.push({ id: 'mute', x: 352, y: 8, w: 46, h: 34 });
+        gameplay.push({ id: 'pause', x: 300, y: 8, w: 46, h: 34 });
+        gameplay.push({ id: 'mute', x: 352, y: 8, w: 46, h: 34 });
       }
       if (this.state === 'playing' && this.zone === 'reef' &&
           this.boat.contains(this.diver) && this.canSail && this.carried === 0) {
-        btns.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
+        gameplay.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
       }
       if (this.state === 'playing') {
         // Primary FIRE button — enlarged for thumb reach at the bottom-right,
         // left of the weapon/flare/torch column. Tap = shot, hold = aim.
-        btns.push({ id: 'aim', x: W - 142, y: H - 96, w: 72, h: 64 });
-        if (this.weapons.length > 1) btns.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
-        if (this.flares > 0) btns.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
-        if (this.hasTorch) btns.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
+        gameplay.push({ id: 'aim', x: W - 142, y: H - 96, w: 72, h: 64 });
+        if (this.weapons.length > 1) gameplay.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
+        if (this.flares > 0) gameplay.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
+        if (this.hasTorch) gameplay.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
       }
       if (this.state === 'playing' && this.zone === 'stage') {
-        btns.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
+        gameplay.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
       }
       // A SHOP button: at the boat once the hold is empty (auto-banked), or at a
       // dive bell any time (the shop offers banking there).
       const onReef = this.state === 'playing' && this.zone === 'reef';
       const atBoatEmpty = onReef && this.carried === 0 && this.boat.contains(this.diver);
       const atAnyBell = onReef && this.bells.some((b) => b.contains(this.diver));
-      if (atBoatEmpty || atAnyBell) btns.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
-      // In the shop: one tappable button per item row.
-      if (this.state === 'shop') {
-        const items = this._shopItems();
-        items.forEach((it, i) => { const r = this._shopRow(i); btns.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
-      }
-      // In the Dry Dock: one tappable button per row.
-      if (this.state === 'drydock') {
-        const rows = this._dryDockRows();
-        rows.forEach((row, i) => { const r = this._ddRow(i); btns.push({ id: 'dd' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
-      }
-      // Help: a "?" on the menus, and nav/close inside the help screen. On the
-      // menu/game-over screens it sits beside the Dry Dock button.
-      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'help', x: W / 2 - 140, y: 516, w: 132, h: 34 });
-      else if (this.state === 'paused') btns.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
-      // Dry Dock: a "🛠" on the menu/game-over screens.
-      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'drydock', x: W / 2 + 8, y: 516, w: 132, h: 34 });
-      // Control-scheme selector: a tap target over the menu/gameover selector row.
-      if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
-      if ((this.state === 'menu' || this.state === 'gameover') && availableSkips(this.meta).length) btns.push({ id: 'skipNext', x: W / 2 - 152, y: 358, w: 344, h: 28 });
-      if (this.state === 'help') {
-        const r = this._helpRects(); btns.push(r.prev, r.next, r.close);
-        if (HELP_PAGES[this.helpPage].id === 'controls') btns.push({ id: 'controls', x: W / 2 - 150, y: 162, w: 300, h: 30 });
-      }
+      if (atBoatEmpty || atAnyBell) gameplay.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
     }
-    this._touchBtns = btns;
-    this.input.touchButtons = btns;
+
+    // Menu / screen UI buttons — clickable on BOTH mouse and touch (this is the
+    // #47 fix: on desktop these had no hit-rects, so only the keys worked).
+    const screen = [];
+    if (this.state === 'menu' || this.state === 'gameover') {
+      screen.push({ id: 'help', x: W / 2 - 140, y: 516, w: 132, h: 34 });
+      screen.push({ id: 'drydock', x: W / 2 + 8, y: 516, w: 132, h: 34 });
+      screen.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
+      if (availableSkips(this.meta).length) screen.push({ id: 'skipNext', x: W / 2 - 152, y: 358, w: 344, h: 28 });
+    } else if (this.state === 'paused') {
+      screen.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
+    }
+    if (this.state === 'shop') {
+      const items = this._shopItems();
+      items.forEach((it, i) => { const r = this._shopRow(i); screen.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
+    }
+    if (this.state === 'drydock') {
+      const rows = this._dryDockRows();
+      rows.forEach((row, i) => { const r = this._ddRow(i); screen.push({ id: 'dd' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
+    }
+    if (this.state === 'help') {
+      const r = this._helpRects(); screen.push(r.prev, r.next, r.close);
+      if (HELP_PAGES[this.helpPage].id === 'controls') screen.push({ id: 'controls', x: W / 2 - 150, y: 162, w: 300, h: 30 });
+    }
+
+    this._touchBtns = gameplay;   // only the touch controls are drawn by _touchBtn
+    // Hit-test list: touch gets everything (controls + screen); desktop gets the
+    // screen buttons, so the mouse can click menu/help/shop/dry-dock/scheme.
+    this.input.touchButtons = this.input.isTouch ? [...gameplay, ...screen] : screen;
   }
 
   // Draw one on-screen touch button with its icon/label.
