@@ -20,15 +20,16 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';
-import { makeStageRooms, mulberry32 } from './stage/chunkgen.js';
+import { makeStageRooms, makeStageDecor, mulberry32 } from './stage/chunkgen.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
+import { BADGES, BADGE_BY_ID, loadBadges, saveBadges, awardBadges, rankFor } from './meta/badges.js';
 import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -140,6 +141,8 @@ export class Game {
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
     this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
     this.meta = loadSalvage();
+    this.badgeState = loadBadges();   // The Trophy Wall (persistent achievements)
+    this.newBadges = [];              // ids earned by the run just ended (for the summary)
     // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
     // wins; otherwise we start on Keyboard and auto-switch to pad prompts once a
     // gamepad shows up (until the player picks manually).
@@ -182,10 +185,18 @@ export class Game {
     applyLoadout(this, this.meta.loadout);
     this.airMax = AIR.max + this._relicAirBonus; this.air = this.airMax;
     this.shieldT = 0; this.speedT = 0; this.magnetT = 0;
+    // Timed consumable buffs (shop-bought): a run-long timer per id, spent on
+    // death (this reset zeroes them). See CONSUMABLE + _shopBuy + the tick below.
+    this.buffT = {}; for (const c of CONSUMABLE) this.buffT[c.id] = 0;
+    // The Deep's extraction kicker (see _tripExtraction / _updateExtraction).
+    this.extractActive = false; this.extractT = 0; this.extractLapsed = false;
     this.nextLifeScore = GAME.firstLifeScore; this.oneUpT = 0;
     this.depthReached = 0; this.fireCd = 0;
     // Per-run Salvage milestone counters (Salvage Log payout at run end).
     this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
+    // Per-run badge stats (see _runStats / awardBadges at game-over).
+    this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
+    this.newBadges = [];
     this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
     // Flash the equipped relics so the player sees their Salvage Log build is live.
     if (this.meta.loadout.length) {
@@ -339,7 +350,8 @@ export class Game {
       const band = deep < 0.30 ? 'shallow' : deep < 0.62 ? 'mid' : 'deep';
       const entry = pickFauna(band, this.reef); if (!entry) continue;
       const spawned = spawnCreature(entry, c.x, c.y, this.reef, { sizeUp });
-      if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
+      if (Array.isArray(spawned)) { this.creatures.push(...spawned); this.creaturesSpawned += spawned.length; }
+      else if (spawned) { this.creatures.push(spawned); this.creaturesSpawned++; }
     }
 
     // Water currents sweep through a few spots — mostly sideways, one downdraft.
@@ -506,24 +518,52 @@ export class Game {
     }
   }
 
-  // Open a supply crate: unlock a reef-available weapon you don't own, else
-  // upgrade a weapon that isn't maxed, else a stash of gold.
+  // Open a supply crate. Crates MOSTLY refill the staples — full harpoons or a
+  // full tank of air — with flares/gold as filler and only a RARE weapon or
+  // consumable buff (see CRATE.weights). A weapon outcome prefers unlocking a
+  // reef-available weapon you lack, else upgrades one that isn't maxed.
   _openCrate() {
     const d = this.diver;
     const lockable = WEAPON_ORDER.filter((w) => WEAPON_INFO[w].cost > 0 && !this.owned.has(w) && this.reef >= WEAPON_INFO[w].minReef);
-    if (lockable.length) {
-      const w = lockable[(Math.random() * lockable.length) | 0];
-      this.owned.add(w); if (w === 'speargun') this.speargunAmmo = SPEARGUN.startAmmo;
-      this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
-      this.puName = `${WEAPON_INFO[w].name}!`; this.puCol = PAL.gold; this.puT = 1.7;
-    } else {
-      const upg = WEAPON_ORDER.filter((w) => w !== 'charge' && this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
-      if (upg.length) {
-        const w = upg[(Math.random() * upg.length) | 0]; this.weaponLevel[w] += 1;
-        this.puName = `${WEAPON_INFO[w].name} Lv${this.weaponLevel[w]}`; this.puCol = PAL.air; this.puT = 1.7;
+    const upgradable = WEAPON_ORDER.filter((w) => w !== 'charge' && this.owned.has(w) && this.weaponLevel[w] < SHOP.maxWeaponLevel);
+    const buyableConsumables = CONSUMABLE.filter((c) => this.reef >= c.minReef);
+    // Which outcomes are possible right now; impossible ones drop out and their
+    // weight redistributes (e.g. a crate can't grant a weapon when all are maxed).
+    const allowed = {
+      harpoons: this.harpoonAmmo < this.harpoonMax,
+      air: this.air < this.airMax,
+      flares: true, gold: true,
+      consumable: buyableConsumables.length > 0,
+      weapon: lockable.length > 0 || upgradable.length > 0,
+    };
+    // If the two staples are both full, gold is the guaranteed fallback.
+    let pick = pickWeighted(CRATE.weights, allowed, Math.random()) || 'gold';
+    if (pick === 'weapon') {
+      if (lockable.length) {
+        const w = lockable[(Math.random() * lockable.length) | 0];
+        this.owned.add(w); if (w === 'speargun') this.speargunAmmo = SPEARGUN.startAmmo;
+        this._rebuildWeapons(); this.weaponIdx = this.weapons.indexOf(w);
+        this.puName = `${WEAPON_INFO[w].name}!`; this.puCol = PAL.gold; this.puT = 1.7;
       } else {
-        this.gold += 200; this.puName = '+200 GOLD!'; this.puCol = PAL.gold; this.puT = 1.7;
+        const w = upgradable[(Math.random() * upgradable.length) | 0]; this.weaponLevel[w] += 1;
+        this.puName = `${WEAPON_INFO[w].name} Lv${this.weaponLevel[w]}`; this.puCol = PAL.air; this.puT = 1.7;
       }
+    } else if (pick === 'consumable') {
+      const c = buyableConsumables[(Math.random() * buyableConsumables.length) | 0];
+      this.buffT[c.id] = c.dur;
+      this.puName = `${c.glyph} ${c.name.toUpperCase()}!`; this.puCol = PAL.air; this.puT = 1.7;
+    } else if (pick === 'harpoons') {
+      this.harpoonAmmo = this.harpoonMax;   // full harpoons
+      this.puName = 'HARPOONS FULL!'; this.puCol = PAL.harpoon; this.puT = 1.7;
+    } else if (pick === 'air') {
+      this.air = this.airMax;   // full tank
+      this.puName = 'AIR FULL!'; this.puCol = PAL.air; this.puT = 1.7;
+    } else if (pick === 'flares') {
+      this.flares += FLARE.pack;
+      this.puName = `+${FLARE.pack} FLARES!`; this.puCol = PAL.puffer; this.puT = 1.7;
+    } else {
+      this.gold += CRATE.goldFind;
+      this.puName = `+${CRATE.goldFind} GOLD!`; this.puCol = PAL.gold; this.puT = 1.7;
     }
     this.particles.sparkle(d.x, d.y, PAL.gold, 26); this.audio.bank();
   }
@@ -574,12 +614,23 @@ export class Game {
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     if (!this.hasTorch && this.reef >= TORCH.minReef)
       items.push({ kind: 'torch', id: 'torch', label: `🔦 Torch — battery light for dark caves (T)`, cost: TORCH.cost });
+    // Timed consumable buffs — gameplay-tied, run-long or until death. Buying one
+    // while it's active refreshes its timer (label shows the live remaining).
+    for (const c of CONSUMABLE) {
+      if (this.reef < c.minReef) continue;
+      const active = (this.buffT[c.id] || 0) > 0;
+      const tag = active ? `  (active ${this._mmss(this.buffT[c.id])})` : '';
+      items.push({ kind: 'consumable', id: c.id, label: `${c.glyph} ${c.name} — ${c.desc}${tag}`, cost: c.cost });
+    }
     items.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
     return items;
   }
 
   // Upgrade prices double each level: base at level 0, 2× at level 1, 4× at 2…
   _dblCost(base, level) { return Math.round(base * Math.pow(2, level)); }
+
+  // Format a seconds count as m:ss (for long consumable-buff timers).
+  _mmss(secs) { const s = Math.max(0, Math.ceil(secs)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
 
   // Row geometry adapts to the item count so a long list (many unlocks +
   // upgrades + refills) still fits — and its Close row stays tappable — inside
@@ -636,6 +687,11 @@ export class Game {
     } else if (it.kind === 'chargecap') {
       this.chargeCapLevel += 1; this.chargeMax = Math.min(CHARGE.capMax, this.chargeMax + 1);
       this.puName = `CHARGE CAP ${this.chargeMax}`; this.puCol = PAL.puffer; this.puT = 1.6;
+    } else if (it.kind === 'consumable') {
+      const c = CONSUMABLE_BY_ID[it.id];
+      this.buffT[it.id] = c.dur;   // set (refresh) — runs until it lapses or you die
+      this.puName = `${c.glyph} ${c.name.toUpperCase()}!`; this.puCol = PAL.air; this.puT = 1.6;
+      this.particles.sparkle(this.diver.x, this.diver.y, PAL.air, 22);
     }
     this.audio.bank();
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
@@ -688,6 +744,10 @@ export class Game {
 
   _openDryDock(from) { this.ddReturn = from; this.state = 'drydock'; this.ddSel = 0; this.ddDeny = 0; this.audio.select(); }
   _closeDryDock() { this.state = this.ddReturn || 'menu'; }
+
+  // The Trophy Wall — a read-only grid of achievement badges (earned vs. locked).
+  _openBadges(from) { this.bdReturn = from; this.state = 'badges'; this.audio.select(); }
+  _closeBadges() { this.state = this.bdReturn || 'menu'; this.audio.select(); }
   _dryDockMove(dir) { const n = this._dryDockRows().length; this.ddSel = (this.ddSel + dir + n) % n; this.audio.pickup(); }
 
   _dryDockAct() {
@@ -1261,6 +1321,13 @@ export class Game {
     // Open help from the menu, pause or game-over screens (H or the ? button).
     if (this.state !== 'playing' && (this.input.pressed('help') || this.input.consumeButton('help'))) { this._openHelp(this.state); this.input.endFrame(); return; }
 
+    // Trophy Wall: a read-only overlay off the menu/game-over — any key closes it.
+    if (this.state === 'badges') {
+      if (this.input.pressed('badges') || this.input.pressed('pause') || this.input.pressed('help') || startEdge || this.input.consumeTapFire() || this.input.consumeButton('badgesclose')) this._closeBadges();
+      this.input.endFrame(); return;
+    }
+    if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('badges') || this.input.consumeButton('badges'))) { this._openBadges(this.state); this.input.endFrame(); return; }
+
     // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
     if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._openDryDock(this.state); this.input.endFrame(); return; }
 
@@ -1353,6 +1420,8 @@ export class Game {
     this.shieldT = Math.max(0, this.shieldT - dt);
     this.speedT = Math.max(0, this.speedT - dt);
     this.magnetT = Math.max(0, this.magnetT - dt);
+    for (const id in this.buffT) this.buffT[id] = Math.max(0, this.buffT[id] - dt);   // consumable buffs count down (spent on death via start())
+    if (this.zone === 'abyss') this._updateExtraction(dt);   // The Deep's escape countdown
     this.shockT = Math.max(0, this.shockT - dt);
     this._ammoFlash = Math.max(0, (this._ammoFlash || 0) - dt);   // out-of-ammo indicator blink
     // Ominous heartbeat when air runs low (< 25%): the interval tightens the
@@ -1388,7 +1457,8 @@ export class Game {
     this.aiming = !!threat; this.aimTarget = threat;
     if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position while aiming
 
-    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult, this.inSub ? SUB : DIVER);
+    const finsMult = this.buffT.fins > 0 ? CONSUMABLE_BY_ID.fins.swimMult : 1;   // Turbo Fins consumable
+    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult * finsMult, this.inSub ? SUB : DIVER);
 
     if (this.aiming) {
       // Swing the reticle onto the target — but do NOT fire here; release fires.
@@ -1462,7 +1532,11 @@ export class Game {
       // deeper reefs = less air; the abyss adds its own 150% on-foot penalty
       // (negated while piloting the mini-sub).
       const oxyMult = oxygenMultiplier(this.reef, this.zone, this.inSub);
-      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * dt;
+      // Sealed Wetsuit consumable eases air drain; a lapsed extraction countdown
+      // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
+      const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
+      const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
+      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
@@ -1509,7 +1583,7 @@ export class Game {
     // Treasure magnet: pull nearby loot toward the diver. The powerup is a
     // strong timed burst; the Magnet Core relic is a permanent, gentler pull
     // that stays on even with no powerup active.
-    if (this.magnetT > 0 || this._relicMagnet) {
+    if (this.magnetT > 0 || this._relicMagnet || this.buffT.lantern > 0) {
       const dv = this.diver, powered = this.magnetT > 0;
       const R = powered ? POWERUP.magnetRadius : POWERUP.magnetRadius * 0.5;
       const maxPull = powered ? POWERUP.magnetPull : POWERUP.magnetPull * 0.5;
@@ -1556,7 +1630,13 @@ export class Game {
     } else if (this.zone === 'abyss') {
       for (const e of this.abyssExits) {
         if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) {
-          if (e.bonus) { this.meta.salvage += e.bonus; saveSalvage(this.meta); this.puName = `SURFACED · +${e.bonus}⚙`; this.puCol = PAL.gateGlow; this.puT = 2.2; }
+          let bonus = e.bonus || 0, msg = `SURFACED · +${bonus}⚙`;
+          // Beat the extraction countdown → a time-scaled Salvage bonus on top.
+          if (this.extractActive && !this.extractLapsed) {
+            const eb = Math.round(ABYSS.extractBonusBase * (this.extractT / ABYSS.extractSecs));
+            if (eb > 0) { bonus += eb; msg = `EXTRACTED! · +${bonus}⚙  (⏱ +${eb})`; }
+          }
+          if (bonus) { this.meta.salvage += bonus; saveSalvage(this.meta); this.puName = msg; this.puCol = PAL.gateGlow; this.puT = 2.4; }
           this._exitAbyss(); this.input.endFrame(); return;
         }
       }
@@ -1581,6 +1661,7 @@ export class Game {
     this._collisions();
 
     this.treasures = this.treasures.filter((tr) => !tr.taken);
+    for (const cr of this.creatures) if (cr.dead) this.kills++;   // run kill tally (for badges)
     this.creatures = this.creatures.filter((cr) => !cr.dead);
     this.harpoons = this.harpoons.filter((h) => !h.dead);
     this.nets = this.nets.filter((n) => !n.dead);
@@ -1615,6 +1696,7 @@ export class Game {
           this.particles.sparkle(tr.x, tr.y, tr.kind === 'gem' ? PAL.gem : PAL.gold, tr.kind === 'coin' ? 12 : 18);
           tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
         }
+        if (this.zone === 'abyss') this._tripExtraction();   // first loot grab arms the escape timer
       }
     }
     // Treasure-sweep bonus: cross 80/90/100% of the reef's loose treasure and
@@ -1628,6 +1710,7 @@ export class Game {
         this.puName = `${Math.round(f * 100)}% TREASURE SWEEP · +${sv}⚙`; this.puCol = PAL.gold; this.puT = 2.4; this.audio.bank();
         this._collectTier++;
       }
+      if (this._collectTier >= COLLECT_BONUS.length) this.didCleanSweep = true;   // 100% swept a reef (badge)
     }
     // Shells (clams & chests): grab loot while open, get bitten when they shut.
     for (const s of this.shells) {
@@ -1763,6 +1846,7 @@ export class Game {
   }
 
   _loseLife(cause = 'air') {
+    this.tookDamage = true;   // any life lost disqualifies the Untouchable badge
     this.lives -= GAME.hitCost;
     if (this.lives <= 0) { this.deathCause = cause; this._gameOver(); return; }
     this.air = Math.max(this.air, this._relicSecondWind ? 60 : 35);
@@ -1784,6 +1868,21 @@ export class Game {
     this.lastPayout = runPayout({ deepestReef: this.reef, bosses: this.bossesFelled, relicsBanked: this.relicsBanked });
     this.meta.salvage += this.lastPayout;
     saveSalvage(this.meta);
+    // Award any newly-earned achievement badges from this run's summary.
+    if (this.badgeState) {
+      this.newBadges = awardBadges(this.badgeState, this._runStats());
+      if (this.newBadges.length) saveBadges(this.badgeState);
+    }
+  }
+
+  // Run summary consumed by the badge predicates (see meta/badges.js).
+  _runStats() {
+    return {
+      won: this.won, cause: this.deathCause, reef: this.reef, depth: this.depthReached,
+      score: this.score, kills: this.kills, spawned: this.creaturesSpawned,
+      bosses: this.bossesFelled, pearls: this.blackPearlsBanked,
+      cleanSweep: this.didCleanSweep, tookDamage: this.tookDamage,
+    };
   }
 
   _win() {
@@ -1887,6 +1986,7 @@ export class Game {
     const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: WH * 0.62 };
     this._placeDiver(c.x, c.y, 0);
     this.inSub = true; this._subHull = true;
+    this.extractActive = false; this.extractT = 0; this.extractLapsed = false;   // arm the kicker fresh
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
   }
@@ -1899,6 +1999,26 @@ export class Game {
     let best = null, bd = Infinity;
     for (const e of this.abyssExits) { const dd = Math.hypot(this.diver.x - e.x, this.diver.y - e.y); if (dd < bd) { bd = dd; best = e; } }
     return best;
+  }
+
+  // Extraction kicker: the first loot grab in The Deep destabilises the trench,
+  // starting a countdown. Reach an exit before it lapses for a time-scaled
+  // Salvage bonus; let it lapse and air vents faster (extractLapseMult) until you
+  // surface. Pure reward-under-pressure — no instant fail.
+  _tripExtraction() {
+    if (this.zone !== 'abyss' || this.extractActive) return;
+    this.extractActive = true; this.extractT = ABYSS.extractSecs; this.extractLapsed = false;
+    this.puName = `⏱ TRENCH DESTABILISING — reach an exit in ${ABYSS.extractSecs}s!`; this.puCol = PAL.danger; this.puT = 3; this.shake = 10;
+    this.audio.gasp();
+  }
+  _updateExtraction(dt) {
+    if (!this.extractActive || this.extractLapsed) return;
+    this.extractT -= dt;
+    if (this.extractT <= 0) {
+      this.extractT = 0; this.extractLapsed = true;
+      this.puName = '⚠ EXTRACTION FAILED — air venting fast!'; this.puCol = PAL.danger; this.puT = 3; this.shake = 14;
+      this.audio.gasp();
+    }
   }
 
   // Dive the whirlpool maw — a survival sweep down an accelerating shaft.
@@ -1936,10 +2056,11 @@ export class Game {
     this.zone = 'stage';
     const seed = (Math.random() * 0x100000000) >>> 0;
     const rooms = makeStageRooms(entrance.theme, this.reef, mulberry32(seed));
-    // generated rooms carry no hand-authored decor (its coords are tied to the
-    // old room layouts); render reads theme.decor?.[i] || [] so an absent
-    // decor is safe.
-    this.stage = new Stage({ ...entrance.theme, rooms, decor: undefined });
+    // Procedural, per-theme decor for the generated rooms (a separate seed
+    // stream so it never perturbs room reproducibility). Physics ignores decor;
+    // the render path already reads theme.decor?.[roomIndex].
+    const decor = makeStageDecor(entrance.theme, rooms, mulberry32((seed ^ 0x9e3779b9) >>> 0), STAGE.decorPerRoom);
+    this.stage = new Stage({ ...entrance.theme, rooms, decor });
     this.camX = 0; this.camY = 0;   // fixed single-screen camera in-stage
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
@@ -2263,9 +2384,10 @@ export class Game {
     }
 
     this.particles.draw(ctx, cx, cy);
-    // The mini-sub hull, drawn behind the diver so it reads as piloting it.
+    // In the sub, the diver rides INSIDE the vessel: draw the sub (pilot shows
+    // through its porthole) and skip the free-swimming diver sprite entirely.
     if (this.state !== 'menu' && this.inSub) drawSub(ctx, this.diver.x - cx, this.diver.y - cy, this.diver.facing);
-    if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
+    else if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
     if (this.zone === 'abyss') this._subLighting(ctx, cx, cy);   // dark trench + headlights
     // Shield bubble (blinks as it runs out).
     if (this.shieldT > 0 && this.state !== 'menu') {
@@ -2372,6 +2494,7 @@ export class Game {
     if (this.state === 'shop') this._shopScreen();
     if (this.state === 'drydock') this._dryDockScreen();
     if (this.state === 'help') this._helpScreen();
+    if (this.state === 'badges') this._badgesScreen();
     if (this.state === 'gameover') this._gameOverScreen();
   }
 
@@ -2552,12 +2675,17 @@ export class Game {
     // #47 fix: on desktop these had no hit-rects, so only the keys worked).
     const screen = [];
     if (this.state === 'menu' || this.state === 'gameover') {
-      screen.push({ id: 'help', x: W / 2 - 140, y: 516, w: 132, h: 34 });
-      screen.push({ id: 'drydock', x: W / 2 + 8, y: 516, w: 132, h: 34 });
+      // Must match _menuButtons(): y=516, w=124, xs = cx-194 / cx-62 / cx+70.
+      screen.push({ id: 'help', x: W / 2 - 194, y: 516, w: 124, h: 34 });
+      screen.push({ id: 'drydock', x: W / 2 - 62, y: 516, w: 124, h: 34 });
+      screen.push({ id: 'badges', x: W / 2 + 70, y: 516, w: 124, h: 34 });
       screen.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
       if (availableSkips(this.meta).length) screen.push({ id: 'skipNext', x: W / 2 - 152, y: 358, w: 344, h: 28 });
     } else if (this.state === 'paused') {
       screen.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
+    }
+    if (this.state === 'badges') {
+      screen.push({ id: 'badgesclose', x: W / 2 - 85, y: 552, w: 170, h: 34 });
     }
     if (this.state === 'shop') {
       const items = this._shopItems();
@@ -2676,6 +2804,13 @@ export class Game {
     if (this.shieldT > 0) buff('🛡', this.shieldT, PAL.gateGlow);
     if (this.speedT > 0) buff('»»', this.speedT, PAL.air);
     if (this.magnetT > 0) buff('🧲', this.magnetT, PAL.gold);
+    // Consumable buffs: long timers, shown as m:ss (a bought gear icon, not a pickup).
+    for (const c of CONSUMABLE) {
+      if ((this.buffT[c.id] || 0) > 0) {
+        this._text(`${c.glyph} ${this._mmss(this.buffT[c.id])}`, buffX, by + bh + 22, 12, PAL.gold, 'left', 'middle', true);
+        buffX += this.ctx.measureText(`${c.glyph} ${this._mmss(this.buffT[c.id])}`).width + 14;
+      }
+    }
 
     // Gold purse + harpoon ammo (a resource — the net gun is your unlimited fallback).
     this._text(`💰 ${this.gold}`, bx + 8, by + bh + 46, 15, PAL.gold, 'left', 'middle', true);
@@ -2721,6 +2856,14 @@ export class Game {
     }
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
+    // The Deep's extraction countdown — a loud centre banner once armed.
+    if (this.zone === 'abyss' && this.extractActive) {
+      const urgent = this.extractLapsed || this.extractT <= 10;
+      const blink = urgent && Math.floor(this.t * 6) % 2 === 0;
+      const col = this.extractLapsed ? PAL.danger : (blink ? '#ff3b30' : (urgent ? PAL.danger : PAL.gold));
+      const label = this.extractLapsed ? '⚠ EXTRACTION FAILED — SURFACE NOW' : `⏱ EXTRACT  ${this._mmss(this.extractT)}`;
+      this._text(label, W / 2, 60, 18, col, 'center', 'top', true);
+    }
 
     // Contextual prompts.
     if (this.zone === 'belly') {
@@ -2939,8 +3082,14 @@ export class Game {
     g.fillStyle = `rgba(1,3,9,${SUB.darkAlpha})`; g.fillRect(0, 0, W, H);
     const sx = this.diver.x - cx, sy = this.diver.y - cy;
     g.globalCompositeOperation = 'destination-out';
+    // A big, SOFT halo: light bleeds far into the dark with a long gentle tail so
+    // the trench glows around the hull rather than cutting off at a hard rim.
+    const halo = g.createRadialGradient(sx, sy, 3, sx, sy, SUB.halo);
+    halo.addColorStop(0, 'rgba(0,0,0,0.55)'); halo.addColorStop(0.5, 'rgba(0,0,0,0.22)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = halo; g.beginPath(); g.arc(sx, sy, SUB.halo, 0, Math.PI * 2); g.fill();
+    // The bright core bubble the sub sits inside, fully clearing the dark up close.
     const amb = g.createRadialGradient(sx, sy, 3, sx, sy, SUB.ambient);
-    amb.addColorStop(0, 'rgba(0,0,0,1)'); amb.addColorStop(0.55, 'rgba(0,0,0,0.85)'); amb.addColorStop(1, 'rgba(0,0,0,0)');
+    amb.addColorStop(0, 'rgba(0,0,0,1)'); amb.addColorStop(0.62, 'rgba(0,0,0,0.9)'); amb.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = amb; g.beginPath(); g.arc(sx, sy, SUB.ambient, 0, Math.PI * 2); g.fill();
     const moving = Math.hypot(this.diver.vx, this.diver.vy) > 12;
     const fwd = moving ? Math.atan2(this.diver.vy, this.diver.vx) : (this.diver.facing >= 0 ? 0 : Math.PI);
@@ -2960,8 +3109,15 @@ export class Game {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, SUB.coneRange, fwd - SUB.coneHalfAngle, fwd + SUB.coneHalfAngle); ctx.closePath();
     const wg = ctx.createRadialGradient(sx, sy, 6, sx, sy, SUB.coneRange);
-    wg.addColorStop(0, 'rgba(200,225,255,0.10)'); wg.addColorStop(1, 'rgba(200,225,255,0)');
-    ctx.fillStyle = wg; ctx.fill(); ctx.restore();
+    wg.addColorStop(0, 'rgba(200,225,255,0.12)'); wg.addColorStop(1, 'rgba(200,225,255,0)');
+    ctx.fillStyle = wg; ctx.fill();
+    // A warm additive bloom around the hull itself — the halo glow the sub casts.
+    const bloom = ctx.createRadialGradient(sx, sy, 4, sx, sy, SUB.halo);
+    bloom.addColorStop(0, `rgba(180,215,255,${SUB.glowWarm})`);
+    bloom.addColorStop(0.4, `rgba(150,195,240,${SUB.glowWarm * 0.4})`);
+    bloom.addColorStop(1, 'rgba(150,195,240,0)');
+    ctx.beginPath(); ctx.arc(sx, sy, SUB.halo, 0, Math.PI * 2); ctx.fillStyle = bloom; ctx.fill();
+    ctx.restore();
   }
 
   // Fog-of-war minimap in the top-right corner.
@@ -3101,14 +3257,23 @@ export class Game {
     this._text(this.input.isTouch ? 'tap to change' : 'C / ← →', cx + 120, 450, 12, '#7fb0d0', 'left', 'middle');
     this._text(`Swim ${this._key('swim')}   ·   Fire ${this._key('fire')} (hold to aim)   ·   Swap ${this._key('swap')}   ·   Shop ${this._key('shop')}`, cx, 474, 12, '#7fb0d0', 'center', 'middle');
     if (this.hi > 0) this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 494, 14, '#bfe6ff', 'center', 'middle');
-    // Help / Dry Dock buttons + prompt.
-    const ctx = this.ctx;
+    // Help / Dry Dock / Badges buttons + prompt.
+    this._menuButtons(cx);
+    this._text(this.input.isTouch ? 'Tap 🛠 DRY DOCK for relics  ·  🎖 BADGES for trophies' : 'R = DRY DOCK (relics)  ·  B = BADGES (trophies)', cx, 505, 11, '#9fc6e0', 'center', 'middle');
+  }
+
+  // The shared three-button bar (Help / Dry Dock / Badges) on the menu and
+  // game-over screens. Coordinates here MUST match the hit-rects registered in
+  // _syncTouchButtons so both mouse and touch land on the same targets.
+  _menuButtons(cx) {
+    const ctx = this.ctx, y = 516, w = 124, h = 34, gap = 8;
+    const xs = [cx - 194, cx - 62, cx + 70];   // help, drydock, badges
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(cx - 140, 516, 132, 34, 8); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.roundRect(cx + 8, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
-    this._text('❔ HOW TO PLAY  (H)', cx - 74, 533, 14, PAL.hudText, 'center', 'middle', true);
-    this._text('🛠 DRY DOCK  (R)', cx + 74, 533, 14, PAL.gold, 'center', 'middle', true);
-    this._text(this.input.isTouch ? 'Tap 🛠 for the DRY DOCK — spend Salvage on relics' : 'Press R / tap 🛠 for the DRY DOCK', cx, 505, 11, '#9fc6e0', 'center', 'middle');
+    for (const x of xs) { ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+    this._text('❔ HELP (H)', xs[0] + w / 2, y + h / 2, 13, PAL.hudText, 'center', 'middle', true);
+    this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 12, PAL.gold, 'center', 'middle', true);
+    this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 12, PAL.glow, 'center', 'middle', true);
   }
 
   _gameOverScreen() {
@@ -3128,15 +3293,51 @@ export class Game {
       const pearlNote = this.blackPearlsBanked > 0 ? `  ·  ${this.blackPearlsBanked} pearl${this.blackPearlsBanked === 1 ? '' : 's'}` : '';
       this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked${pearlNote}`, cx, 394, 15, PAL.gold, 'center', 'middle');
     }
+    // New badges earned this run — a bright callout so the unlock lands.
+    if (this.newBadges && this.newBadges.length) {
+      const glyphs = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].glyph).filter(Boolean).join(' ');
+      const names = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].name).filter(Boolean).join(', ');
+      this._text(`🎖 NEW BADGE${this.newBadges.length > 1 ? 'S' : ''}: ${glyphs}`, cx, 420, 17, PAL.glow, 'center', 'middle', true);
+      this._text(names, cx, 442, 13, '#bfe6ff', 'center', 'middle');
+    }
     const blink = Math.floor(this.t * 2) % 2 === 0;
-    if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 430, 20, PAL.gold, 'center', 'middle', true);
-    this._text(this.input.isTouch ? 'Tap 🛠 for the DRY DOCK — spend Salvage on relics' : 'Press R / tap 🛠 for the DRY DOCK', cx, 466, 12, '#9fc6e0', 'center', 'middle');
-    const ctx = this.ctx;
+    if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 470, 20, PAL.gold, 'center', 'middle', true);
+    this._text(this.input.isTouch ? '🛠 DRY DOCK for relics  ·  🎖 BADGES for trophies' : 'R = DRY DOCK  ·  B = BADGES', cx, 500, 12, '#9fc6e0', 'center', 'middle');
+    this._menuButtons(cx);
+  }
+
+  // The Trophy Wall — a two-column grid of every badge, earned ones lit and
+  // locked ones dimmed behind a padlock (with their unlock hint still shown, so
+  // players have something to chase). A rank line summarises progress.
+  _badgesScreen() {
+    const ctx = this.ctx, cx = W / 2;
+    this._panel(0.9);
+    const earned = new Set(this.badgeState.earned);
+    const rank = rankFor(earned.size);
+    this._text('🎖 THE TROPHY WALL', cx, 78, 32, PAL.gold, 'center', 'middle', true);
+    this._text(`${rank.name}  ·  ${earned.size} / ${BADGES.length} badges`, cx, 116, 16, PAL.glow, 'center', 'middle', true);
+    const cols = 2, cellW = 400, gap = 24;
+    const gridW = cols * cellW + (cols - 1) * gap, x0 = cx - gridW / 2;
+    const top = 150, rowsN = Math.ceil(BADGES.length / cols);
+    const step = Math.min(56, (516 - top) / rowsN), ch = step - 6;
+    BADGES.forEach((b, i) => {
+      const col = i % cols, row = (i / cols) | 0;
+      const x = x0 + col * (cellW + gap), y = top + row * step;
+      const has = earned.has(b.id);
+      ctx.save();
+      ctx.fillStyle = has ? 'rgba(36,78,58,0.5)' : 'rgba(20,32,48,0.45)';
+      ctx.strokeStyle = has ? 'rgba(120,230,170,0.5)' : 'rgba(120,160,200,0.18)';
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x, y, cellW, ch, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+      ctx.globalAlpha = has ? 1 : 0.55;
+      this._text(has ? b.glyph : '🔒', x + 26, y + ch / 2, 22, PAL.hudText, 'center', 'middle');
+      this._text(b.name, x + 52, y + 16, 15, has ? PAL.gold : '#9fb8cc', 'left', 'middle', true);
+      this._text(b.desc, x + 52, y + 34, 11, has ? '#cfe6d8' : '#7f97ac', 'left', 'middle');
+      ctx.globalAlpha = 1;
+    });
+    const bw = 170, bh = 34, bx = cx - bw / 2, by = 552;
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(cx - 140, 516, 132, 34, 8); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.roundRect(cx + 8, 516, 132, 34, 8); ctx.fill(); ctx.stroke(); ctx.restore();
-    this._text('❔ HOW TO PLAY  (H)', cx - 74, 533, 14, PAL.hudText, 'center', 'middle', true);
-    this._text('🛠 DRY DOCK  (R)', cx + 74, 533, 14, PAL.gold, 'center', 'middle', true);
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text(this.input.isTouch ? 'CLOSE' : 'CLOSE  (B)', cx, by + bh / 2, 14, PAL.hudText, 'center', 'middle', true);
   }
 
   _overlay(title, sub) {

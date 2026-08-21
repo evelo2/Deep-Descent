@@ -329,22 +329,36 @@ export function drawSub(ctx, x, y, facing = 1) {
   ctx.save();
   ctx.translate(x, y);
   if (facing < 0) ctx.scale(-1, 1);
-  const w = 24, h = 15;   // ~1.6x the 15px diver radius
+  const w = 28, h = 17;   // a proper vessel — the diver rides INSIDE it
   // hull
   const hull = ctx.createLinearGradient(0, -h, 0, h);
   hull.addColorStop(0, '#a9bfce'); hull.addColorStop(1, '#4c5f6c');
   ctx.fillStyle = hull;
   ctx.beginPath(); ctx.roundRect(-w, -h, w * 2, h * 2, h); ctx.fill();
   ctx.strokeStyle = '#232d34'; ctx.lineWidth = 2; ctx.stroke();
-  // porthole
-  ctx.fillStyle = 'rgba(150,225,255,0.85)';
-  ctx.beginPath(); ctx.arc(6, 0, 6, 0, TAU); ctx.fill();
+  // conning-tower fin on top, so it reads as a submarine from any angle
+  ctx.fillStyle = '#5a6d7a';
+  ctx.beginPath(); ctx.roundRect(-4, -h - 6, 12, 8, 3); ctx.fill();
+  ctx.strokeStyle = '#232d34'; ctx.lineWidth = 1.5; ctx.stroke();
+  // porthole — a glass dome with the PILOT (the diver) visible inside it
+  const px = 9, pr = 8;
+  ctx.fillStyle = '#0e2330';
+  ctx.beginPath(); ctx.arc(px, 0, pr, 0, TAU); ctx.fill();
+  ctx.save();   // clip the pilot to the glass
+  ctx.beginPath(); ctx.arc(px, 0, pr - 1, 0, TAU); ctx.clip();
+  ctx.fillStyle = PAL.diverSuit; ctx.beginPath(); ctx.arc(px, pr, pr * 0.9, 0, TAU); ctx.fill();   // shoulders
+  ctx.fillStyle = PAL.diver; ctx.beginPath(); ctx.arc(px + 1, -1, pr * 0.5, 0, TAU); ctx.fill();   // helmeted head
+  ctx.fillStyle = PAL.diverGlass; ctx.beginPath(); ctx.arc(px + 2.5, -2, pr * 0.2, 0, TAU); ctx.fill(); // visor glint
+  ctx.restore();
+  // glass tint + rim over the pilot
+  ctx.fillStyle = 'rgba(150,225,255,0.28)';
+  ctx.beginPath(); ctx.arc(px, 0, pr, 0, TAU); ctx.fill();
   ctx.strokeStyle = '#1a2126'; ctx.lineWidth = 1.5; ctx.stroke();
   // tail prop
   ctx.strokeStyle = '#232d34'; ctx.lineWidth = 3; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(-w, 0); ctx.lineTo(-w - 8, -5);
-  ctx.moveTo(-w, 0); ctx.lineTo(-w - 8, 5);
+  ctx.moveTo(-w, 0); ctx.lineTo(-w - 9, -6);
+  ctx.moveTo(-w, 0); ctx.lineTo(-w - 9, 6);
   ctx.stroke();
   ctx.restore();
 }
