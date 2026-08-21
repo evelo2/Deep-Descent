@@ -1380,19 +1380,28 @@ export class Game {
       const rate = AIM.aimRateBase + AIM.aimRatePerLevel * (this.aimLevel - AIM.unlockLevel);
       this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
       this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
+      // Once the reticle swings within lock tolerance, COMMIT to this target: a
+      // release now fires STRAIGHT AT IT (independent of any residual swing lag).
+      if (Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol) this._aimLock = threat;
     } else if (!(released && this._prevAiming)) {
-      // Sync the reticle to facing — EXCEPT on the frame we release out of an
-      // aim, so the aimed angle survives to fire at the target below.
+      // Sync the reticle to facing — except on the frame we release out of an aim.
       this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);
     }
-    // Release fires one shot ALONG THE RETICLE. diver.update() re-points the
-    // diver's aim at its travel each frame, so we overwrite aimX/aimY from
-    // aimAngle right before firing — otherwise a released aim shot flies straight
-    // instead of at the target. `!graced` swallows the zone/game-entry press.
+    // Release fires ONE shot. If a target was LOCKED during the hold, snap the
+    // shot straight at it — the fix for 'release fires straight, not at the
+    // target'. Otherwise (quick tap, or released before lock) fire along the
+    // reticle/facing. `!graced` swallows the zone/game-entry press.
     if (released && !graced) {
-      this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
+      const tgt = this._aimLock;
+      if (tgt && !tgt.dead) {
+        const a = Math.atan2(tgt.y - this.diver.y, tgt.x - this.diver.x);
+        this.diver.aimX = Math.cos(a); this.diver.aimY = Math.sin(a);
+      } else {
+        this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
+      }
       this.fire();
     }
+    if (!holding) this._aimLock = null;   // clear the lock for the next hold
     this._prevAiming = this.aiming;
     this._prevHolding = holding;
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
