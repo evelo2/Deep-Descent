@@ -360,7 +360,19 @@ export const ABYSS = { airMult: 1.5, entranceChance: 0.5, subCost: 400 };
 // tierSalvageBase/tierScore drive the speed-break payout (see whirlpoolReward
 // below): each whirlSpeed tier crossed awards Salvage + score, once, in
 // game.js's _updateWhirlpool.
-export const WHIRL = { entranceChance: 0.5, baseSpeed: 120, accel: 22, maxSpeed: 520, tierStep: 90, shaftHalfW: 220, obstacleR: 22, tierSalvageBase: 12, tierScore: 250 };
+export const WHIRL = {
+  entranceChance: 0.5, baseSpeed: 120, accel: 22, maxSpeed: 520, tierStep: 90,
+  shaftHalfW: 220, obstacleR: 22, tierSalvageBase: 12, tierScore: 250,
+  // Endless survival: obstacles/collectibles stream past forever and density
+  // ramps from LOW to high over rampSecs, so a moderate player lasts ~30s. Air
+  // drains at a fixed rate (not depth-scaled — depth is unbounded now).
+  airDrain: 4.0,          // air/sec while swept (bubbles refill)
+  rampSecs: 26,           // time to reach peak obstacle density
+  rowGapStart: 560, rowGapEnd: 190,   // vertical px between obstacle rows: sparse → dense
+  rowCountMax: 3,         // obstacles per row at peak density (1 at the start)
+  bubbleGap: 620, treasureGap: 470, pearlEvery: 9,   // collectible cadence (px)
+  safeDrop: 520,          // clear stretch below the drop-in before obstacles begin
+};
 
 // Cumulative Salvage reward for having reached `tier` whirlSpeed breaks —
 // monotonic increasing, tier 0 → 0. Pure/exported so it's Node-testable.

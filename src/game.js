@@ -908,67 +908,76 @@ export class Game {
     this.stageEntrances = []; this.whirlEntrance = null; this.door = null; this.key = null;
 
     const cx = WW / 2, halfW = WHIRL.shaftHalfW;
-    const top = OPEN_BAND, bottom = WH - 80;
-    this.whirlShaft = { cx, halfW, top, bottom };
+    const top = OPEN_BAND;
+    this.whirlShaft = { cx, halfW, top };   // endless: no fixed bottom
 
-    // Obstacles scattered down the shaft in bands, denser the deeper the band
-    // — the sweep's danger ramps the same way its speed does. The topmost
-    // stretch stays clear so the drop-in never dumps you straight onto a rock.
-    this.whirlObstacles = [];
-    const safeTop = top + 260;
-    const bands = 14;
-    for (let i = 0; i < bands; i++) {
-      const y0 = safeTop + (bottom - safeTop) * (i / bands);
-      const y1 = safeTop + (bottom - safeTop) * ((i + 1) / bands);
-      const density = 2 + Math.round((i / (bands - 1)) * 5);   // 2..7 per band, deeper = denser
-      for (let n = 0; n < density; n++) {
-        const r = WHIRL.obstacleR * (0.8 + Math.random() * 0.5);
-        const y = y0 + Math.random() * (y1 - y0);
-        const x = cx + (Math.random() * 2 - 1) * (halfW - r - 10);
-        this.whirlObstacles.push({ x, y, r });
+    // Endless survival: obstacles + collectibles are STREAMED ahead of the diver
+    // and recycled once they scroll above (see _updateWhirlpool). It starts
+    // sparse — a clear drop-in stretch, then density ramps over WHIRL.rampSecs —
+    // so a moderate player rides ~30s before the vortex (or their air) gets them.
+    this.whirlObstacles = []; this.whirlBubbles = []; this.whirlTreasures = [];
+    this.whirlT = 0;                                  // seconds swept (drives the density ramp)
+    this.whirlNextObstacleY = top + WHIRL.safeDrop;   // obstacles begin below the safe drop-in
+    this.whirlNextBubbleY = top + WHIRL.safeDrop + 120;
+    this.whirlNextTreasureY = top + WHIRL.safeDrop + 60;
+    this.whirlTreasuresSeeded = 0;                    // for the periodic Black Pearl
+
+    // Ascend back out the top (swim up against the current) to bail early — a
+    // clean escape that still banks the earned score/loot (see _updateWhirlpool).
+    this.whirlExit = { x: cx, y: top - 6, r: 46 };
+  }
+
+  // Streaming helpers: spawn a row/collectible at world-y `y` for the endless
+  // whirlpool. `ramp` (0→1) tightens rows and adds obstacles as the run wears on.
+  _whirlSpawnRow(y, ramp) {
+    const s = this.whirlShaft, usable = s.halfW - 12;
+    const count = 1 + Math.round(ramp * (WHIRL.rowCountMax - 1));   // 1 → rowCountMax
+    const kinds = ['mine', 'jelly', 'star'];
+    for (let n = 0; n < count; n++) {
+      const r = WHIRL.obstacleR * (0.8 + Math.random() * 0.5);
+      const x = s.cx + (Math.random() * 2 - 1) * (usable - r);
+      const kind = kinds[(Math.random() * kinds.length) | 0];
+      this.whirlObstacles.push({ x, y: y + (Math.random() - 0.5) * 90, r, kind, phase: Math.random() * Math.PI * 2 });
+    }
+  }
+  _whirlRandX(r) { const s = this.whirlShaft; return s.cx + (Math.random() * 2 - 1) * (s.halfW - r - 12); }
+
+  // Draw a whirlpool obstacle (centred at 0,0) by kind: landmine / jellyfish /
+  // starfish. Collision is the plain circle radius o.r regardless of kind.
+  _drawWhirlObstacle(ctx, o, t) {
+    const R = o.r, TAU = Math.PI * 2;
+    if (o.kind === 'mine') {
+      ctx.strokeStyle = '#0f1319'; ctx.lineWidth = Math.max(2, R * 0.13);
+      for (let i = 0; i < 8; i++) { const a = o.phase + i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62); ctx.lineTo(Math.cos(a) * R * 1.05, Math.sin(a) * R * 1.05); ctx.stroke(); }
+      const g = ctx.createRadialGradient(-R * 0.28, -R * 0.28, R * 0.1, 0, 0, R * 0.78);
+      g.addColorStop(0, '#3d454f'); g.addColorStop(1, '#191e25');
+      ctx.fillStyle = g; ctx.strokeStyle = '#0f1319'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.72, 0, TAU); ctx.fill(); ctx.stroke();
+      const blink = Math.sin(t * 6 + o.phase) > 0.2;
+      if (blink) { ctx.shadowColor = '#ff5a44'; ctx.shadowBlur = 9; }
+      ctx.fillStyle = blink ? '#ff5a44' : '#5c1c14';
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.2, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
+    } else if (o.kind === 'jelly') {
+      const pulse = 1 + Math.sin(t * 2.5 + o.phase) * 0.09;
+      ctx.strokeStyle = 'rgba(214,170,255,0.55)'; ctx.lineWidth = 2;
+      for (let i = -2; i <= 2; i++) {
+        const bx = i * R * 0.26; ctx.beginPath(); ctx.moveTo(bx, R * 0.05);
+        for (let s = 1; s <= 4; s++) { const yy = R * 0.05 + s * R * 0.4; const xx = bx + Math.sin(t * 3 + o.phase + s * 0.9 + i) * R * 0.16; ctx.lineTo(xx, yy); }
+        ctx.stroke();
       }
+      const g = ctx.createRadialGradient(0, -R * 0.25, R * 0.1, 0, -R * 0.15, R);
+      g.addColorStop(0, 'rgba(232,205,255,0.6)'); g.addColorStop(1, 'rgba(168,118,240,0.14)');
+      ctx.fillStyle = g; ctx.strokeStyle = 'rgba(222,182,255,0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, -R * 0.12, R * 0.92 * pulse, R * 0.72, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    } else {   // star (starfish)
+      const rot = o.phase + t * 0.4;
+      ctx.fillStyle = '#e8863a'; ctx.strokeStyle = '#a5531d'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) { const a = rot + i * Math.PI / 5; const rr = (i % 2 === 0) ? R : R * 0.44; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,222,150,0.7)';
+      for (let i = 0; i < 5; i++) { const a = rot + i * TAU / 5; ctx.beginPath(); ctx.arc(Math.cos(a) * R * 0.5, Math.sin(a) * R * 0.5, R * 0.1, 0, TAU); ctx.fill(); }
     }
-
-    // Collectibles down the shaft — bubbles for air, loot/pearls for the
-    // Salvage payoff cashed on exit (see _updateWhirlpool/_bankLoot). Kept
-    // out of the safe drop-in band, and clear of the obstacles so grabbing
-    // one doesn't force a hit. Lightweight plain objects for bubbles (rather
-    // than BigBubble, whose upward drift + short life fit a reef ceiling, not
-    // a diver being swept straight down a shaft); Treasure is reused as-is
-    // for loot/pearls since it's already a static, bob-in-place collectible.
-    const clearOfObstacles = (x, y, pad) => this.whirlObstacles.every((o) => Math.hypot(x - o.x, y - o.y) > o.r + pad);
-    const randX = (r) => cx + (Math.random() * 2 - 1) * (halfW - r - 10);
-
-    this.whirlBubbles = [];
-    for (let i = 0; i < 10; i++) {
-      const y = safeTop + Math.random() * (bottom - safeTop);
-      const x = randX(BUBBLE.r);
-      if (!clearOfObstacles(x, y, BUBBLE.r + 14)) continue;
-      this.whirlBubbles.push({ x, y, r: BUBBLE.r, taken: false, phase: Math.random() * Math.PI * 2 });
-    }
-
-    this.whirlTreasures = [];
-    for (let i = 0; i < 16; i++) {
-      const y = safeTop + Math.random() * (bottom - safeTop);
-      const x = randX(14);
-      if (!clearOfObstacles(x, y, 24)) continue;
-      this.whirlTreasures.push(new Treasure(x, y, Math.random() < 0.5 ? 'gem' : 'coin'));
-    }
-    // A Black Pearl or two, deep in the shaft — the run's rarest grab.
-    const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0);
-    for (let i = 0; i < pearlCount; i++) {
-      // Retry to reliably seat each pearl in a clear spot — a single attempt that
-      // landed near an obstacle used to drop the (rare) pearl entirely.
-      for (let tries = 0; tries < 24; tries++) {
-        const y = bottom - Math.random() * (bottom - safeTop) * 0.35;   // lower third
-        const x = randX(11);
-        if (clearOfObstacles(x, y, 22)) { this.whirlTreasures.push(new Treasure(x, y, 'blackpearl')); break; }
-      }
-    }
-
-    // Ascend back out the top to bail early — a clean escape that still banks
-    // whatever survival score/loot was earned (see _updateWhirlpool).
-    this.whirlExit = { x: cx, y: OPEN_BAND - 6, r: 46 };
   }
 
   // Scatter current zones on open cells, flowing along the cave.
@@ -1896,6 +1905,29 @@ export class Game {
     const d = this.diver, shaft = this.whirlShaft;
     // The sweep ramps forever (capped at maxSpeed) — it never gets easier.
     this.whirlSpeed = Math.min(WHIRL.maxSpeed, this.whirlSpeed + WHIRL.accel * dt);
+    this.whirlT += dt;
+
+    // Endless streaming: spawn obstacles + collectibles ahead of the diver, at a
+    // density that ramps from LOW to peak over WHIRL.rampSecs, and recycle
+    // anything that has scrolled above. Row gap tightens as the ramp climbs.
+    const ramp = Math.min(1, this.whirlT / WHIRL.rampSecs);
+    const rowGap = WHIRL.rowGapStart + (WHIRL.rowGapEnd - WHIRL.rowGapStart) * ramp;
+    const ahead = d.y + H * 1.4;
+    while (this.whirlNextObstacleY < ahead) { this._whirlSpawnRow(this.whirlNextObstacleY, ramp); this.whirlNextObstacleY += rowGap; }
+    while (this.whirlNextBubbleY < ahead) {
+      this.whirlBubbles.push({ x: this._whirlRandX(BUBBLE.r), y: this.whirlNextBubbleY, r: BUBBLE.r, taken: false, phase: Math.random() * Math.PI * 2 });
+      this.whirlNextBubbleY += WHIRL.bubbleGap * (0.7 + Math.random() * 0.6);
+    }
+    while (this.whirlNextTreasureY < ahead) {
+      const n = ++this.whirlTreasuresSeeded;
+      const kind = (n % WHIRL.pearlEvery === 0) ? 'blackpearl' : (Math.random() < 0.5 ? 'gem' : 'coin');
+      this.whirlTreasures.push(new Treasure(this._whirlRandX(14), this.whirlNextTreasureY, kind));
+      this.whirlNextTreasureY += WHIRL.treasureGap * (0.7 + Math.random() * 0.6);
+    }
+    const above = d.y - H;   // recycle everything that has scrolled off the top
+    this.whirlObstacles = this.whirlObstacles.filter((o) => o.y > above);
+    this.whirlBubbles = this.whirlBubbles.filter((b) => !b.taken && b.y > above);
+    this.whirlTreasures = this.whirlTreasures.filter((t) => !t.taken && t.y > above);
 
     // Lateral steering only — vertical speed is the current's, not physics'.
     const v = this.input.vector();
@@ -1912,7 +1944,7 @@ export class Game {
     if (shaft) {
       const left = shaft.cx - shaft.halfW + d.radius, right = shaft.cx + shaft.halfW - d.radius;
       if (d.x < left) { d.x = left; d.vx = 0; } else if (d.x > right) { d.x = right; d.vx = 0; }
-      if (d.y > shaft.bottom) d.y = shaft.bottom;
+      // no bottom — the shaft is endless (the run ends on a hit, air-out, or bail)
     }
 
     if (Math.abs(d.vx) > 8) d.facing = d.vx > 0 ? 1 : -1;
@@ -1920,17 +1952,18 @@ export class Game {
     if (d.invuln > 0) d.invuln -= dt;
     if (d.hurtT > 0) d.hurtT -= dt;
 
-    // Camera follows straight down (same clamp/ease as the reef).
+    // Camera follows straight down — NOT clamped to WH (the shaft is endless);
+    // the diver rides above centre so onrushing obstacles are visible in time.
     const tx = Math.max(0, Math.min(WW - W, d.x - W / 2));
-    const ty = Math.max(0, Math.min(WH - H, d.y - H / 2));
+    const ty = d.y - H * 0.42;
     this.camX += (tx - this.camX) * Math.min(1, dt * 6);
     this.camY += (ty - this.camY) * Math.min(1, dt * 6);
     this.depthReached = Math.max(this.depthReached, d.y - WORLD.SURFACE);
 
-    // Air drains at the plain per-reef rate — no zone penalty here (the
-    // whirlpool isn't 'abyss', so oxygenMultiplier applies none). The sweep
-    // outrunning your air is the danger, not an extra tax on top of it.
-    this.air -= (AIR.drainPerSec + d.y * AIR.drainDepthFactor) * oxygenMultiplier(this.reef, this.zone, false) * dt;
+    // Air drains at a fixed whirlpool rate (depth is unbounded now, so the old
+    // depth-scaled drain can't apply). Bubbles refill; the ramping vortex + your
+    // air together give a moderate player ~30s. No zone penalty (not 'abyss').
+    this.air -= WHIRL.airDrain * dt;
 
     // Survival score: speed × time, so riding it faster/longer is worth more.
     this.whirlScore += this.whirlSpeed * dt * 0.12;
@@ -2294,13 +2327,12 @@ export class Game {
       if (tx < -60 || tx > W + 60 || ty < -60 || ty > H + 60) continue;
       tr.draw(ctx, cx, cy, this.t);
     }
-    // Obstacles.
+    // Obstacles — landmines, jellyfish, starfish (random per obstacle).
     for (const o of this.whirlObstacles) {
       const ox = o.x - cx, oy = o.y - cy;
       if (ox < -60 || ox > W + 60 || oy < -60 || oy > H + 60) continue;
       ctx.save(); ctx.translate(ox, oy);
-      ctx.fillStyle = PAL.abyssRock; ctx.strokeStyle = PAL.abyssDark; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, 0, o.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      this._drawWhirlObstacle(ctx, o, this.t);
       ctx.restore();
     }
     // Bail-out exit near the top.
