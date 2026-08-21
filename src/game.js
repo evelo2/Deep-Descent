@@ -2156,7 +2156,20 @@ export class Game {
       // Temple gate (reef) / door, key & exit (temple).
       if (this.templeGate) { ctx.save(); ctx.translate(this.templeGate.x - cx, this.templeGate.y - cy); drawTempleGate(ctx, this.t, this.templeGate.r); ctx.restore(); }
       for (const e of this.stageEntrances) e.draw(ctx, cx, cy, this.t);
-      if (this.abyssEntrance) { ctx.save(); ctx.translate(this.abyssEntrance.x - cx, this.abyssEntrance.y - cy); drawAbyssMaw(ctx, this.t, this.abyssEntrance.r); ctx.restore(); }
+      if (this.abyssEntrance) {
+        ctx.save(); ctx.translate(this.abyssEntrance.x - cx, this.abyssEntrance.y - cy); drawAbyssMaw(ctx, this.t, this.abyssEntrance.r); ctx.restore();
+        // A visible mini-sub parked beside the maw — BUY it (press shop) before
+        // diving, or you plunge on foot at 150% air. Bobs gently; dimmed and
+        // priced when you can't yet afford it. Hidden once bought (it's yours).
+        if (!this.hasSub) {
+          const afford = this.gold >= ABYSS.subCost;
+          const sx = this.abyssEntrance.x - cx - (this.abyssEntrance.r + 48);
+          const sy = this.abyssEntrance.y - cy - 8 + Math.sin(this.t * 2) * 3;
+          ctx.save(); ctx.translate(sx, sy); ctx.scale(2, 2);
+          ctx.globalAlpha = afford ? 1 : 0.5; drawSub(ctx, 0, 0, 1); ctx.restore();
+          this._text(`⚙${ABYSS.subCost}`, sx, sy - 26, 13, afford ? PAL.gold : PAL.danger, 'center', 'middle', true);
+        }
+      }
       if (this.whirlEntrance) { ctx.save(); ctx.translate(this.whirlEntrance.x - cx, this.whirlEntrance.y - cy); drawWhirlMaw(ctx, this.t, this.whirlEntrance.r); ctx.restore(); }
       if (this.door) { ctx.save(); ctx.translate(this.door.x + this.door.w / 2 - cx, this.door.y + this.door.h / 2 - cy); drawDoor(ctx, this.door.open, this.door.w, this.door.h); ctx.restore(); }
       if (this.key && !this.key.taken) { ctx.save(); ctx.translate(this.key.x - cx, this.key.y - cy); drawKey(ctx, this.t); ctx.restore(); }
