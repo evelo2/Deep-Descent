@@ -28,7 +28,7 @@ import { THEMES } from './stage/themes.js';
 import { makeStageRooms, mulberry32 } from './stage/chunkgen.js';
 import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
-import { loadSalvage, saveSalvage, runPayout } from './meta/salvage.js';
+import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
 import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -155,15 +155,18 @@ export class Game {
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
+    this.pendingStartReef = 1;   // menu 'START AT' selection (cash a reef relic)
     this.reefName = ''; this.reefTheme = REEF_THEMES[0];
     this.puT = 0; this.puName = ''; this.puCol = '#fff';   // power-up name flourish
     this.diver.reset();
   }
 
   // ---- lifecycle -------------------------------------------------------
-  start() {
+  start(startReef = 1) {
     this.state = 'playing';
-    this.score = 0; this.carried = 0; this.gold = 0; this.lives = GAME.startLives; this.atBell = null;
+    // Reef-skip: a cashed reef relic starts the run deeper with a gold head-start.
+    startReef = Math.max(1, Math.floor(startReef) || 1);
+    this.score = 0; this.carried = 0; this.gold = skipStartGold(startReef); this.lives = GAME.startLives; this.atBell = null;
     this.airMax = AIR.max; this.air = this.airMax; this.multiFireT = 0;
     // Salvage Log: apply the equipped loadout's relic flags for this run (resets
     // per-run relic state first, so an empty loadout = no behavior change), then
@@ -206,7 +209,14 @@ export class Game {
     this.shockBattery = SHOCK.batteryMax; this.shockBolts = [];
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
-    this.zone = 'reef'; this.savedReef = null; this.reef = 1;
+    this.zone = 'reef'; this.savedReef = null; this.reef = startReef;
+    // Consume the cashed reef relic (a reef-(N−1) token unlocks a start at reef N)
+    // and persist; flash the head-start so the skip is legible.
+    if (startReef > 1 && consumeReefRelic(this.meta, startReef - 1)) {
+      saveSalvage(this.meta);
+      this.puName = `⚓ Skipped to Reef ${startReef} · +${this.gold}g`; this.puCol = PAL.key; this.puT = 2.6;
+    }
+    this.pendingStartReef = 1;   // reset the menu selection for next time
     this.hasSub = false; this.inSub = false;   // the mini-sub is bought per-reef
     this._newReefName();
     this.diver.reset();
@@ -1028,7 +1038,7 @@ export class Game {
 
   // ---- input events (from main) ---------------------------------------
   onAction() {
-    if (this.state === 'menu' || this.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(); }
+    if (this.state === 'menu' || this.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(this.pendingStartReef); }
     else if (this.state === 'paused') { this.state = 'playing'; this._fireGrace = 0.3; }
     else if (this.state === 'playing') this.state = 'paused';
     else if (this.state === 'shop') this._shopBuy();
@@ -1216,6 +1226,9 @@ export class Game {
     if (cycleControls) this._cycleScheme();
     else if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('right') || this.input.consumeButton('schemeNext'))) this._cycleScheme();
     else if ((this.state === 'menu' || this.state === 'gameover') && this.input.pressed('left')) this._setScheme(prevScheme(this.controlScheme));
+    // Reef-skip 'START AT' selector (↑ ↓ on the menus, or its tap target).
+    if ((this.state === 'menu' || this.state === 'gameover') &&
+        (this.input.pressed('up') || this.input.pressed('down') || this.input.consumeButton('skipNext'))) this._cycleStartReef();
 
     if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else if (this.state === 'drydock') this._closeDryDock(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
@@ -1416,6 +1429,9 @@ export class Game {
       this.relic.update(dt, this.t);
       if (this.zone === 'reef' && this.relic.reached(this.diver)) {
         this.relic.taken = true; this.carryingRelic = true; this.carried += RELIC.value;
+        // Bank a one-use reef-skip token the instant it's found (persist now, so
+        // it's kept even if the run ends before sailing on).
+        bankReefRelic(this.meta, this.reef); saveSalvage(this.meta);
         this.particles.sparkle(this.relic.x, this.relic.y, PAL.key, 30); this.audio.gem();
       }
     }
@@ -2411,6 +2427,7 @@ export class Game {
       if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'drydock', x: W / 2 + 8, y: 516, w: 132, h: 34 });
       // Control-scheme selector: a tap target over the menu/gameover selector row.
       if (this.state === 'menu' || this.state === 'gameover') btns.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
+      if ((this.state === 'menu' || this.state === 'gameover') && availableSkips(this.meta).length) btns.push({ id: 'skipNext', x: W / 2 - 152, y: 358, w: 344, h: 28 });
       if (this.state === 'help') {
         const r = this._helpRects(); btns.push(r.prev, r.next, r.close);
         if (HELP_PAGES[this.helpPage].id === 'controls') btns.push({ id: 'controls', x: W / 2 - 150, y: 162, w: 300, h: 30 });
@@ -2424,7 +2441,7 @@ export class Game {
   _touchBtn(b) {
     // The scheme selectors are invisible tap targets over their own menu/help
     // text — no button chrome, just a hit region.
-    if (b.id === 'schemeNext' || b.id === 'controls') return;
+    if (b.id === 'schemeNext' || b.id === 'controls' || b.id === 'skipNext') return;
     const ctx = this.ctx;
     const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive) || (b.id === 'torch' && this.torchOn);
     ctx.save();
@@ -2805,6 +2822,16 @@ export class Game {
     this._applyHintStrip(); this.audio.select();
   }
   _cycleScheme() { this._setScheme(nextScheme(this.controlScheme)); }
+
+  // Cycle the menu 'START AT' selector through fresh-reef-1 plus every reef a
+  // held relic unlocks. No-op when you hold no reef relics.
+  _cycleStartReef() {
+    const opts = [1, ...availableSkips(this.meta)];
+    if (opts.length <= 1) { this.pendingStartReef = 1; return; }
+    const i = Math.max(0, opts.indexOf(this.pendingStartReef));
+    this.pendingStartReef = opts[(i + 1) % opts.length];
+    this.audio.select();
+  }
   // Auto-switch to pad prompts when a gamepad appears — until the player picks.
   _autoDetectScheme() {
     if (this._schemeManual) return;
@@ -2822,6 +2849,19 @@ export class Game {
     this._text('Explore 2D caves — tunnels, drop-offs & chambers.', cx, 288, 17, PAL.hudText, 'center', 'middle');
     this._text('Grab pearls, gems & sunken wrecks. Harpoon the hunters.', cx, 314, 17, PAL.hudText, 'center', 'middle');
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
+    // Reef-skip 'START AT' selector — only shown when you hold reef relics.
+    const skips = availableSkips(this.meta);
+    if (skips.length) {
+      const opts = [1, ...skips];
+      if (!opts.includes(this.pendingStartReef)) this.pendingStartReef = 1;
+      const r = this.pendingStartReef;
+      const label = r > 1
+        ? `‹ Reef ${r}  ·  cash a Reef-${r - 1} relic  ·  +${skipStartGold(r)}g ›`
+        : '‹ Reef 1 — fresh dive ›';
+      this._text('⚓ START AT:', cx - 152, 372, 13, '#9fc6e0', 'right', 'middle');
+      this._text(label, cx + 4, 372, 14, r > 1 ? PAL.key : PAL.hudText, 'center', 'middle', true);
+      this._text(this.input.isTouch ? 'tap' : '↑ ↓', cx + 176, 372, 11, '#7fb0d0', 'left', 'middle');
+    }
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE', cx, 404, 22, PAL.gold, 'center', 'middle', true);
     // Control-scheme selector (‹ Keyboard / Steam Deck / ROG Ally ›). Tap it on
