@@ -185,6 +185,22 @@ export class Cave {
   surfaceBelow(x, y, maxD = 400) { let s = y; const lim = y + maxD; while (s < lim && !this.isSolid(x, s)) s += 3; return s; }
   surfaceSide(x, y, dir, maxD = 400) { let s = x; const lim = x + dir * maxD; while (dir * (lim - s) > 0 && !this.isSolid(s, y)) s += dir * 3; return s; }
 
+  // Nearest open cell centre to a world point (ring search outward). Guarantees
+  // a valid, connected open spawn even if (x,y) lands in rock — used to drop the
+  // diver into the main shaft at a zone's entrance/exit.
+  nearestOpen(x, y, maxRing = 24) {
+    const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+    for (let r = 0; r <= maxRing; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;   // ring perimeter only
+        const gx = cx + dx, gy = cy + dy;
+        if (gx < 1 || gy < 1 || gx >= this.GW - 1 || gy >= this.GH - 1) continue;
+        if (this.open[this._idx(gx, gy)]) return this.cellCentre(gx, gy);
+      }
+    }
+    return null;
+  }
+
   // A random open cell centre below the given world y.
   randomOpen(minY = OPEN_BAND + CELL, tries = 40) {
     for (let i = 0; i < tries; i++) {
