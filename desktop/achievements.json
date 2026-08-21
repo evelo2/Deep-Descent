@@ -1,0 +1,19 @@
+{
+  "_comment": "Canonical Steam achievement API names. Each MUST equal a badge id in src/meta/badges.js (enforced by tests/desktop/achievements.test.mjs). Create one achievement in the Steamworks partner backend for every id below, using the id verbatim as the API Name.",
+  "ids": [
+    "firstblood",
+    "krakenslayer",
+    "pacifist",
+    "conservationist",
+    "untouchable",
+    "beachcomber",
+    "pearldiver",
+    "highroller",
+    "deepdiver",
+    "abyssal",
+    "marathon",
+    "waterlogged",
+    "oneanddone",
+    "emptyhanded"
+  ]
+}
