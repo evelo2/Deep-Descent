@@ -2,14 +2,15 @@
 // surface making tunnels, vertical drop-offs and chambers. A chamfer distance
 // field over that grid gives smooth, organic rock: collision slides entities
 // along curved walls, and rendering soft-carves the caves out of a rock layer.
-import { WORLD, CAVE, PAL } from '../config.js';
+import { WORLD, CAVE, caveParams, PAL } from '../config.js';
 
 const { WW, WH, CELL, OPEN_BAND } = WORLD;
 const BIG = 9999;
 
 export class Cave {
-  constructor(biome = 'reef') {
+  constructor(biome = 'reef', reef = 1) {
     this.biome = biome;   // 'reef' (rock) | 'belly' (fleshy) | 'temple' (stone) | 'abyss' (dark trench)
+    this.reef = reef;     // drives per-reef carve density (deeper = branchier, vaster)
     this.GW = Math.ceil(WW / CELL);
     this.GH = Math.ceil(WH / CELL);
     this.CARVE = CAVE.carve;
@@ -64,13 +65,26 @@ export class Cave {
     // Miner stack. The first miner is a "main shaft" driven mostly downward from
     // directly under the boat (the dive point), so there's always an entrance and
     // a route to the bottom; the rest wander to make the network.
+    const P = caveParams(this.reef);   // per-reef density: deeper reefs are vaster
     const spawnGX = clampX(Math.round((WW / 2) / CELL));
+    // Seed the stack (processed LIFO via pop): push wanderers FIRST so the
+    // shafts, pushed last, pop and carve FIRST — otherwise a deep reef's swarm
+    // of wanderer branches exhausts the iteration guard before the shafts run
+    // (which would starve even the guaranteed dive entrance). Wanderers then
+    // weave between the shafts + carve chambers under the remaining budget.
     const miners = [];
-    for (let i = 0; i < CAVE.miners; i++)
-      miners.push({ x: i === 0 ? spawnGX : clampX(2 + Math.floor(Math.random() * (this.GW - 4))), y: bandRow, steps: CAVE.minerSteps, shaft: i === 0 });
+    for (let i = 0; i < P.wanderers; i++)
+      miners.push({ x: clampX(2 + Math.floor(Math.random() * (this.GW - 4))), y: bandRow, steps: P.steps, shaft: false });
+    // Parallel descent shafts spread across the width → multiple top→bottom
+    // routes, all joined at the top via the open-sea band so every one is
+    // reachable. Shaft 0 stays under the boat: the guaranteed dive entrance.
+    for (let i = 0; i < P.shafts; i++) {
+      const gx = i === 0 ? spawnGX : clampX(Math.round((i + 0.5) / P.shafts * this.GW));
+      miners.push({ x: gx, y: bandRow, steps: P.steps, shaft: true });
+    }
 
     let guard = 0;
-    while (miners.length && guard++ < 4000) {
+    while (miners.length && guard++ < P.maxIters) {
       const m = miners.pop();
       let { x, y } = m, left = m.steps;
       while (left > 0) {
@@ -90,7 +104,7 @@ export class Cave {
           else if (mode === 'diag') { x += dir; y++; }
           x = clampX(x); y = clampY(y);
           left--;
-          if (!m.shaft && Math.random() < CAVE.branchChance && miners.length < 44)
+          if (!m.shaft && Math.random() < P.branch && miners.length < P.concurrentCap)
             miners.push({ x, y, steps: 30 + (Math.random() * 60 | 0), shaft: false });
         }
       }

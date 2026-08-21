@@ -229,7 +229,7 @@ export class Game {
   }
 
   _generateWorld() {
-    const C = this.cave = new Cave('reef');
+    const C = this.cave = new Cave('reef', this.reef);
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];

@@ -74,10 +74,32 @@ export const GAME = {
 // sliding collision. See systems/cave.js.
 export const CAVE = {
   carve: 50,        // px carve radius — wall offset from open-cell centres
-  miners: 5,        // parallel miners carving from the surface
-  minerSteps: 190,  // steps each miner walks
+  miners: 5,        // parallel miners carving from the surface (reef 1 baseline)
+  minerSteps: 190,  // steps each miner walks (reef 1 baseline)
   branchChance: 0.14,
+  // Reef scaling: deeper reefs carve denser, multi-route networks — more miners,
+  // longer tunnels, and more forks — so the map opens from a sparse single route
+  // into a sprawling maze to explore. Reef 1 keeps the baseline exactly.
+  minersPerReef: 1.2, stepsPerReef: 22, branchPerReef: 0.022,
+  branchMax: 0.30, minerCap: 16, concurrentCapBase: 44,
 };
+
+// Per-reef cave generation parameters (pure/Node-testable). reef 1 → baseline.
+// `shafts` = parallel top→bottom descent routes spread across the width (so a
+// deep reef has many routes, not one); `wanderers` = horizontal-biased miners
+// that weave between them and carve chambers. Both grow with reef, opening the
+// map from a single corridor into a sprawling multi-route network.
+export function caveParams(reef = 1) {
+  const r = Math.max(0, (Math.floor(reef) || 1) - 1);
+  return {
+    shafts: Math.min(5, 1 + Math.floor(r / 3)),
+    wanderers: Math.min(CAVE.minerCap, Math.round(CAVE.miners - 1 + r * CAVE.minersPerReef)),
+    steps: Math.round(CAVE.minerSteps + r * CAVE.stepsPerReef),
+    branch: Math.min(CAVE.branchMax, CAVE.branchChance + r * CAVE.branchPerReef),
+    concurrentCap: Math.min(120, CAVE.concurrentCapBase + r * 8),
+    maxIters: 4000 + r * 900,
+  };
+}
 
 // Sharks come in sizes — small darters to big hunters.
 export const SHARK = { minScale: 0.7, maxScale: 1.7 };
