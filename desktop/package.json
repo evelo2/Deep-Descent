@@ -1,0 +1,29 @@
+{
+  "name": "deep-descent-desktop",
+  "productName": "Deep Descent",
+  "version": "1.0.0",
+  "description": "Desktop (Electron) wrapper for Deep Descent — Steam distribution.",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "sync": "node scripts/sync-web.mjs",
+    "start": "npm run sync && electron .",
+    "dist": "npm run sync && electron-builder --win",
+    "test": "node ../tests/desktop/steam-shim.test.mjs && node ../tests/desktop/achievements.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
+  },
+  "build": {
+    "appId": "com.evelo2.deepdescent",
+    "productName": "Deep Descent",
+    "files": ["main.js", "preload.js", "steam.js", "achievements.json", "steam_appid.txt", "app/**/*"],
+    "asarUnpack": ["**/node_modules/steamworks.js/**"],
+    "directories": { "output": "dist" },
+    "win": { "target": "nsis" }
+  }
+}

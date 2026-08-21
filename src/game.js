@@ -30,6 +30,7 @@ import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
 import { BADGES, BADGE_BY_ID, loadBadges, saveBadges, awardBadges, rankFor } from './meta/badges.js';
+import { unlockAchievement } from './platform/steam.js';
 import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
@@ -1883,7 +1884,11 @@ export class Game {
     // Award any newly-earned achievement badges from this run's summary.
     if (this.badgeState) {
       this.newBadges = awardBadges(this.badgeState, this._runStats());
-      if (this.newBadges.length) saveBadges(this.badgeState);
+      if (this.newBadges.length) {
+        saveBadges(this.badgeState);
+        // Mirror each freshly-earned badge to Steam (no-op on the web build).
+        for (const id of this.newBadges) unlockAchievement(id);
+      }
     }
   }
 
