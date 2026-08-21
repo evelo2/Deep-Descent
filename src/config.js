@@ -276,10 +276,11 @@ export const AIM = {
 export function shellShape(p) {
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const smooth = (u) => u * u * (3 - 2 * u);
-  if (p < 0.44) return { open: 0, shake: p > 0.30 ? clamp01((p - 0.30) / 0.14) : 0 };
+  if (p < 0.44) return { open: 0, shake: p > 0.30 ? clamp01((p - 0.30) / 0.14) : 0 };  // rattle before opening
   if (p < 0.60) return { open: smooth((p - 0.44) / 0.16), shake: 0 };  // slow open
-  if (p < 0.90) return { open: 1, shake: 0 };                           // hold open
-  if (p < 0.94) return { open: 1 - (p - 0.90) / 0.04, shake: 0 };       // snap shut
+  if (p < 0.82) return { open: 1, shake: 0 };                          // hold open (calm, grab now)
+  if (p < 0.90) return { open: 1, shake: clamp01((p - 0.82) / 0.08) }; // SHUDDER — telegraph the imminent close
+  if (p < 0.94) return { open: 1 - (p - 0.90) / 0.04, shake: 1 };      // snap shut (still shuddering)
   return { open: 0, shake: 0 };
 }
 

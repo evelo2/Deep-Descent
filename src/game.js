@@ -404,6 +404,7 @@ export class Game {
       if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
     }
 
+    this._orientShells();
     this._clearCreaturesNearPortals();
   }
 
@@ -411,6 +412,21 @@ export class Game {
   // you never arrive at (or get dropped back beside) one straight into an enemy.
   // Call at the end of a generator, once every portal for the zone exists (some
   // reef specials are placed after the creature loop, so this is a cleanup pass).
+  // Orient ledge shells to their surroundings: a directional clam is flipped to
+  // open toward open water (away from a side wall), and any shell clipping a
+  // side wall is nudged clear so it sits flush rather than embedded in rock.
+  _orientShells() {
+    const C = this.cave; if (!C) return;
+    for (const s of this.shells) {
+      const r = s.radius;
+      const rockR = C.isSolid(s.x + r * 0.85, s.y);
+      const rockL = C.isSolid(s.x - r * 0.85, s.y);
+      if (rockR && !rockL) { s.facing = -1; s.x -= r * 0.18; }        // wall on right → open left, nudge clear
+      else if (rockL && !rockR) { s.facing = 1; s.x += r * 0.18; }    // wall on left → open right, nudge clear
+      // both sides rock (tight niche) or open both sides → keep default facing
+    }
+  }
+
   _clearCreaturesNearPortals() {
     const portals = [];
     if (this.zone === 'reef') {
@@ -819,6 +835,7 @@ export class Game {
     this._makeCurrents(2);
     this._makePowerups(1);
     this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._orientShells();
     this._clearCreaturesNearPortals();
   }
 
@@ -862,6 +879,7 @@ export class Game {
     this._makeCurrents(3);   // a churning trench
     this._makePowerups(1);
     this.abyssExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._orientShells();
     this._clearCreaturesNearPortals();
   }
 
@@ -1004,6 +1022,7 @@ export class Game {
     this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
     this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this._orientShells();
     this._clearCreaturesNearPortals();
   }
 
