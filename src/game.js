@@ -162,7 +162,7 @@ export class Game {
     this.whirlEntrance = null; this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = [];
     this.whirlSpeed = 0; this.whirlScore = 0; this.whirlTier = 0; this.whirlSalvageEarned = 0;
     this.whirlBubbles = []; this.whirlTreasures = [];
-    this.hasSub = false; this.inSub = false; this._subHull = false;   // mini-sub: owned/piloting this reef
+    this.hasSub = false; this.inSub = false; this.subArmor = 0;   // mini-sub: piloting + hull armor remaining
     this.powerups = []; this.airMax = AIR.max; this.multiFireT = 0; this.bells = []; this.crates = []; this.darkZones = [];
     this.relic = null; this.relicBanked = false; this.carryingRelic = false; this.reefBanked = 0; this.reefGoal = RELIC.goalBase;
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
@@ -972,7 +972,9 @@ export class Game {
     }
 
     this.flora = new Flora([]);
-    this._makeCurrents(3);   // a churning trench
+    // No currents in the trench: the heavy sub + narrow channels made swept
+    // currents almost impossible to fight, so The Deep stays still water.
+    this.currents = [];
     this._makePowerups(1);
     // Several exit hatches scattered through the trench — deeper ones pay a
     // bigger Salvage bonus on the way out (see the exit check in update()).
@@ -1147,9 +1149,12 @@ export class Game {
     else if (this.state === 'drydock') this._dryDockAct();
   }
 
-  get weapon() { return this.weapons[this.weaponIdx]; }
+  // In the sub the net is the ONLY weapon (its launcher is what the hull mounts);
+  // everywhere else it's the selected weapon.
+  get weapon() { return this.inSub ? 'net' : this.weapons[this.weaponIdx]; }
 
   _cycleWeapon(dir) {
+    if (this.inSub) return;   // the sub carries only the net — no switching
     if (this.weapons.length < 2) return;
     this.weaponIdx = (this.weaponIdx + dir + this.weapons.length) % this.weapons.length;
     this.weaponSwapT = 1.2;   // brief HUD flash of the new weapon name
@@ -1828,11 +1833,18 @@ export class Game {
       this.audio.select && this.audio.select();
       return;
     }
-    // The mini-sub's hull absorbs the first contact hit each abyss dive (no
-    // life/loot lost), then must be re-boarded (a fresh _enterAbyss) to reset.
-    if (this.inSub && this._subHull) {
-      this._subHull = false;
-      this.puName = 'HULL HIT!'; this.puCol = PAL.air; this.puT = 1.0;
+    // The sub's hull soaks several contact hits (no life/loot lost) while armor
+    // remains. When it's spent, the next hit BREACHES the hull: the diver is
+    // ejected from the trench and the un-banked trench haul is lost — the only
+    // way to keep it is to leave through an exit hatch.
+    if (this.inSub) {
+      if (this.subArmor > 0) {
+        this.subArmor -= 1; this.flash = 1; this.shake = 10; this.audio.hit();
+        this.puName = this.subArmor > 0 ? `🛡 HULL HIT — armor ${this.subArmor}/${SUB.armor}` : '⚠ HULL BREACHING — one more hit ejects you!';
+        this.puCol = this.subArmor > 0 ? PAL.air : PAL.danger; this.puT = 1.4;
+        return;
+      }
+      this._ejectFromAbyss();
       return;
     }
     this.diver.hit(); this.flash = 1; this.shake = 12;
@@ -1928,6 +1940,9 @@ export class Game {
     this.whirlExit = null; this.whirlShaft = null; this.whirlObstacles = []; this.whirlSpeed = 0; this.whirlScore = 0;
     this.whirlTier = 0; this.whirlSalvageEarned = 0; this.whirlBubbles = []; this.whirlTreasures = [];
     this._placeDiver(s.returnX, s.returnY, 0);
+    // Surfacing from any special level tops the tank up by up to half — a breather
+    // reward for making it out (and softens the deep-zone air tax on the way back).
+    this.air = Math.min(this.airMax, this.air + this.airMax * GAME.exitAirRefillFrac);
     this.savedReef = null; this.zoneFade = 1;
     this.reentryT = 1.5;   // grace so we don't immediately re-enter what we just left
     this.audio.bank();
@@ -1982,10 +1997,13 @@ export class Game {
     this._generateAbyss();
     // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
     // trench by headlight to find one of the exit hatches. inSub is always on
-    // here now (the sub IS the entrance); _subHull absorbs the first contact hit.
+    // here now (the sub IS the entrance); the hull armor soaks several hits.
     const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: WH * 0.62 };
     this._placeDiver(c.x, c.y, 0);
-    this.inSub = true; this._subHull = true;
+    this.inSub = true; this.subArmor = SUB.armor;
+    // Remember the haul on entry: leaving via a hatch keeps whatever you gather
+    // in the trench, but a hull breach ejects you and forfeits the trench gains.
+    this._abyssEntryCarried = this.carried; this._abyssEntryPearls = this.carriedPearls;
     this.extractActive = false; this.extractT = 0; this.extractLapsed = false;   // arm the kicker fresh
     this.shake = 8; this.zoneFade = 1;
     this.audio.select();
@@ -1993,7 +2011,18 @@ export class Game {
   // Leaving the abyss consumes its entrance — like the temple, a plundered
   // special zone's portal is spent, so it won't re-trigger at the return spot.
   // Disembarking the sub happens here too — ascending out is how you get off.
-  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; this._subHull = false; }
+  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; this.subArmor = 0; }
+
+  // Hull breached: ejected from the trench WITHOUT the haul gathered down there
+  // (only a hatch exit keeps it). Restore the carried loot to its entry value,
+  // then surface. No life lost — losing the loot is the whole penalty.
+  _ejectFromAbyss() {
+    this.carried = this._abyssEntryCarried || 0;
+    this.carriedPearls = this._abyssEntryPearls || 0;
+    this.flash = 1; this.shake = 18; this.audio.gasp();
+    this.puName = '💥 HULL DESTROYED — ejected, trench haul lost!'; this.puCol = PAL.danger; this.puT = 2.8;
+    this._exitAbyss();
+  }
 
   _nearestExit() {
     let best = null, bd = Infinity;
@@ -2852,7 +2881,12 @@ export class Game {
       const rel = this.relicBanked ? '⚓ RELIC ✓' : this.carryingRelic ? '⚓ RELIC — bank it!' : `⚓ ${this.reefBanked}/${this.reefGoal}`;
       this._text(this.canSail ? '⚓ SAIL READY' : rel, W - 20, 102, 12, this.canSail ? PAL.air : PAL.key, 'right', 'top');
     } else if (this.zone === 'abyss') {
-      this._text(this.inSub ? '🛥 IN SUB' : '⚠ 150% AIR', W - 20, 102, 12, this.inSub ? PAL.air : PAL.danger, 'right', 'top');
+      if (this.inSub) {
+        const breached = this.subArmor <= 0;
+        this._text(`🛥 HULL ${'▮'.repeat(this.subArmor)}${'▯'.repeat(Math.max(0, SUB.armor - this.subArmor))}`, W - 20, 102, 12, breached ? PAL.danger : PAL.air, 'right', 'top');
+      } else {
+        this._text('⚠ 150% AIR', W - 20, 102, 12, PAL.danger, 'right', 'top');
+      }
     }
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
     if (this.muted) this._text('MUTED', W / 2, 42, 11, '#ff9a6b', 'center', 'top');
