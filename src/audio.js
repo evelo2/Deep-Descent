@@ -72,6 +72,11 @@ export class Audio {
   gasp()    { this._tone({ type: 'sine', f0: 180, f1: 90, t: 0.5, gain: 0.3 }); }
   select()  { this._tone({ type: 'square', f0: 520, f1: 720, t: 0.08, gain: 0.15 }); }
   fire()    { this._tone({ type: 'square', f0: 900, f1: 240, t: 0.14, gain: 0.22 }); }
+  click()   { this._tone({ type: 'square', f0: 150, f1: 80, t: 0.035, gain: 0.16 }); }   // dry dead-trigger (out of ammo)
+  heartbeat() {   // ominous low lub-dub when air runs low
+    this._tone({ type: 'sine', f0: 68, f1: 44, t: 0.13, gain: 0.34 });
+    setTimeout(() => this._tone({ type: 'sine', f0: 58, f1: 38, t: 0.17, gain: 0.26 }), 175);
+  }
   kill()    { this._tone({ type: 'sawtooth', f0: 500, f1: 120, t: 0.2, gain: 0.28 });
               this._tone({ type: 'triangle', f0: 700, f1: 300, t: 0.16, gain: 0.16 }); }
   gem()     { [784,1046,1318,1568].forEach((f,i)=>setTimeout(()=>this._tone({type:'sine',f0:f,f1:f*1.2,t:0.18,gain:0.28}), i*55)); }
