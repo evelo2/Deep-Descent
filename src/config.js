@@ -285,10 +285,14 @@ export const POWERUP = {
 // slow (the standard harpoon is a slow, deliberate weapon).
 export const AIM = {
   threshold: 0.14,        // seconds of hold before aim mode engages
-  baseRate: 1.5,          // rad/s the aim swings toward target at level 0 (deliberately slow)
-  ratePerLevel: 0.8,      // extra rad/s per targeting level (gentle — high upgrades stay measured)
-  fireMultPerLevel: 0.78, // cooldown ×= this per targeting level (faster fire)
-  lockTol: 0.17,          // radians within which it will fire
+  // AIM SPEED (how fast the reticle swings onto a target) is a SEPARATE knob
+  // from FIRE SPEED (how often you can shoot, fireMultPerLevel below). You hold
+  // to aim and RELEASE to fire, so the swing rate sets how long you must hold to
+  // lock, while fireMultPerLevel sets the shot cooldown.
+  aimRateBase: 0.9,       // rad/s the reticle swings at level 1 (deliberately slow — hold to lock)
+  aimRatePerLevel: 0.9,   // extra rad/s per Targeting level above unlock (upgrades track much faster)
+  fireMultPerLevel: 0.78, // fire COOLDOWN ×= this per targeting level (faster fire) — independent of aim
+  lockTol: 0.17,          // radians within which the reticle reads as 'locked' (visual cue)
   range: 720,             // only auto-target threats within this range
   unlockLevel: 1,         // auto-aim LOCK is gated: engages only at aimLevel >= this (0 = manual fire only)
   maxLevel: 3,
