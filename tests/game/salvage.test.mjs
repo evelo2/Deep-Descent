@@ -65,7 +65,7 @@ const store = (init = null) => {
 // --- saveSalvage -> loadSalvage round-trip. -------------------------------------
 {
   const s = store();
-  const state = { salvage: 123, unlocked: ['lungs', 'fins'], slots: 3, loadout: ['lungs'] };
+  const state = { salvage: 123, unlocked: ['lungs', 'fins'], slots: 3, loadout: ['lungs'], reefRelics: { 1: 2, 3: 1 } };
   saveSalvage(state, s);
   const r = loadSalvage(s);
   check('round-trip: state survives save -> load unchanged', deepEqual(r, state));
