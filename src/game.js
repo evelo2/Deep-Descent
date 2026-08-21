@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, WHIRL, whirlpoolReward, DIVER } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -70,7 +70,7 @@ const WACKY_OF = ['of Doom', 'of Secrets', 'of Regret', 'of Lost Socks', 'of Whi
 const HELP_PAGES = [
   { title: '🐟 CONTROLS', id: 'controls', lines: [
     'Swim — Arrows / WASD / drag / left stick',
-    'Fire — Space / F / tap / A   ·   HOLD fire to auto-aim the nearest threat',
+    'Fire — Space / F / tap / A   ·   HOLD to aim the nearest threat, RELEASE to shoot it',
     'Swap weapon — Q / E   ·   gamepad Y / LB',
     'Flare — G   (light up a dark cave)',
     'Torch — T   (toggle a battery light; shares the shock-rod battery)',
@@ -98,6 +98,14 @@ const HELP_PAGES = [
     'targeting, ammo, capacity and flares. Upgrade prices double each level.',
     '⚓ Bank the relic (or hit the points goal), then sail on to a harder reef.',
     'Supply crates and floor pickups give free gear, harpoons and flares.',
+  ] },
+  { title: '⚙ SALVAGE & DRY DOCK', lines: [
+    'Salvage (⚙) is meta-currency that PERSISTS between runs and even game-overs.',
+    'Earn it: reaching new reefs, felling mini-bosses, finding the reef relic,',
+    'whirlpool speed-breaks, golden pearls, and sweeping a reef’s treasure clean.',
+    'Black Pearls (rare, deep) bank straight to Salvage. Spend it at the DRY DOCK',
+    '(🛠 R on the menu) to unlock & equip permanent relics — lungs, fins, sonar…',
+    'A reef relic you FIND can be cashed at the menu to START a run reefs deeper.',
   ] },
 ];
 
@@ -258,6 +266,9 @@ export class Game {
       const c = C.randomOpen(); if (!c) continue;
       this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WH) * 0.18 ? 'gem' : 'coin'));
     }
+    // Treasure-sweep bonus baseline: total loose treasure this reef, and which
+    // completion tiers (80/90/100%) have paid out (see the check in update()).
+    this._reefTreasureTotal = this.treasures.length; this._collectTier = 0;
 
     // Air vents on cave walls, spread out.
     for (const w of spread(C.walls(), 14, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
@@ -1587,6 +1598,18 @@ export class Game {
           this.particles.sparkle(tr.x, tr.y, tr.kind === 'gem' ? PAL.gem : PAL.gold, tr.kind === 'coin' ? 12 : 18);
           tr.kind === 'gem' ? this.audio.gem() : this.audio.pickup();
         }
+      }
+    }
+    // Treasure-sweep bonus: cross 80/90/100% of the reef's loose treasure and
+    // bank a chunk of Salvage (once each) — rewards a thorough clean-out.
+    if (this.zone === 'reef' && this._reefTreasureTotal > 0 && this._collectTier < COLLECT_BONUS.length) {
+      let taken = 0; for (const tr of this.treasures) if (tr.taken) taken++;
+      const frac = taken / this._reefTreasureTotal;
+      while (this._collectTier < COLLECT_BONUS.length && frac >= COLLECT_BONUS[this._collectTier][0]) {
+        const [f, sv] = COLLECT_BONUS[this._collectTier];
+        this.meta.salvage += sv; saveSalvage(this.meta);
+        this.puName = `${Math.round(f * 100)}% TREASURE SWEEP · +${sv}⚙`; this.puCol = PAL.gold; this.puT = 2.4; this.audio.bank();
+        this._collectTier++;
       }
     }
     // Shells (clams & chests): grab loot while open, get bitten when they shut.
