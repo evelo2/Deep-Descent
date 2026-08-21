@@ -1328,35 +1328,36 @@ export class Game {
     }
     if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
 
-    // Hold-to-aim: after a brief hold, root the diver and lock the nearest
-    // threat; the aim swings toward it (rate rises with the Targeting upgrade)
-    // and auto-fires once lined up.
+    // Hold to AIM, RELEASE to fire: while held (past a brief pre-hold) the diver
+    // roots and the reticle swings toward the nearest threat at the aim rate
+    // (slow at L1, faster with Targeting upgrades). Letting go fires ONE shot
+    // along the current reticle — a locked shot if you held long enough for the
+    // swing to land, a miss if you released early. Aim speed and fire rate are
+    // independent (see AIM in config).
     const holding = graced ? false : this.input.fireHeld();
     const released = !holding && this._prevHolding;
-    const heldT = this.fireHeldT;                     // hold duration up to last frame
     if (holding) this.fireHeldT += dt; else this.fireHeldT = 0;
     let intent = this.input.vector();
     const engaged = holding && this.fireHeldT >= AIM.threshold;   // past the brief pre-hold
     const threat = this._acquireAimTarget(engaged);
     this.aiming = !!threat; this.aimTarget = threat;
-    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; this._didAim = true; }   // hold position
+    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position while aiming
 
     this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult);
 
     if (this.aiming) {
-      // Swing the aim onto the target; fire only once lined up (no pre-shot).
+      // Swing the reticle onto the target — but do NOT fire here; release fires.
       const ta = Math.atan2(threat.y - this.diver.y, threat.x - this.diver.x);
-      const rate = AIM.baseRate + AIM.ratePerLevel * this.aimLevel;
+      const rate = AIM.aimRateBase + AIM.aimRatePerLevel * (this.aimLevel - AIM.unlockLevel);
       this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
       this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
-      if (Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol) this.fire();
     } else {
       this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);   // keep synced for a smooth engage
-      if (engaged) this.fire();   // holding with no threat in range → fire in the facing direction
     }
-    // A quick tap (pressed and released before aim engaged) fires one shot.
-    if (released && !this._didAim && heldT < AIM.threshold) this.fire();
-    if (released) this._didAim = false;
+    // Release fires one shot along the reticle (aimed if it locked, or a snap
+    // shot in the facing direction for a quick tap). fire()'s own cooldown gates
+    // the fire RATE. `!graced` swallows the press that entered the zone/game.
+    if (released && !graced) this.fire();
     this._prevHolding = holding;
     for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
     this.cave.collide(this.diver);
