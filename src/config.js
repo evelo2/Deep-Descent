@@ -196,8 +196,8 @@ export const WEAPON_INFO = {
   // most once every 2s (minCd floor), so aimed single shots matter.
   harpoon:  { name: 'HARPOON',      cd: 2.6,  minCd: 2.0, glyph: '➤', cost: 0,   minReef: 0 },
   net:      { name: 'NET GUN',      cd: 0.75, glyph: '🕸', cost: 150, minReef: 1 },
-  shock:    { name: 'SHOCK ROD',    cd: 0.55, glyph: '⚡', cost: 300, minReef: 2 },
-  speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙', cost: 260, minReef: 2 },
+  shock:    { name: 'SHOCK ROD',    cd: 0.55, glyph: '⚡', cost: 6000, minReef: 2 },
+  speargun: { name: 'SPEARGUN',     cd: 0.95, glyph: '⋙', cost: 5200, minReef: 2 },
   charge:   { name: 'DEPTH CHARGE', cd: 1.15, glyph: '💣', cost: 520, minReef: 3 },
 };
 
@@ -216,6 +216,41 @@ export const SHOP = {
   harpoonCapMaxLevel: 3,
   harpoonCapBase: 200,      // harpoon-capacity level-1 cost (doubles per level)
 };
+// Timed consumable buffs — bought with gold at the shop, they run a long timer
+// OR until death (whichever comes first), then they're spent. Gameplay-tied to
+// the core loops (air / mobility / loot) and distinct from the PERMANENT relic
+// passives: a per-run gold sink with real risk (you lose it on death). Each
+// entry names the run-field flag it flips while active (see game.js buffT).
+// `dur` is deliberately long — a run rarely lasts it out, so in practice these
+// are "until death". See _shopItems / _shopBuy / the buffT tick + HUD.
+export const CONSUMABLE = [
+  { id: 'suit',    name: 'Sealed Wetsuit',  glyph: '🧥', cost: 700, dur: 900, minReef: 1, desc: '−35% air drain', airMult: 0.65 },
+  { id: 'fins',    name: 'Turbo Fins',      glyph: '🐟', cost: 600, dur: 900, minReef: 1, desc: '+40% swim speed', swimMult: 1.4 },
+  { id: 'lantern', name: 'Salvage Lantern', glyph: '🧲', cost: 650, dur: 900, minReef: 2, desc: 'draws in loot',   magnet: true },
+];
+export const CONSUMABLE_BY_ID = Object.fromEntries(CONSUMABLE.map((c) => [c.id, c]));
+
+// Supply-crate loot table. A crate should MOSTLY refill the staples (harpoons /
+// air) and only RARELY cough up a weapon or a consumable buff. Weighted roll in
+// game._openCrate; entries whose precondition fails (e.g. no lockable weapon,
+// air already full) are skipped and their weight redistributes to the rest.
+export const CRATE = {
+  weights: { harpoons: 34, air: 28, flares: 14, gold: 10, consumable: 6, weapon: 8 },
+  goldFind: 200,     // gold granted by a "gold" crate
+};
+
+// Pick a key from `weights` restricted to those whose `allowed[key]` is truthy,
+// proportional to weight. `r` is a roll in [0,1). Returns null if nothing is
+// allowed. Pure/Node-testable — used for supply-crate contents (see _openCrate).
+export function pickWeighted(weights, allowed, r) {
+  const keys = Object.keys(weights).filter((k) => allowed[k] && weights[k] > 0);
+  if (!keys.length) return null;
+  const total = keys.reduce((s, k) => s + weights[k], 0);
+  let x = Math.max(0, Math.min(0.999999, r)) * total;
+  for (const k of keys) { x -= weights[k]; if (x < 0) return k; }
+  return keys[keys.length - 1];
+}
+
 export const NET = { speed: 340, range: 340, snare: 4.5, r: 17 };
 // Depth charge: a scarce, hand-detonated mine. Click once to throw it (it sinks
 // and settles), click again to detonate. The blast reaches 10× the charge's
@@ -353,6 +388,7 @@ export const STAGE = {
   doorGrace: 0.6,     // after entering a room, ignore door tiles this long so a
                       // residual/held input at the transition can't bounce you
                       // straight back out through the adjacent retreat door
+  decorPerRoom: [3, 6],   // min..max procedural decor props placed per generated room
 };
 
 // The deep-dive abyss — a loot-rich trench off the reef, reached through its
@@ -369,15 +405,25 @@ export const ABYSS = {
   entranceMinDepthFrac: 0.6,   // the sub only appears on floors below this depth
   exits: 3,                    // exit hatches to find (deeper ones pay more)
   exitBonusBase: 15,           // Salvage per exit, scaled by its depth fraction
+  // Extraction kicker: the FIRST loot grab in the trench trips a countdown — the
+  // trench "destabilises". Reach an exit before it hits 0 for a fat time-scaled
+  // Salvage bonus; let it lapse and pressure spikes (air drains extractLapseMult
+  // faster) until you surface through a hatch. Pure reward-under-pressure — no
+  // instant fail. See game._updateExtraction.
+  extractSecs: 45,             // countdown length once tripped
+  extractBonusBase: 60,        // Salvage for extracting with time to spare (scaled by fraction left)
+  extractLapseMult: 2.2,       // air-drain multiplier once the countdown lapses
 };
 
 // Sub piloting physics: heavy — slow to accelerate, lots of glide/inertia (low
 // drag), but a higher top speed than the nimble diver. Plus its headlights.
 export const SUB = {
   accel: 300, drag: 0.9, buoyancy: 4, maxSpeed: 340,
-  ambient: 92,          // small glow radius around the hull
-  coneRange: 360,       // headlight throw
-  coneHalfAngle: 0.5,   // headlight cone half-angle (rad)
+  ambient: 104,         // bright glow radius around the hull (the core lit bubble)
+  halo: 260,            // soft outer halo — light bleeds this far into the dark, gently
+  glowWarm: 0.20,       // strength of the warm additive bloom around the hull
+  coneRange: 380,       // headlight throw
+  coneHalfAngle: 0.52,  // headlight cone half-angle (rad)
   darkAlpha: 0.95,      // how black the unlit trench is
 };
 
@@ -559,6 +605,7 @@ export const KEYMAP = {
   shop: ['KeyB'],
   help: ['KeyH'],
   drydock: ['KeyR'],
+  badges: ['KeyB'],   // opens the Trophy Wall on the menu / game-over (shop key is unused there)
   flare: ['KeyG'],
   torch: ['KeyT'],
   controls: ['KeyC'],
