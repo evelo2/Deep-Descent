@@ -38,7 +38,7 @@ export function controlsHelpLines(scheme) {
   const g = (a) => prompt(scheme, a);
   return [
     `Swim — ${g('swim')} / drag`,
-    `Fire — ${g('fire')} / tap   ·   HOLD fire to auto-aim the nearest threat`,
+    `Fire — ${g('fire')} / tap   ·   HOLD to aim the nearest threat, RELEASE to shoot it`,
     `Swap weapon — ${g('swap')}`,
     `Flare — ${g('flare')}   (light up a dark cave)`,
     `Torch — ${g('torch')}   (toggle a battery light; shares the shock-rod battery)`,
