@@ -154,6 +154,10 @@ export const SALVAGE = { perReef: 8, perBoss: 40, perRelic: 15, perPearl: 30, st
 // start a new run one reef deeper, with goldPerReef × (startReef − 1) head-start.
 export const SKIP = { goldPerReef: 500 };
 
+// Treasure-sweep bonus: collecting this fraction of a reef's loose treasure
+// awards this much Salvage (once each), rewarding a thorough clean-out.
+export const COLLECT_BONUS = [[0.8, 10], [0.9, 20], [1.0, 50]];
+
 // Dark caves: pitch-black chambers that only light up around a burning flare.
 // They hide rich loot, so a flare is the price of admission.
 export const DARKZONE = {
