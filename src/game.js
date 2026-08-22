@@ -135,7 +135,7 @@ export function oxygenMultiplier(reef, zone, inSub = false) {
 }
 
 export class Game {
-  constructor(ctx, input, audio, particles, background) {
+  constructor(ctx, input, audio, particles, background, services) {
     this.ctx = ctx; this.input = input; this.audio = audio;
     this.particles = particles; this.bg = background;
     this.state = 'menu';                 // menu | playing | paused | gameover
@@ -143,10 +143,16 @@ export class Game {
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
     this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
-    this.meta = loadSalvage();
-    this.badgeState = loadBadges();   // The Trophy Wall (persistent achievements)
-    this.statState = loadStats();     // lifetime cumulative counters (progressive badges)
-    this.progressState = loadProgress(); // earned progressive tier ids
+    // The meta-progression states are now OWNED by the Core services (Phase 2):
+    // when the platform hands us `services`, we source the same state objects it
+    // holds so a salvage/badge earned here is the one every future minigame sees
+    // (host.economy.state, host.progression.badges, …). All our mutations + saves
+    // below stay byte-identical — the wallet just lives in Core now. Without
+    // services (bare construction, e.g. isolated tests) we load directly as before.
+    this.meta = services ? services.economy.state : loadSalvage();
+    this.badgeState = services ? services.progression.badges : loadBadges();   // Trophy Wall (persistent achievements)
+    this.statState = services ? services.progression.stats : loadStats();      // lifetime cumulative counters (progressive badges)
+    this.progressState = services ? services.progression.progress : loadProgress(); // earned progressive tier ids
     this.newBadges = [];              // ids earned by the run just ended (for the summary)
     this.newTiers = [];               // progressive tier names crossed this run (summary)
     // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
