@@ -29,12 +29,33 @@ achievements no-op. The game is served over a custom `app://` scheme (not
 
 ## Package for Steam
 
+Cross-platform. `npm run dist` builds for whatever OS you run it on; the
+explicit variants force a target:
+
 ```bash
-npm run dist     # → dist/Deep Descent Setup <version>.exe
+npm run dist        # host OS (Windows .exe on Win, .dmg/.zip on Mac)
+npm run dist:mac    # macOS → dist/*.dmg + *.zip, both x64 and arm64
+npm run dist:win    # Windows → dist/Deep Descent Setup <version>.exe (NSIS)
 ```
 
 `steamworks.js` is a native module and is kept unpacked from the asar
-(`asarUnpack` in package.json).
+(`asarUnpack` in package.json). Each platform must be built on (or targeted
+from) a matching toolchain — build the Mac app on a Mac.
+
+### macOS signing / notarization
+
+The Mac config ships **unsigned** (`"mac": { "identity": null }`) so
+`npm run dist:mac` works on any Mac with no Apple cert — the resulting `.app`
+runs locally (first launch: right-click → Open to clear Gatekeeper).
+
+For a **distributable** Mac build (Steam's Mac depot, or direct download):
+1. Get an Apple Developer ID ($99/yr).
+2. Remove the `"identity": null` line so electron-builder auto-discovers your
+   Developer ID cert from the keychain (or set `CSC_LINK`/`CSC_KEY_PASSWORD`).
+3. Add hardened-runtime entitlements + a `notarize` step (Apple ID +
+   app-specific password, or an API key) so Gatekeeper clears it on other Macs.
+
+None of this is needed to test locally — only to ship.
 
 ## Steam achievements
 

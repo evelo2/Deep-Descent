@@ -8,7 +8,9 @@
   "scripts": {
     "sync": "node scripts/sync-web.mjs",
     "start": "npm run sync && electron .",
-    "dist": "npm run sync && electron-builder --win",
+    "dist": "npm run sync && electron-builder",
+    "dist:mac": "npm run sync && electron-builder --mac",
+    "dist:win": "npm run sync && electron-builder --win",
     "test": "node ../tests/desktop/steam-shim.test.mjs && node ../tests/desktop/achievements.test.mjs"
   },
   "devDependencies": {
@@ -24,6 +26,14 @@
     "files": ["main.js", "preload.js", "steam.js", "achievements.json", "steam_appid.txt", "app/**/*"],
     "asarUnpack": ["**/node_modules/steamworks.js/**"],
     "directories": { "output": "dist" },
-    "win": { "target": "nsis" }
+    "win": { "target": "nsis" },
+    "mac": {
+      "category": "public.app-category.games",
+      "identity": null,
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    }
   }
 }
