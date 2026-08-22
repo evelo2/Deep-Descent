@@ -30,6 +30,8 @@ import { drawStageScene, drawStageHud } from './render/stage.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
 import { BADGES, BADGE_BY_ID, loadBadges, saveBadges, awardBadges, rankFor } from './meta/badges.js';
+import { loadStats, saveStats, addRun } from './meta/stats.js';
+import { TRACKS, loadProgress, saveProgress, awardProgress, trackProgress, tierNameById } from './meta/progressive.js';
 import { unlockAchievement } from './platform/steam.js';
 import { applyLoadout, RELICS, getRelic } from './meta/relics.js';
 
@@ -143,7 +145,10 @@ export class Game {
     this.hiReef = +(localStorage.getItem(HI_REEF_KEY) || 1);
     this.meta = loadSalvage();
     this.badgeState = loadBadges();   // The Trophy Wall (persistent achievements)
+    this.statState = loadStats();     // lifetime cumulative counters (progressive badges)
+    this.progressState = loadProgress(); // earned progressive tier ids
     this.newBadges = [];              // ids earned by the run just ended (for the summary)
+    this.newTiers = [];               // progressive tier names crossed this run (summary)
     // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
     // wins; otherwise we start on Keyboard and auto-switch to pad prompts once a
     // gamepad shows up (until the player picks manually).
@@ -197,7 +202,9 @@ export class Game {
     this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
     // Per-run badge stats (see _runStats / awardBadges at game-over).
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
-    this.newBadges = [];
+    // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
+    this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
+    this.newBadges = []; this.newTiers = [];
     this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
     // Flash the equipped relics so the player sees their Salvage Log build is live.
     if (this.meta.loadout.length) {
@@ -747,7 +754,7 @@ export class Game {
   _closeDryDock() { this.state = this.ddReturn || 'menu'; }
 
   // The Trophy Wall — a read-only grid of achievement badges (earned vs. locked).
-  _openBadges(from) { this.bdReturn = from; this.state = 'badges'; this.audio.select(); }
+  _openBadges(from) { this.bdReturn = from; this.bdPage = 0; this.state = 'badges'; this.audio.select(); }
   _closeBadges() { this.state = this.bdReturn || 'menu'; this.audio.select(); }
   _dryDockMove(dir) { const n = this._dryDockRows().length; this.ddSel = (this.ddSel + dir + n) % n; this.audio.pickup(); }
 
@@ -1329,6 +1336,9 @@ export class Game {
 
     // Trophy Wall: a read-only overlay off the menu/game-over — any key closes it.
     if (this.state === 'badges') {
+      if (this.input.pressed('left') || this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.pressed('weaponPrev') || this.input.consumeButton('badgespage')) {
+        this.bdPage = this.bdPage ? 0 : 1; this.audio.pickup(); this.input.endFrame(); return;
+      }
       if (this.input.pressed('badges') || this.input.pressed('pause') || this.input.pressed('help') || startEdge || this.input.consumeTapFire() || this.input.consumeButton('badgesclose')) this._closeBadges();
       this.input.endFrame(); return;
     }
@@ -1377,6 +1387,7 @@ export class Game {
       this.input.endFrame(); return;
     }
     if (this.state !== 'playing') { this.input.endFrame(); return; }
+    this.runTime += dt;   // lifetime dive-time accrues only while actually diving
     if (this.zone === 'stage') { this._updateStage(dt); this.input.endFrame(); return; }
     if (this.zone === 'whirlpool') { this._updateWhirlpool(dt); this.input.endFrame(); return; }
     // Switch weapons (keyboard Q/E or [ ], gamepad Y/LB, touch weapon button).
@@ -1667,7 +1678,10 @@ export class Game {
     this._collisions();
 
     this.treasures = this.treasures.filter((tr) => !tr.taken);
-    for (const cr of this.creatures) if (cr.dead) this.kills++;   // run kill tally (for badges)
+    for (const cr of this.creatures) if (cr.dead) {   // run kill tally (for badges)
+      this.kills++;
+      if (cr.constructor && cr.constructor.name === 'Shark') this.runSharkKills++;
+    }
     this.creatures = this.creatures.filter((cr) => !cr.dead);
     this.harpoons = this.harpoons.filter((h) => !h.dead);
     this.nets = this.nets.filter((n) => !n.dead);
@@ -1783,6 +1797,7 @@ export class Game {
       for (const cr of this.creatures) {
         if (!cr.dead && cr.snareT <= 0 && !cr.netImmune && n.hits(cr)) {
           cr.snareT = NET.snare + (this.weaponLevel.net - 1) * 1.5; n.dead = true;
+          this.runNetted++;   // lifetime "beasts netted" tally
           if (cr.vx !== undefined) { cr.vx = 0; cr.vy = 0; }
           this.particles.sparkle(cr.x, cr.y, '#dbe9f2', 12); this.audio.pickup();
           break;
@@ -1890,6 +1905,34 @@ export class Game {
         for (const id of this.newBadges) unlockAchievement(id);
       }
     }
+    // Fold this run into the lifetime counters, then award any progressive tiers
+    // it just crossed (see meta/stats.js + meta/progressive.js).
+    if (this.statState && this.progressState) {
+      addRun(this.statState, this._runDelta());
+      saveStats(this.statState);
+      const freshTiers = awardProgress(this.progressState, this.statState);
+      if (freshTiers.length) {
+        saveProgress(this.progressState);
+        for (const id of freshTiers) unlockAchievement(id);
+        this.newTiers = freshTiers.map((id) => tierNameById(id)).filter(Boolean);
+      }
+    }
+  }
+
+  // This run's contribution to the lifetime counters (see meta/stats.js).
+  _runDelta() {
+    return {
+      sharkKills: this.runSharkKills,
+      metersDived: Math.round(this.depthReached / 10),
+      diveSeconds: this.runTime,
+      subLoot: this.runSubLoot,
+      netted: this.runNetted,
+      dives: 1,
+      salvageEarned: (this.lastPayout || 0) + this.blackPearlsBanked * SALVAGE.perPearl,
+      pearlsBanked: this.blackPearlsBanked,
+      bossesFelled: this.bossesFelled,
+      careerScore: this.score,
+    };
   }
 
   // Run summary consumed by the badge predicates (see meta/badges.js).
@@ -2016,7 +2059,13 @@ export class Game {
   // Leaving the abyss consumes its entrance — like the temple, a plundered
   // special zone's portal is spent, so it won't re-trigger at the return spot.
   // Disembarking the sub happens here too — ascending out is how you get off.
-  _exitAbyss() { this._restoreReef(); this.abyssEntrance = null; this.inSub = false; this.subArmor = 0; }
+  _exitAbyss() {
+    // "Loot gathered with sub" = the trench haul carried out. On a hatch exit
+    // carried holds the haul; on an eject _ejectFromAbyss has already reset
+    // carried to the entry value, so this contributes nothing (loot forfeited).
+    this.runSubLoot += Math.max(0, this.carried - (this._abyssEntryCarried || 0));
+    this._restoreReef(); this.abyssEntrance = null; this.inSub = false; this.subArmor = 0;
+  }
 
   // Hull breached: ejected from the trench WITHOUT the haul gathered down there
   // (only a hatch exit keeps it). Restore the carried loot to its entry value,
@@ -2719,6 +2768,7 @@ export class Game {
       screen.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
     }
     if (this.state === 'badges') {
+      screen.push({ id: 'badgespage', x: W / 2 - 85, y: 520, w: 170, h: 26 });
       screen.push({ id: 'badgesclose', x: W / 2 - 85, y: 552, w: 170, h: 34 });
     }
     if (this.state === 'shop') {
@@ -3333,11 +3383,17 @@ export class Game {
       this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked${pearlNote}`, cx, 394, 15, PAL.gold, 'center', 'middle');
     }
     // New badges earned this run — a bright callout so the unlock lands.
+    let cy = 420;
     if (this.newBadges && this.newBadges.length) {
       const glyphs = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].glyph).filter(Boolean).join(' ');
       const names = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].name).filter(Boolean).join(', ');
-      this._text(`🎖 NEW BADGE${this.newBadges.length > 1 ? 'S' : ''}: ${glyphs}`, cx, 420, 17, PAL.glow, 'center', 'middle', true);
-      this._text(names, cx, 442, 13, '#bfe6ff', 'center', 'middle');
+      this._text(`🎖 NEW BADGE${this.newBadges.length > 1 ? 'S' : ''}: ${glyphs}`, cx, cy, 17, PAL.glow, 'center', 'middle', true);
+      this._text(names, cx, cy + 20, 13, '#bfe6ff', 'center', 'middle');
+      cy += 38;
+    }
+    // Progressive tiers crossed this run.
+    if (this.newTiers && this.newTiers.length) {
+      this._text(`⭐ ${this.newTiers.join('   ')}`, cx, cy, 14, PAL.gold, 'center', 'middle', true);
     }
     const blink = Math.floor(this.t * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 470, 20, PAL.gold, 'center', 'middle', true);
@@ -3348,31 +3404,86 @@ export class Game {
   // The Trophy Wall — a two-column grid of every badge, earned ones lit and
   // locked ones dimmed behind a padlock (with their unlock hint still shown, so
   // players have something to chase). A rank line summarises progress.
+  // Format a lifetime stat value for display, per its track unit.
+  _fmtStat(v, unit) {
+    v = Math.round(v);
+    if (unit === 'time') {
+      const h = (v / 3600) | 0, m = ((v % 3600) / 60) | 0;
+      return h > 0 ? `${h}h${m}m` : (m > 0 ? `${m}m` : `${v}s`);
+    }
+    if (unit === 'm') return `${v} m`;
+    if (unit === 'gold') return `${v}g`;
+    return `${v}`;
+  }
+
   _badgesScreen() {
     const ctx = this.ctx, cx = W / 2;
     this._panel(0.9);
     const earned = new Set(this.badgeState.earned);
     const rank = rankFor(earned.size);
-    this._text('🎖 THE TROPHY WALL', cx, 78, 32, PAL.gold, 'center', 'middle', true);
-    this._text(`${rank.name}  ·  ${earned.size} / ${BADGES.length} badges`, cx, 116, 16, PAL.glow, 'center', 'middle', true);
-    const cols = 2, cellW = 400, gap = 24;
-    const gridW = cols * cellW + (cols - 1) * gap, x0 = cx - gridW / 2;
-    const top = 150, rowsN = Math.ceil(BADGES.length / cols);
-    const step = Math.min(56, (516 - top) / rowsN), ch = step - 6;
-    BADGES.forEach((b, i) => {
-      const col = i % cols, row = (i / cols) | 0;
-      const x = x0 + col * (cellW + gap), y = top + row * step;
-      const has = earned.has(b.id);
-      ctx.save();
-      ctx.fillStyle = has ? 'rgba(36,78,58,0.5)' : 'rgba(20,32,48,0.45)';
-      ctx.strokeStyle = has ? 'rgba(120,230,170,0.5)' : 'rgba(120,160,200,0.18)';
-      ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x, y, cellW, ch, 8); ctx.fill(); ctx.stroke(); ctx.restore();
-      ctx.globalAlpha = has ? 1 : 0.55;
-      this._text(has ? b.glyph : '🔒', x + 26, y + ch / 2, 22, PAL.hudText, 'center', 'middle');
-      this._text(b.name, x + 52, y + 16, 15, has ? PAL.gold : '#9fb8cc', 'left', 'middle', true);
-      this._text(b.desc, x + 52, y + 34, 11, has ? '#cfe6d8' : '#7f97ac', 'left', 'middle');
-      ctx.globalAlpha = 1;
-    });
+    this._text('🎖 THE TROPHY WALL', cx, 70, 30, PAL.gold, 'center', 'middle', true);
+
+    if (!this.bdPage) {
+      this._text(`${rank.name}  ·  ${earned.size} / ${BADGES.length} badges`, cx, 108, 16, PAL.glow, 'center', 'middle', true);
+      const cols = 2, cellW = 400, gap = 24;
+      const gridW = cols * cellW + (cols - 1) * gap, x0 = cx - gridW / 2;
+      const top = 140, rowsN = Math.ceil(BADGES.length / cols);
+      const step = Math.min(54, (508 - top) / rowsN), ch = step - 6;
+      BADGES.forEach((b, i) => {
+        const col = i % cols, row = (i / cols) | 0;
+        const x = x0 + col * (cellW + gap), y = top + row * step;
+        const has = earned.has(b.id);
+        ctx.save();
+        ctx.fillStyle = has ? 'rgba(36,78,58,0.5)' : 'rgba(20,32,48,0.45)';
+        ctx.strokeStyle = has ? 'rgba(120,230,170,0.5)' : 'rgba(120,160,200,0.18)';
+        ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x, y, cellW, ch, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+        ctx.globalAlpha = has ? 1 : 0.55;
+        this._text(has ? b.glyph : '🔒', x + 26, y + ch / 2, 22, PAL.hudText, 'center', 'middle');
+        this._text(b.name, x + 52, y + 16, 15, has ? PAL.gold : '#9fb8cc', 'left', 'middle', true);
+        this._text(b.desc, x + 52, y + 34, 11, has ? '#cfe6d8' : '#7f97ac', 'left', 'middle');
+        ctx.globalAlpha = 1;
+      });
+    } else {
+      const life = this.statState, prog = new Set(this.progressState.earned);
+      const tiersEarned = prog.size;
+      this._text(`PROGRESSIVE  ·  ${tiersEarned} / ${TRACKS.length * 3} tiers`, cx, 108, 16, PAL.glow, 'center', 'middle', true);
+      const cols = 2, cellW = 400, gap = 24;
+      const gridW = cols * cellW + (cols - 1) * gap, x0 = cx - gridW / 2;
+      const top = 140, rowsN = Math.ceil(TRACKS.length / cols);
+      const step = Math.min(74, (508 - top) / rowsN), ch = step - 8;
+      TRACKS.forEach((tr, i) => {
+        const col = i % cols, row = (i / cols) | 0;
+        const x = x0 + col * (cellW + gap), y = top + row * step;
+        const p = trackProgress(life, tr);
+        const started = p.reached > 0;
+        ctx.save();
+        ctx.fillStyle = p.reached === p.max ? 'rgba(48,66,30,0.55)' : (started ? 'rgba(30,52,70,0.5)' : 'rgba(20,32,48,0.42)');
+        ctx.strokeStyle = p.reached === p.max ? 'rgba(230,200,110,0.55)' : 'rgba(120,160,200,0.22)';
+        ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x, y, cellW, ch, 8); ctx.fill(); ctx.stroke(); ctx.restore();
+        this._text(tr.glyph, x + 26, y + 22, 20, PAL.hudText, 'center', 'middle');
+        this._text(tr.label, x + 50, y + 15, 14, PAL.gold, 'left', 'middle', true);
+        // tier pips ●●○
+        for (let t = 0; t < p.max; t++) {
+          this._text(t < p.reached ? '●' : '○', x + cellW - 66 + t * 18, y + 15, 13, t < p.reached ? PAL.gold : '#6f879c', 'center', 'middle');
+        }
+        // progress bar toward the next tier (or full at MAX)
+        const prev = p.reached > 0 ? tr.tiers[p.reached - 1] : 0;
+        const frac = p.next === null ? 1 : Math.max(0, Math.min(1, (p.have - prev) / (p.next - prev)));
+        const bx = x + 50, bw = cellW - 66, by = y + ch - 16, bh = 6;
+        ctx.save();
+        ctx.fillStyle = 'rgba(10,24,40,0.8)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 3); ctx.fill();
+        ctx.fillStyle = p.next === null ? PAL.gold : PAL.glow; ctx.beginPath(); ctx.roundRect(bx, by, bw * frac, bh, 3); ctx.fill();
+        ctx.restore();
+        const label = p.next === null ? `MAX · ${this._fmtStat(p.have, tr.unit)}` : `${this._fmtStat(p.have, tr.unit)} / ${this._fmtStat(p.next, tr.unit)}`;
+        this._text(label, x + cellW - 12, y + ch - 26, 11, '#bfe6ff', 'right', 'middle');
+      });
+    }
+
+    // Page toggle + close.
+    const pw = 170, ph = 26, px = cx - pw / 2, py = 520;
+    ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    this._text(this.bdPage ? '◂ BADGES' : 'PROGRESSIVE ▸', cx, py + ph / 2, 13, PAL.hudText, 'center', 'middle', true);
     const bw = 170, bh = 34, bx = cx - bw / 2, by = 552;
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke(); ctx.restore();
