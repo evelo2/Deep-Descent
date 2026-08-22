@@ -102,6 +102,12 @@ builds a `Host`, and delegates to the current game via the `MiniGame` contract �
 **zero behavioral change**. This de-risks everything: the platform exists and the
 game runs through it before anything is extracted.
 
+**Landed:** `feat/platform-p1` → main — Core+Host+contract stood up; whole game
+wrapped as the `legacy` MiniGame; `main.js` boots + drives the RAF loop through
+`Core.update/render`. Zero behavior change (browser-verified vs baseline: menu,
+dive, HUD, gameplay identical; banner logs; no console errors). Suite 54/54
+(added `tests/core/host.test.mjs` + `tests/core/core.test.mjs`). `BUILD='platform-p1'`.
+
 **Files:**
 - Create `src/core/contract.js` — JSDoc typedefs for `MiniGame`, `Host`, `MiniGameResult` (doc-only; no runtime).
 - Create `src/core/host.js` — `makeHost({audio, input, particles, viewport, rng, economy, progression, achievements, world})` returning the facade.
@@ -115,19 +121,19 @@ game runs through it before anything is extracted.
 - `makeHost(services) → Host`
 - `MiniGame`, `Host`, `MiniGameResult` typedefs in `core/contract.js`
 
-- [ ] **Step 1** — Write `tests/core/host.test.mjs`: `makeHost({...stubs})` exposes `economy/progression/achievements/audio/particles/viewport/rng`; `world` is present only when passed.
-- [ ] **Step 2** — Run it; expect FAIL (no module). `node tests/core/host.test.mjs`
-- [ ] **Step 3** — Implement `src/core/contract.js` (typedefs) + `src/core/host.js`.
-- [ ] **Step 4** — Run host test; expect PASS.
-- [ ] **Step 5** — Write `tests/core/core.test.mjs`: register a fake minigame, `boot('fake')` calls its `enter(host)`; `update/render` delegate; a fake `exit()` result is passed to `creditResult` (spy).
-- [ ] **Step 6** — Run it; expect FAIL.
-- [ ] **Step 7** — Implement `src/core/core.js` to pass. Keep `creditResult` a no-op-with-hook in P1.
-- [ ] **Step 8** — Run core test; expect PASS.
-- [ ] **Step 9** — Implement `src/minigames/legacy/index.js` wrapping `Game` (construct/hold the instance; delegate `enter/update/render`; `exit` returns `{outcome}`).
-- [ ] **Step 10** — Rewire `src/main.js`: build services → `makeHost` → `new Core` → `register(legacy)` → `boot('legacy')`; RAF loop calls `core.update/render`.
-- [ ] **Step 11** — Full suite green.
-- [ ] **Step 12** — Browser-verify on a fresh port: menu, a dive, a zone, game-over all behave **identically** to baseline; console shows the version banner; no errors.
-- [ ] **Step 13** — Bump `BUILD='platform-p1'`; commit.
+- [x] **Step 1** — Write `tests/core/host.test.mjs`: `makeHost({...stubs})` exposes `economy/progression/achievements/audio/particles/viewport/rng`; `world` is present only when passed.
+- [x] **Step 2** — Run it; expect FAIL (no module). `node tests/core/host.test.mjs`
+- [x] **Step 3** — Implement `src/core/contract.js` (typedefs) + `src/core/host.js`.
+- [x] **Step 4** — Run host test; expect PASS.
+- [x] **Step 5** — Write `tests/core/core.test.mjs`: register a fake minigame, `boot('fake')` calls its `enter(host)`; `update/render` delegate; a fake `exit()` result is passed to `creditResult` (spy).
+- [x] **Step 6** — Run it; expect FAIL.
+- [x] **Step 7** — Implement `src/core/core.js` to pass. Keep `creditResult` a no-op-with-hook in P1.
+- [x] **Step 8** — Run core test; expect PASS.
+- [x] **Step 9** — Implement `src/minigames/legacy/index.js` wrapping `Game` (construct/hold the instance; delegate `enter/update/render`; `exit` returns `{outcome}`).
+- [x] **Step 10** — Rewire `src/main.js`: build services → `makeHost` → `new Core` → `register(legacy)` → `boot('legacy')`; RAF loop calls `core.update/render`.
+- [x] **Step 11** — Full suite green.
+- [x] **Step 12** — Browser-verify on a fresh port: menu, a dive, a zone, game-over all behave **identically** to baseline; console shows the version banner; no errors.
+- [x] **Step 13** — Bump `BUILD='platform-p1'`; commit.
 
 **🧹 CHECKPOINT → /clear.** (This phase touches boot + a new layer; verify hard.)
 

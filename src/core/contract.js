@@ -1,0 +1,49 @@
+// The platform contract — the small, stable surface every MiniGame speaks to
+// the Core through. Doc-only in Phase 1: these are JSDoc typedefs, NOT runtime
+// code (this module intentionally exports nothing executable). They exist so the
+// boundary has one authoritative shape that later phases can lock with `tsc`
+// (Phase 7) without a build step today. See docs/platform/architecture.md.
+
+/**
+ * A MiniGame is a self-contained mode plugged into the Core. The Core owns the
+ * lifecycle and calls these; the MiniGame never reaches around the Host.
+ *
+ * @typedef {Object} MiniGame
+ * @property {string} id                 Stable unique key used by Core.boot(id).
+ * @property {(host: Host) => void} enter Called once when the Core activates it;
+ *                                        receives the Host facade (its only door
+ *                                        to shared services).
+ * @property {(dt: number) => void} update Advance one frame (seconds).
+ * @property {(ctx: CanvasRenderingContext2D) => void} render Draw one frame.
+ * @property {() => (MiniGameResult|void)} [exit] Called when the mode ends; may
+ *                                        return rewards to credit. Optional.
+ */
+
+/**
+ * The Host is the single facade a MiniGame receives — shared services owned by
+ * the Core. `world` (the DiverWorld engine) is an OPT-IN capability, present
+ * only for diver-world modes; bring-your-own-engine modes omit it.
+ *
+ * @typedef {Object} Host
+ * @property {*} audio         Sound service.
+ * @property {*} input         Input service.
+ * @property {*} particles     Particle system.
+ * @property {*} viewport      Live logical viewport (W/H).
+ * @property {() => number} rng Random source (0..1).
+ * @property {*} economy       Shared salvage/currency economy (real in Phase 2).
+ * @property {*} progression   Badges/ranks/stats (real in Phase 2).
+ * @property {*} achievements  Achievement/Steam bridge (real in Phase 2).
+ * @property {*} [world]       DiverWorld engine — present only when opted in.
+ */
+
+/**
+ * What a MiniGame hands back on exit so the Core can credit the shared economy.
+ * Shape firms up in Phase 2; kept loose here so Phase 1 stays behavior-neutral.
+ *
+ * @typedef {Object} MiniGameResult
+ * @property {string} [outcome]  e.g. 'gameover' | 'extracted' | 'quit'.
+ * @property {number} [salvage]  Currency earned this run.
+ * @property {*} [stats]         Run stats for progression.
+ */
+
+export {};
