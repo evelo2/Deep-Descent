@@ -37,13 +37,23 @@
  */
 
 /**
- * What a MiniGame hands back on exit so the Core can credit the shared economy.
- * Shape firms up in Phase 2; kept loose here so Phase 1 stays behavior-neutral.
+ * What a MiniGame hands back on exit so the Core can credit the shared spine
+ * (see Core.creditResult). Every field is optional; the Core credits only what
+ * is present.
  *
  * @typedef {Object} MiniGameResult
- * @property {string} [outcome]  e.g. 'gameover' | 'extracted' | 'quit'.
- * @property {number} [salvage]  Currency earned this run.
- * @property {*} [stats]         Run stats for progression.
+ * @property {'won'|'lost'|'bailed'|string} [outcome] How the run ended.
+ * @property {number} [salvage]  Persistent currency to add via economy.earn.
+ * @property {number} [score]    Run score (informational; the diver-world game
+ *                               already folds score into its own progression).
+ * @property {{delta?: object, summary?: object}} [stats] Run stats for
+ *                               progression.recordRun — `delta` folds into
+ *                               lifetime counters, `summary` drives one-shot badges.
+ * @property {string[]} [achievements] Achievement/badge ids to unlock.
+ * @property {boolean} [credited] Set when the mode ALREADY self-credited during
+ *                               play (e.g. the legacy game, which persists
+ *                               mid-run); Core.creditResult then skips it so
+ *                               nothing is double-counted.
  */
 
 export {};
