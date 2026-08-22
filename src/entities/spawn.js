@@ -21,6 +21,58 @@ export const ZONE_FAUNA = {
   temple:  [ {k:'sentinel',w:2} ],
 };
 
+// Display name + glyph per creature kind — for the reef-intro "new threat"
+// flash (see Game#_generateWorld). Covers every kind used in ZONE_FAUNA.
+export const FAUNA_INFO = {
+  shark:     { name: 'Shark',        glyph: '🦈' },
+  octopus:   { name: 'Octopus',      glyph: '🐙' },
+  jelly:     { name: 'Jellyfish',    glyph: '🪼' },
+  puffer:    { name: 'Pufferfish',   glyph: '🐡' },
+  piranha:   { name: 'Piranha',      glyph: '🐟' },
+  barracuda: { name: 'Barracuda',    glyph: '🐟' },
+  eel:       { name: 'Eel',          glyph: '🐍' },
+  angler:    { name: 'Anglerfish',   glyph: '🎣' },
+  stonefish: { name: 'Stonefish',    glyph: '🪨' },
+  moray:     { name: 'Moray Eel',    glyph: '🐍' },
+  ray:       { name: 'Electric Ray', glyph: '⚡' },
+  urchin:    { name: 'Sea Urchin',   glyph: '🦔' },
+  squid:     { name: 'Giant Squid',  glyph: '🦑' },
+  grouper:   { name: 'Grouper',      glyph: '🐠' },
+  parasite:  { name: 'Parasite',     glyph: '🦠' },
+  sentinel:  { name: 'Sentinel',     glyph: '🗿' },
+};
+export function faunaInfo(kind) { return FAUNA_INFO[kind] || null; }
+
+// Bands that actually appear inside the open reef (excludes the belly & temple
+// special zones). Used to choose each reef's "featured new enemy".
+const REEF_BANDS = ['shallow', 'mid', 'deep', 'dark', 'wreck', 'current'];
+
+// Earliest reef a kind becomes available across the reef bands (an entry with
+// no minReef is reef-1 baseline).
+function earliestReef(kind) {
+  let best = Infinity;
+  for (const band of REEF_BANDS) for (const e of ZONE_FAUNA[band] || []) {
+    if (e.k === kind) best = Math.min(best, e.minReef || 1);
+  }
+  return best;
+}
+
+// Unique reef-band kinds that first unlock *exactly* at `reef` — the genuine
+// new arrivals to announce.
+export function newFaunaAtReef(reef) {
+  const kinds = new Set();
+  for (const band of REEF_BANDS) for (const e of ZONE_FAUNA[band] || []) kinds.add(e.k);
+  return [...kinds].filter((k) => earliestReef(k) === reef);
+}
+
+// Unique reef-band kinds available at or before `reef` (the fallback novelty
+// pool once a reef unlocks nothing new).
+export function faunaKindsUpTo(reef) {
+  const kinds = new Set();
+  for (const band of REEF_BANDS) for (const e of ZONE_FAUNA[band] || []) if ((e.minReef || 1) <= reef) kinds.add(e.k);
+  return [...kinds];
+}
+
 // Weighted pick from a zone's fauna pool, filtered by reef gating
 // (entries whose minReef exceeds the current reef are excluded). Returns the
 // chosen entry (not a Creature instance) or null if the pool is empty.
