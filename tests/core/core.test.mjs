@@ -86,5 +86,49 @@ const host = { _k: 'host' };
   check('update/render with no active mode do not throw', !threw);
 }
 
+// --- 7. the REAL creditResult (Phase 2) credits host services uniformly ---
+// A host with spy economy/progression/achievements, so we can assert the single
+// credit path any future minigame relies on.
+function spyHost() {
+  const earned = [], recorded = [], unlocked = [];
+  return {
+    earned, recorded, unlocked,
+    economy: { earn: (r) => earned.push(r) },
+    progression: { recordRun: (r) => recorded.push(r) },
+    achievements: { unlock: (id) => unlocked.push(id) },
+  };
+}
+{
+  const h = spyHost();
+  const core = new Core({ host: h });   // no injected creditResult → the real one
+  core.creditResult({ outcome: 'won', salvage: 12, stats: { delta: { dives: 1 }, summary: { reef: 3 } }, achievements: ['deepdiver', 'shark_1'] });
+  check('salvage credited once via economy.earn', h.earned.length === 1 && h.earned[0].salvage === 12);
+  check('stats credited once via progression.recordRun', h.recorded.length === 1 && h.recorded[0].runDelta.dives === 1 && h.recorded[0].runStats.reef === 3);
+  check('each achievement unlocked in order', JSON.stringify(h.unlocked) === JSON.stringify(['deepdiver', 'shark_1']));
+}
+{
+  // Report-only results (already self-credited by the minigame, e.g. legacy) are
+  // skipped so nothing is double-counted.
+  const h = spyHost();
+  const core = new Core({ host: h });
+  core.creditResult({ outcome: 'lost', credited: true, salvage: 999, stats: { delta: { dives: 1 } }, achievements: ['x'] });
+  check('credited:true result credits nothing', h.earned.length === 0 && h.recorded.length === 0 && h.unlocked.length === 0);
+}
+{
+  // Partial results and empties are harmless; missing services never throw.
+  const h = spyHost();
+  const core = new Core({ host: h });
+  let threw = false;
+  try {
+    core.creditResult(undefined);
+    core.creditResult({ outcome: 'bailed' });         // nothing to credit
+    core.creditResult({ salvage: 5 });                // salvage only
+    new Core({ host: { _k: 'bare' } }).creditResult({ salvage: 5, achievements: ['x'] }); // no services
+  } catch { threw = true; }
+  check('undefined/partial/serviceless creditResult never throw', !threw);
+  check('salvage-only result still credits salvage', h.earned.length === 1 && h.earned[0].salvage === 5);
+  check('salvage-only result credits no stats/achievements', h.recorded.length === 0 && h.unlocked.length === 0);
+}
+
 console.log(`core: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

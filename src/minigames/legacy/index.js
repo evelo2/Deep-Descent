@@ -25,16 +25,32 @@ import { Game } from '../../game.js';
  * @param {*} deps.audio
  * @param {*} deps.particles
  * @param {*} deps.background
+ * @param {*} [deps.economy]       Core wallet service (Phase 2).
+ * @param {*} [deps.progression]   Core badges/stats/tiers service (Phase 2).
+ * @param {*} [deps.achievements]  Core Steam-bridge service (Phase 2).
  * @returns {import('../../core/contract.js').MiniGame & { game: Game }}
  */
-export function createLegacyMiniGame({ ctx, input, audio, particles, background }) {
-  const game = new Game(ctx, input, audio, particles, background);
+export function createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements }) {
+  // Phase 2: hand the game the Core services so its meta state (wallet, badges,
+  // stats, tiers) IS the Core's — one shared economy. The game keeps crediting
+  // inline in its own _gameOver (it persists mid-run and shows badges instantly,
+  // and nothing routes its exit() yet), so those services are the very objects
+  // it mutates. `services` is only passed when all three are present.
+  const services = economy && progression && achievements ? { economy, progression, achievements } : undefined;
+  const game = new Game(ctx, input, audio, particles, background, services);
   return {
     id: 'legacy',
     game,
-    enter(_host) { /* Game self-boots to the menu; nothing to do in Phase 1. */ },
+    enter(_host) { /* Game self-boots to the menu; nothing to do here. */ },
     update(dt) { game.update(dt); },
     render(_ctx) { game.draw(); },
-    exit() { return { outcome: game.state }; },
+    // A report-only MiniGameResult: the game has ALREADY self-credited this run
+    // through the shared services, so `credited` tells Core.creditResult to skip
+    // it (no double-count). outcome maps the terminal state; a still-'playing'
+    // state means an early bail-out.
+    exit() {
+      const outcome = game.state === 'playing' ? 'bailed' : (game.won ? 'won' : 'lost');
+      return { outcome, score: game.score, reef: game.reef, credited: true };
+    },
   };
 }
