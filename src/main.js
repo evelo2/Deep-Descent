@@ -5,7 +5,10 @@ import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { Particles } from './systems/particles.js';
 import { Background } from './render/background.js';
-import { Game, setViewport } from './game.js';
+import { setViewport } from './game.js';
+import { Core } from './core/core.js';
+import { makeHost } from './core/host.js';
+import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { VERSION, BUILD } from './version.js';
 
 // Boot banner — self-identifies the running build (also confirms which version
@@ -19,7 +22,26 @@ const input = new Input(canvas);
 const audio = new Audio();
 const particles = new Particles();
 const background = new Background();
-const game = new Game(ctx, input, audio, particles, background);
+
+// Platform boot (Phase 1): the game now runs *through* the Core. The Core holds
+// a Host of shared services and drives the active MiniGame's update/render each
+// frame. The whole current game is registered as one "legacy" MiniGame — zero
+// behavior change; later phases carve zones out into their own MiniGames.
+// economy/progression/achievements are wired to the Host in Phase 2 (null here);
+// the legacy game still reaches its own meta modules internally for now.
+const host = makeHost({
+  audio, input, particles,
+  viewport: WORLD, rng: Math.random,
+  economy: null, progression: null, achievements: null,
+});
+const core = new Core({ host });
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background });
+core.register(legacy);
+core.boot('legacy');
+
+// The live Game instance, for the input-event wiring below (input plumbing is
+// formalized in a later phase; the frame loop already runs through the Core).
+const game = legacy.game;
 
 // The visible logical viewport flexes to the screen aspect so the canvas FILLS
 // it (no letterbox bars) instead of sitting centred in a fixed 3:2 box — the
@@ -89,9 +111,9 @@ function frame(now) {
     if (ambientT > 0.15) { ambientT = 0; particles.bubble(game.camX + Math.random() * WORLD.W, game.camY + WORLD.H + 10); }
   }
 
-  game.update(dt);
+  core.update(dt);
   particles.update(dt);
-  game.draw();
+  core.render(ctx);
 
   requestAnimationFrame(frame);
 }
