@@ -6,7 +6,7 @@ import { Boat } from './entities/boat.js';
 import { Clam, Chest, GiantClam } from './entities/shell.js';
 import { BigBubble } from './entities/bigbubble.js';
 import { Treasure } from './entities/treasure.js';
-import { spawnCreature, pickFauna } from './entities/spawn.js';
+import { spawnCreature, pickFauna, faunaInfo, newFaunaAtReef, faunaKindsUpTo } from './entities/spawn.js';
 import { Cave } from './systems/cave.js';
 import { Flora } from './render/flora.js';
 import { Harpoon } from './entities/harpoon.js';
@@ -20,7 +20,7 @@ import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted } from './config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, whirlpoolReward, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
 import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
@@ -205,6 +205,8 @@ export class Game {
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
     this.newBadges = []; this.newTiers = [];
+    this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
+    this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
     this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
     // Flash the equipped relics so the player sees their Salvage Log build is live.
     if (this.meta.loadout.length) {
@@ -460,9 +462,36 @@ export class Game {
       if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
     }
 
+    // Reef intro flashes (reef 2+): announce this reef's featured new enemy,
+    // then its relic — sequential flourishes reusing the power-up toast.
+    if (this.reef >= 2) {
+      const fresh = newFaunaAtReef(this.reef).filter((k) => !this.metFauna.has(k));
+      const pool = fresh.length ? fresh
+        : faunaKindsUpTo(this.reef).filter((k) => k !== 'shark' && !this.metFauna.has(k));
+      if (pool.length) {
+        const featured = pool[(Math.random() * pool.length) | 0];
+        this.metFauna.add(featured);
+        const fc = C.randomOpen(OPEN_BAND + 200);   // guarantee at least one of it spawns
+        if (fc) {
+          const sp = spawnCreature({ k: featured }, fc.x, fc.y, this.reef);
+          if (Array.isArray(sp)) { this.creatures.push(...sp); this.creaturesSpawned += sp.length; }
+          else if (sp) { this.creatures.push(sp); this.creaturesSpawned++; }
+        }
+        const fi = faunaInfo(featured);
+        if (fi) this._enqueueToast(`${fi.glyph} NEW THREAT: ${fi.name}`, PAL.danger, 2.2);
+      }
+      if (this.relic) {
+        const ri = RELIC_INFO[this.relic.type];
+        if (ri) this._enqueueToast(`${ri.glyph} RELIC: ${ri.name}`, PAL.key, 2.2);
+      }
+    }
+
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
+
+  // Queue a power-up-style flourish to play after any current one clears.
+  _enqueueToast(name, col, dur = 2.2) { this.toastQueue.push({ name, col, dur }); }
 
   // Keep hazards clear of "portals" — zone entrances/exits and dive stations — so
   // you never arrive at (or get dropped back beside) one straight into an enemy.
@@ -1024,6 +1053,8 @@ export class Game {
     this.whirlNextBubbleY = top + WHIRL.safeDrop + 120;
     this.whirlNextTreasureY = top + WHIRL.safeDrop + 60;
     this.whirlTreasuresSeeded = 0;                    // for the periodic Black Pearl
+    this.whirlLives = WHIRL.lives;                    // obstacle hits survived before the sweep ends
+    this.whirlHitT = 0;                               // i-frame timer after a hit
 
     // Ascend back out the top (swim up against the current) to bail early — a
     // clean escape that still banks the earned score/loot (see _updateWhirlpool).
@@ -1313,6 +1344,10 @@ export class Game {
     this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
     this.oneUpT = Math.max(0, this.oneUpT - dt);
     this.puT = Math.max(0, this.puT - dt);
+    // Drain the flourish queue: load the next toast once the current one clears.
+    if (this.puT <= 0 && this.toastQueue && this.toastQueue.length) {
+      const t = this.toastQueue.shift(); this.puName = t.name; this.puCol = t.col; this.puT = t.dur;
+    }
     this.reentryT = Math.max(0, (this.reentryT || 0) - dt);
 
     this.input.poll();   // gamepad
@@ -2195,11 +2230,24 @@ export class Game {
   // swimming back up to the top exit — all bank whirlScore into this.score
   // and call _exitWhirlpool(). NONE of them call _loseLife: the whirlpool
   // never costs a life, win or lose, by design.
+  // Register one whirlpool obstacle hit: drop the struck rock, spend a hull life,
+  // start i-frames, and flash. Returns true when that was the last life (the
+  // caller then banks + exits). Never costs a real run-life.
+  _whirlpoolHit(i) {
+    this.whirlObstacles.splice(i, 1);
+    this.whirlLives -= 1; this.whirlHitT = WHIRL.hitInvuln;
+    this.shake = 12; this.flash = 0.6; this.audio.hit();
+    if (this.whirlLives <= 0) return true;
+    this.puName = `💥 HULL HIT — ${this.whirlLives} left`; this.puCol = PAL.danger; this.puT = 1.1;
+    return false;
+  }
+
   _updateWhirlpool(dt) {
     const d = this.diver, shaft = this.whirlShaft;
     // The sweep ramps forever (capped at maxSpeed) — it never gets easier.
     this.whirlSpeed = Math.min(WHIRL.maxSpeed, this.whirlSpeed + WHIRL.accel * dt);
     this.whirlT += dt;
+    this.whirlHitT = Math.max(0, this.whirlHitT - dt);
 
     // Endless streaming: spawn obstacles + collectibles ahead of the diver, at a
     // density that ramps from LOW to peak over WHIRL.rampSecs, and recycle
@@ -2320,11 +2368,16 @@ export class Game {
       this.puName = `SURVIVED · SPEED ${tierReached} · +${earned}⚙`; this.puCol = PAL.gateGlow; this.puT = 2.2;
     };
 
-    // Obstacle contact ends the run — no life lost, whirlScore banked.
-    for (const o of this.whirlObstacles) {
-      if (Math.hypot(d.x - o.x, d.y - o.y) < o.r + d.radius) {
-        this.shake = 10; this.flash = 0.5; this.audio.hit();
-        bank(); this._exitWhirlpool(); return;
+    // Obstacle contact costs a whirlpool life; the run ends only when they run
+    // out. Brief i-frames after a hit so one rock can't drain several lives, and
+    // the struck obstacle is removed so you're not re-hit while passing through.
+    if (this.whirlHitT <= 0) {
+      for (let i = 0; i < this.whirlObstacles.length; i++) {
+        const o = this.whirlObstacles[i];
+        if (Math.hypot(d.x - o.x, d.y - o.y) < o.r + d.radius) {
+          if (this._whirlpoolHit(i)) { bank(); this._exitWhirlpool(); return; }
+          break;
+        }
       }
     }
     // Air-out ends the run the same way — never a life.
@@ -2677,6 +2730,11 @@ export class Game {
     this._text('AIR', bx, by - 6, 12, PAL.hudText, 'left', 'bottom');
     this._text(`${Math.round(this.air)}`, bx + bw + 8, by + bh / 2, 13, PAL.hudText, 'left', 'middle');
 
+    // Whirlpool hull lives — filled ♥ for remaining, hollow ♡ for spent.
+    const lives = this.whirlLives != null ? this.whirlLives : WHIRL.lives;
+    const hearts = '♥'.repeat(Math.max(0, lives)) + '♡'.repeat(Math.max(0, WHIRL.lives - lives));
+    this._text(`HULL ${hearts}`, bx, by + bh + 12, 15, this.whirlHitT > 0 ? PAL.danger : PAL.gold, 'left', 'middle', true);
+
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     this._text(`+${Math.round(this.whirlScore)} this ride`, W - 20, 46, 14, PAL.whirlRim, 'right', 'top');
     this._text(`HI ${this.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
@@ -2690,7 +2748,7 @@ export class Game {
       this._text(`LOOT +${this.carried}${pearlBit}`, W - 20, 108, 13, PAL.gold, 'right', 'top');
     }
 
-    this._text(`🌀 WHIRLPOOL — SPEED ${Math.round(this.whirlSpeed)} — survive! (no life lost)`, W / 2, H - 30, 15, PAL.whirlRim, 'center', 'middle', true);
+    this._text(`🌀 WHIRLPOOL — SPEED ${Math.round(this.whirlSpeed)} — survive the rocks! (costs no run-life)`, W / 2, H - 30, 15, PAL.whirlRim, 'center', 'middle', true);
     this._text('◀ ▶ steer — dodge the rocks, or ride back up to the maw to bail out', W / 2, H - 8, 12, 'rgba(200,240,235,0.75)', 'center', 'middle');
   }
 

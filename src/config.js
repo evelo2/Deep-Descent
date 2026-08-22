@@ -116,6 +116,14 @@ export const RELIC = {
   types: ['anchor', 'statue', 'map', 'idol'],
 };
 
+// Display name + glyph per relic type — for the reef-intro relic flash.
+export const RELIC_INFO = {
+  anchor: { name: 'Ancient Anchor', glyph: '⚓' },
+  statue: { name: 'Sunken Statue',  glyph: '🗿' },
+  map:    { name: 'Treasure Map',   glyph: '🗺️' },
+  idol:   { name: 'Golden Idol',    glyph: '🪙' },
+};
+
 // The living whale — a benign giant you can swim into to enter its belly.
 export const WHALE = {
   scale: 1.0,        // overall size multiplier (whale is authored ~360px long)
@@ -452,6 +460,8 @@ export const WHIRL = {
   rowCountMax: 3,         // obstacles per row at peak density (1 at the start)
   bubbleGap: 620, treasureGap: 470, pearlEvery: 9,   // collectible cadence (px)
   safeDrop: 520,          // clear stretch below the drop-in before obstacles begin
+  lives: 3,               // obstacle hits the sub can survive before the sweep ends
+  hitInvuln: 1.2,         // seconds of i-frames after a hit (so one rock ≠ all lives)
 };
 
 // Cumulative Salvage reward for having reached `tier` whirlSpeed breaks —
