@@ -6,6 +6,11 @@ import { Audio } from './audio.js';
 import { Particles } from './systems/particles.js';
 import { Background } from './render/background.js';
 import { Game, setViewport } from './game.js';
+import { VERSION, BUILD } from './version.js';
+
+// Boot banner — self-identifies the running build (also confirms which version
+// the browser actually loaded, e.g. after a deploy or a cache purge).
+console.log(`Deep Descent v${VERSION} (${BUILD})`);
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
