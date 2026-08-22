@@ -8,6 +8,9 @@ import { Background } from './render/background.js';
 import { setViewport } from './game.js';
 import { Core } from './core/core.js';
 import { makeHost } from './core/host.js';
+import { makeEconomy } from './core/economy.js';
+import { makeProgression } from './core/progression.js';
+import { makeAchievements } from './core/achievements.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { VERSION, BUILD } from './version.js';
 
@@ -23,19 +26,25 @@ const audio = new Audio();
 const particles = new Particles();
 const background = new Background();
 
-// Platform boot (Phase 1): the game now runs *through* the Core. The Core holds
-// a Host of shared services and drives the active MiniGame's update/render each
-// frame. The whole current game is registered as one "legacy" MiniGame — zero
-// behavior change; later phases carve zones out into their own MiniGames.
-// economy/progression/achievements are wired to the Host in Phase 2 (null here);
-// the legacy game still reaches its own meta modules internally for now.
+// Platform boot: the game runs *through* the Core. The Core holds a Host of
+// shared services and drives the active MiniGame's update/render each frame. The
+// whole current game is registered as one "legacy" MiniGame — zero behavior
+// change; later phases carve zones out into their own MiniGames.
+//
+// Phase 2: the meta-progression spine is now Core-owned — economy (wallet),
+// progression (badges/stats/tiers), achievements (Steam bridge) are real
+// services on the Host. They're also handed to the legacy game so its state IS
+// the Core's: one shared economy, reachable by every future minigame.
+const economy = makeEconomy();
+const progression = makeProgression();
+const achievements = makeAchievements();
 const host = makeHost({
   audio, input, particles,
   viewport: WORLD, rng: Math.random,
-  economy: null, progression: null, achievements: null,
+  economy, progression, achievements,
 });
 const core = new Core({ host });
-const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background });
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements });
 core.register(legacy);
 core.boot('legacy');
 

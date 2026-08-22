@@ -141,6 +141,19 @@ dive, HUD, gameplay identical; banner logs; no console errors). Suite 54/54
 
 ## Phase 2 — Promote the meta-spine to Core services
 
+**Landed:** `feat/platform-p2` — `core/economy.js` (wallet over `meta/salvage.js`),
+`core/progression.js` (badges+stats+tiers over `meta/{badges,stats,progressive}.js`),
+`core/achievements.js` (Steam bridge over `platform/steam.js`) stand up as
+Host-exposed services. `Core.creditResult` is now the real uniform credit path
+(salvage→earn, stats→recordRun, ids→unlock; skips `credited` report-only results).
+The legacy `Game` sources its meta state objects FROM the services (same refs), so
+`game.js` internals are byte-identical yet the wallet/progression are Core-owned and
+shared — browser-proved `game.meta === economy.state` (+ badges/stats/progress),
+earning via the service is visible to the game, persistence keys unchanged (the four
+baseline `.v1` keys), a real dive plays identically, banner reads `platform-p2`, no
+console errors. Suite 57/57 (added economy/progression/achievements tests + extended
+core.test). `BUILD='platform-p2'`.
+
 **Aim:** `salvage.js`/`badges.js`/`stats.js`/`progressive.js` become the
 Host-exposed `economy`/`progression`/`achievements` services; the legacy game
 credits rewards **through the Host** instead of its own internals. One economy,
@@ -155,6 +168,88 @@ Legacy minigame's `exit()` returns a real `MiniGameResult` (salvage/stats/etc.).
 (same localStorage keys/format); existing salvage/badges/stats/progressive tests
 stay green. Browser: a full run still banks Salvage, awards badges/tiers, unlocks
 Steam (web no-op) exactly as before.
+
+### Design notes (locked before implementing — see the constraints they satisfy)
+
+Two facts about the current code bind the design:
+
+1. **No test constructs `new Game(...)`** — every game test drives
+   `Game.prototype.<method>.call(stub)` on a hand-built stub. So the `Game`
+   *constructor* is free to change, but rewiring `_gameOver`/`_bankLoot`/shop
+   *internals* to call `this.economy.earn(...)` would break those stubs (they
+   carry no `economy`/`progression`). Internals therefore stay byte-identical.
+2. **The legacy game persists mid-run** (banking salvage, shop spends, pearls) and
+   **awards badges/tiers at game-over for immediate on-screen display.** Nothing
+   calls the legacy `exit()` during normal play (the inter-minigame router lands
+   in P3+), so the legacy game *cannot* defer crediting to `Core.creditResult` —
+   it must credit inline, exactly as today.
+
+**The seam that satisfies both:** the services become the **owner** of the loaded
+meta state; `Game` *sources its state objects from the services* (same object
+references) in its constructor. Every existing inline mutation + `saveSalvage`/
+`saveBadges`/… call in `game.js` is then unchanged, yet the wallet/progression are
+now Core-owned and reachable by any future minigame via `host.economy.state` etc.
+This is the moat (one shared economy) delivered with zero behavior change.
+
+`Core.creditResult(result)` becomes the **real uniform credit path** used by
+*future* minigames (and unit-tested now): given a `MiniGameResult` it credits
+`economy.earn` + `progression.recordRun` + `achievements.unlock`. The legacy game
+self-credits inline, so its `exit()` returns a **report-only** result
+(`{outcome, score, reef, credited:true}`) and `creditResult` skips anything marked
+`credited` — no double-count. (Tightening the legacy internals to call service
+methods happens naturally as `game.js` shrinks in P3–P5.)
+
+**Service surfaces (thin wrappers over the existing meta modules — reuse):**
+- `makeEconomy({store}) →` `{ state, balance(), save(), earn({salvage}),`
+  `bankReefRelic(reef), consumeReefRelic(reef), availableSkips() }`
+  (over `meta/salvage.js`; `state` is the loaded salvage bag).
+- `makeProgression({store}) →` `{ badges, stats, progress, rank(),`
+  `recordRun({runStats, runDelta}) → {newBadges, freshTiers} }`
+  (over `meta/badges.js` + `meta/stats.js` + `meta/progressive.js`; mirrors the
+  exact award order in today's `_gameOver`).
+- `makeAchievements({unlock}) →` `{ unlock(id) }` (over `platform/steam.js`;
+  `unlock` injectable for tests, defaults to `unlockAchievement`).
+
+**Steps (TDD — write the test, watch it fail, implement, watch it pass):**
+
+- [x] **Step 1** — `tests/core/economy.test.mjs`: `makeEconomy({store})` loads via
+  `loadSalvage` (same key/format), `balance()` reads `state.salvage`, `earn({salvage})`
+  adds + persists (round-trips through the same store), reef-relic passthroughs work.
+- [x] **Step 2** — Run it → FAIL. Implement `src/core/economy.js`. Run → PASS.
+- [x] **Step 3** — `tests/core/progression.test.mjs`: `makeProgression({store})` loads
+  badges/stats/progress; `recordRun({runStats, runDelta})` awards badges, folds stats,
+  awards tiers, persists all three (same keys), and returns `{newBadges, freshTiers}`;
+  a second identical `recordRun` returns empty badge/tier lists but the stat delta is
+  applied again (matches `addRun` semantics — caller guards double-calls, as `_gameOver`
+  already does). `rank()` reflects earned count.
+- [x] **Step 4** — Run it → FAIL. Implement `src/core/progression.js`. Run → PASS.
+- [x] **Step 5** — `tests/core/achievements.test.mjs`: `makeAchievements({unlock:spy})`
+  forwards `unlock(id)` to the injected fn; defaults wire to `unlockAchievement`.
+- [x] **Step 6** — Run it → FAIL. Implement `src/core/achievements.js`. Run → PASS.
+- [x] **Step 7** — Extend `tests/core/core.test.mjs`: with a host carrying spy
+  economy/progression/achievements, `creditResult({salvage, stats:{delta,summary},
+  achievements:[id]})` credits each once; `creditResult({credited:true, salvage})`
+  credits nothing (report-only); `creditResult(undefined)` is a no-op.
+- [x] **Step 8** — Run it → FAIL. Implement `Core.creditResult`. Run → PASS.
+- [x] **Step 9** — `game.js` constructor: accept an optional `services` arg; when
+  present, `this.meta = services.economy.state`, `this.badgeState =
+  services.progression.badges`, `this.statState = services.progression.stats`,
+  `this.progressState = services.progression.progress`; else load directly (fallback
+  preserves the no-services path). **No other line of `game.js` changes.**
+- [x] **Step 10** — `minigames/legacy/index.js`: accept `{economy, progression,
+  achievements}`, pass them to `new Game(...)` as the `services` arg; `exit()` returns
+  `{outcome: game.won ? 'won' : (game.state === 'playing' ? 'bailed' : 'lost'), score:
+  game.score, reef: game.reef, credited: true}`.
+- [x] **Step 11** — `main.js`: build `economy/progression/achievements` via the three
+  factories, pass into `makeHost` (replacing the P1 `null`s) **and** into
+  `createLegacyMiniGame`.
+- [x] **Step 12** — Full suite green (all 54 prior + the new service/core tests).
+- [x] **Step 13** — Browser-verify on a **fresh port**: a full run banks Salvage, the
+  shop spends, reef-relics bank/cash, game-over awards badges + progressive tiers with
+  toasts, the Trophy Wall + rank render — all **identical** to baseline. Console banner
+  reads `platform-p2`; no errors. (Verify persistence keys unchanged in DevTools →
+  Application → Local Storage.)
+- [x] **Step 14** — Bump `BUILD='platform-p2'`; commit.
 
 **🧹 CHECKPOINT → /clear.**
 
