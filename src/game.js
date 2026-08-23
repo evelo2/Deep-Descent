@@ -19,15 +19,13 @@ import { PowerUp } from './entities/powerup.js';
 import { Relic } from './entities/relic.js';
 import { DiveBell } from './entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from './entities/weapons.js';
-import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, stageHintStrip } from './controls.js';
+import { SCHEMES, SCHEME_LABEL, nextScheme, prevScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
 import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO } from './config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from './render/props.js';
-import { Stage } from './stage/stage.js';
 import { StageEntrance } from './entities/stageentrance.js';
-import { THEMES } from './stage/themes.js';
-import { makeStageRooms, makeStageDecor, mulberry32 } from './stage/chunkgen.js';
-import { drawStageScene, drawStageHud } from './render/stage.js';
+import { THEMES } from './stage/themes.js';   // reef-side: placing stage-entrance portals in _generateReef
 import { makeWhirlpool } from './minigames/whirlpool/index.js';
+import { makeStage } from './minigames/stage/index.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
 import { BADGES, BADGE_BY_ID, loadBadges, saveBadges, awardBadges, rankFor } from './meta/badges.js';
@@ -187,7 +185,7 @@ export class Game {
     this.shells = []; this.bigBubbles = []; this.skeletons = []; this.whales = []; this.currents = []; this.krakens = [];
     this.zone = 'reef'; this.ribs = []; this.whaleExit = null; this.savedReef = null;
     this.templeGate = null; this.templeExit = null; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
-    this.stageEntrances = []; this.stage = null; this._enteredEntrance = null;
+    this.stageEntrances = [];   // reef portals (reef-owned); stage gameplay state lives in the Stage MiniGame (Phase 5)
     this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null;   // a reef PORTAL (reef-owned); the whirlpool zone itself is the whirlpool MiniGame (Phase 4)
     this.hasSub = false; this.inSub = false; this.subArmor = 0;   // mini-sub: piloting + hull armor remaining
@@ -199,20 +197,52 @@ export class Game {
     this.puT = 0; this.puName = ''; this.puCol = '#fff';   // power-up name flourish
     this.diver.reset();
 
-    // Whirlpool MiniGame (Phase 4): the first reef zone extracted into
-    // src/minigames/whirlpool/. Built only when the platform hands us the
-    // DiverWorld engine (world) + Core services (economy) — i.e. production and
-    // the seam test; bare constructions (isolated stub tests that never enter a
-    // whirlpool) skip it. The reef drives it (enter/update/render/exit) and hands
-    // it the reef-owned surface it still touches via the `reef` facade below.
-    this._whirl = (world && services) ? makeWhirlpool({
-      host: {
-        world: this._world, economy: services.economy,
-        audio: this.audio, input: this.input, particles: this.particles,
-        viewport: WORLD,   // live W/H/WW/WH (setViewport mutates WORLD in place)
+    // Extracted zone MiniGames (P4 whirlpool, P5 stage). Built only when the
+    // platform hands us the DiverWorld engine — i.e. production + the seam tests;
+    // bare stub constructions (which never enter a zone) skip them. Each is
+    // reef-driven (enter/update/render/exit) and gets the reef-owned surface it
+    // still touches via its `reef` facade below. The whirlpool also needs the
+    // economy (tier salvage); the stage doesn't.
+    const mgHost = world ? {
+      world: this._world, economy: services && services.economy,
+      audio: this.audio, input: this.input, particles: this.particles,
+      viewport: WORLD,   // live W/H/WW/WH (setViewport mutates WORLD in place)
+    } : null;
+    this._whirl = (world && services) ? makeWhirlpool({ host: mgHost, reef: this._whirlReef() }) : null;
+    this._stage = world ? makeStage({ host: mgHost, reef: this._stageReef() }) : null;
+  }
+
+  // The reef-owned surface the Stage MiniGame still touches while the reef is the
+  // legacy monolith (Phase 5): the carried loot pile, run score/lives/fx,
+  // snapshot/restore, `_loseLife` (the stage costs run-lives), the reef-owned
+  // `stageEntrances` portals (consumed one-shot on exit), the fire-grace, and the
+  // control scheme for the HUD hint. Getters/setters route to this Game.
+  _stageReef() {
+    const g = this;
+    return {
+      get carried() { return g.carried; }, set carried(v) { g.carried = v; },
+      get score() { return g.score; },
+      get lives() { return g.lives; },
+      get shake() { return g.shake; }, set shake(v) { g.shake = v; },
+      get flash() { return g.flash; }, set flash(v) { g.flash = v; },
+      get zoneFade() { return g.zoneFade; }, set zoneFade(v) { g.zoneFade = v; },
+      get zone() { return g.zone; }, set zone(v) { g.zone = v; },
+      get state() { return g.state; },
+      get t() { return g.t; },
+      get reefNum() { return g.reef; },
+      get controlScheme() { return g.controlScheme; },
+      set fireGrace(v) { g._fireGrace = v; },
+      snapshotReef: (x, y) => g._snapshotReef(x, y),
+      restoreReef: () => g._restoreReef(),
+      loseLife: (cause) => g._loseLife(cause),
+      consumeStageEntrance: (e) => { g.stageEntrances = g.stageEntrances.filter((x) => x !== e); },
+      // The generic end-of-frame chrome the stage scene shares with the reef.
+      drawChrome: () => {
+        if (g._touchBtns) for (const b of g._touchBtns) g._touchBtn(b);
+        if (g.state === 'paused') g._overlay('PAUSED', (g.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume'));
+        if (g.state === 'gameover') g._gameOverScreen();
       },
-      reef: this._whirlReef(),
-    }) : null;
+    };
   }
 
   // The reef-owned surface the whirlpool MiniGame still touches while the reef is
@@ -1406,7 +1436,7 @@ export class Game {
     }
     if (this.state !== 'playing') { this.input.endFrame(); return; }
     this.runTime += dt;   // lifetime dive-time accrues only while actually diving
-    if (this.zone === 'stage') { this._updateStage(dt); this.input.endFrame(); return; }
+    if (this.zone === 'stage') { this._stage.update(dt); this.input.endFrame(); return; }
     if (this.zone === 'whirlpool') { this._whirl.update(dt); this.input.endFrame(); return; }
     // Switch weapons (keyboard Q/E or [ ], gamepad Y/LB, touch weapon button).
     if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
@@ -1651,7 +1681,7 @@ export class Game {
       // special zone we just left (the diver is dropped back near its entrance).
       for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
-      for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._enterStage(e); this.input.endFrame(); return; } }
+      for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._stage.enter(e); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.abyssEntrance &&
           Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) {
         this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return;   // board the sub (free)
@@ -2121,64 +2151,6 @@ export class Game {
     }
   }
 
-  // Enter a themed platformer stage through a reef entrance. Snapshots the reef,
-  // builds the stage, seals the air. Mirrors _enterWhale/_enterTemple.
-  _enterStage(entrance) {
-    this._snapshotReef(entrance.x, entrance.y + STAGE.entranceR + 10);
-    this._enteredEntrance = entrance;
-    this.zone = 'stage';
-    const seed = (Math.random() * 0x100000000) >>> 0;
-    const rooms = makeStageRooms(entrance.theme, this.reef, mulberry32(seed));
-    // Procedural, per-theme decor for the generated rooms (a separate seed
-    // stream so it never perturbs room reproducibility). Physics ignores decor;
-    // the render path already reads theme.decor?.[roomIndex].
-    const decor = makeStageDecor(entrance.theme, rooms, mulberry32((seed ^ 0x9e3779b9) >>> 0), STAGE.decorPerRoom);
-    this.stage = new Stage({ ...entrance.theme, rooms, decor });
-    this.camX = 0; this.camY = 0;   // fixed single-screen camera in-stage
-    this.shake = 8; this.zoneFade = 1;
-    this.audio.select();
-  }
-
-  // Drive the stage: translate Input → command, apply loot/death/exit events.
-  _updateStage(dt) {
-    const inp = this.input;
-    const v = inp.vector();
-    const up = v.y < -0.4, down = v.y > 0.4;
-    const moveX = Math.abs(v.x) > 0.3 ? (v.x > 0 ? 1 : -1) : 0;
-    const climbY = up ? -1 : down ? 1 : 0;
-    // Jump edge: fresh up-press (rising edge), fire press (Space/F/A), tap, or JUMP button.
-    const jump = (up && !this._stageUpPrev) || inp.firePress || inp.consumeTapFire() || inp.consumeButton('jump');
-    this._stageUpPrev = up;
-
-    const ev = this.stage.update(dt, { moveX, jump, climbY });
-    if (ev.loot) {
-      this.carried += ev.loot;
-      this.particles.sparkle(this.stage.body.x, this.stage.body.y, PAL.gold, 16);
-      this.audio.pearl();
-    }
-    if (ev.died) {
-      this.flash = 1; this.shake = 12; this.audio.hit();
-      this._loseLife('killed');
-      if (this.state === 'playing') this.stage.respawn();   // still alive → back to room start
-    }
-    // No backing out: only reaching the forward exit completes the stage and
-    // returns you to the reef. (The engine never emits 'retreat' now — the rooms
-    // have no retreat door — but gate on 'complete' explicitly so a stage is
-    // strictly commit-and-finish: complete it, or keep trying until your lives
-    // run out.)
-    if (ev.exited === 'complete') this._exitStage();
-  }
-
-  // Leave the stage on completion. Restores the reef and consumes the
-  // entrance (one-shot), mirroring _exitWhale filtering the entered whale.
-  _exitStage() {
-    this._restoreReef();
-    this.stageEntrances = this.stageEntrances.filter((e) => e !== this._enteredEntrance);
-    this._enteredEntrance = null;
-    this.stage = null;
-    this._fireGrace = 0.3;   // the exit/jump press shouldn't fire a harpoon back in the reef
-  }
-
   _placeDiver(x, y, vx) {
     // The DiverWorld engine owns diver + camera (Phase 3); delegate to its one
     // authoritative placeDiver when present. Fallback keeps the original body for
@@ -2206,20 +2178,7 @@ export class Game {
   // ---- render ----------------------------------------------------------
   draw() {
     if (this.state === 'sailing') { this._sailScreen(); return; }
-    if (this.zone === 'stage' && this.stage) {
-      const ctx = this.ctx;
-      ctx.save();
-      if (this.shake > 0.2) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
-      drawStageScene(ctx, this.stage, this.t);
-      ctx.restore();
-      if (this.flash > 0.01) { ctx.fillStyle = `rgba(255,40,40,${0.35 * this.flash})`; ctx.fillRect(0, 0, W, H); }
-      if (this.zoneFade > 0.01) { ctx.fillStyle = `rgba(120,180,220,${0.7 * this.zoneFade})`; ctx.fillRect(0, 0, W, H); }
-      drawStageHud(ctx, this.stage, { air: this.air, airMax: this.airMax, lives: this.lives, score: this.score, carried: this.carried, hint: stageHintStrip(this.controlScheme) });
-      if (this._touchBtns) for (const b of this._touchBtns) this._touchBtn(b);
-      if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume'));
-      if (this.state === 'gameover') this._gameOverScreen();
-      return;
-    }
+    if (this.zone === 'stage') { this._stage.render(this.ctx); return; }
     if (this.zone === 'whirlpool') { this._whirl.render(this.ctx); return; }
     const ctx = this.ctx;
     ctx.save();
