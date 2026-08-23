@@ -28,16 +28,18 @@ import { Game } from '../../game.js';
  * @param {*} [deps.economy]       Core wallet service (Phase 2).
  * @param {*} [deps.progression]   Core badges/stats/tiers service (Phase 2).
  * @param {*} [deps.achievements]  Core Steam-bridge service (Phase 2).
+ * @param {*} [deps.world]         DiverWorld engine (Phase 3) — the game's diver/
+ *                                 camera/air become engine-owned (host.world).
  * @returns {import('../../core/contract.js').MiniGame & { game: Game }}
  */
-export function createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements }) {
+export function createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world }) {
   // Phase 2: hand the game the Core services so its meta state (wallet, badges,
   // stats, tiers) IS the Core's — one shared economy. The game keeps crediting
   // inline in its own _gameOver (it persists mid-run and shows badges instantly,
   // and nothing routes its exit() yet), so those services are the very objects
   // it mutates. `services` is only passed when all three are present.
   const services = economy && progression && achievements ? { economy, progression, achievements } : undefined;
-  const game = new Game(ctx, input, audio, particles, background, services);
+  const game = new Game(ctx, input, audio, particles, background, services, world);
   return {
     id: 'legacy',
     game,

@@ -135,10 +135,27 @@ export function oxygenMultiplier(reef, zone, inSub = false) {
 }
 
 export class Game {
-  constructor(ctx, input, audio, particles, background, services) {
+  constructor(ctx, input, audio, particles, background, services, world) {
     this.ctx = ctx; this.input = input; this.audio = audio;
     this.particles = particles; this.bg = background;
     this.state = 'menu';                 // menu | playing | paused | gameover
+    // DiverWorld engine seam (Phase 3, slice 1): when the platform hands us the
+    // engine, the diver/camera/air are OWNED by it — install instance accessors
+    // so every `this.diver`/`this.camX`/`this.air` line below stays byte-identical
+    // yet reads/writes engine state (host.world). This MUST run before the first
+    // such assignment (this.camX just below). Bare construction (no world) keeps
+    // plain own fields, exactly as before. Instance-level (not prototype) so the
+    // many prototype-call stub tests, which never `new Game`, are untouched.
+    this._world = world;
+    if (world) {
+      for (const key of ['diver', 'camX', 'camY', 'air', 'airMax']) {
+        Object.defineProperty(this, key, {
+          get() { return this._world[key]; },
+          set(v) { this._world[key] = v; },
+          configurable: true, enumerable: true,
+        });
+      }
+    }
     this.t = 0; this.shake = 0;
     this.camX = WW / 2 - W / 2; this.camY = 0;
     this.hi = +(localStorage.getItem(HI_KEY) || 0);
@@ -2400,6 +2417,10 @@ export class Game {
   }
 
   _placeDiver(x, y, vx) {
+    // The DiverWorld engine owns diver + camera (Phase 3); delegate to its one
+    // authoritative placeDiver when present. Fallback keeps the original body for
+    // bare construction (no engine).
+    if (this._world) { this._world.placeDiver(x, y, vx); return; }
     const d = this.diver;
     d.x = x; d.y = y; d.vx = vx; d.vy = 0; d.invuln = 1.6;
     this.camX = Math.max(0, Math.min(WW - W, x - W / 2));
