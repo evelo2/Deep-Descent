@@ -366,6 +366,67 @@ whirl internals; browser-verify the whirlpool plays identically (3 lives,
 banking, bail-out). At this phase expand to bite-sized TDD steps first
 (detail-on-demand), informed by the real P3 engine surface.
 
+**Design (chosen 2026-08-23 — "delegated module seam", user-approved over a full
+Core-router mode):** the whirlpool is a *nested reef sub-zone*, entered mid-dive
+from the reef and returning to it — NOT a Core-booted top-level mode (the reef is
+still the legacy monolith until P6). So:
+
+- `src/minigames/whirlpool/index.js` `makeWhirlpool({ host, reef })` OWNS all
+  whirl-local state (shaft/obstacles/bubbles/treasures/speed/score/tier/
+  salvageEarned/elapsed/hitT/lives/streaming cursors/exit) + the logic
+  (`generate`, `spawnRow`, `randX`, `hit`, `update`, `enter`, `exit`) + the draw
+  (`render` = scene + HUD + obstacle art). MiniGame-shaped (`id`, `enter`,
+  `update`, `render`, `exit`) but reef-driven, not `Core.boot`-ed yet.
+- Shared services via **`host`**: `host.world` (diver/camX/camY/air/airMax/
+  placeDiver — real from P3), `host.economy.earn({salvage})` (replaces the inline
+  `this.meta.salvage += r; saveSalvage`), `host.audio/particles/input`,
+  `host.viewport` (live W/H/WW/WH).
+- Reef-owned surface the whirlpool still touches (loot piles, fx, snapshot/
+  restore, HUD helpers) via an explicit **`reef` facade** Game hands in — the
+  documented remaining coupling that P6 will narrow when the reef itself becomes a
+  MiniGame. Facade: get/set `carried,carriedPearls,score,depthReached,shake,
+  flash,zoneFade,zone,whirlEntrance`; get `hi,state,t,bg,ctx`; verbs
+  `snapshotReef(x,y),restoreReef(),bankLoot(rate),toast(name,col,dur),
+  text(...),drawChrome()`.
+- `whirlEntrance` STAYS reef-owned (it's a reef portal: rolled in `_generateReef`,
+  detected in the reef update loop, drawn/ hinted in the reef, snapshotted). The
+  reef hands it to `whirl.enter(entrance)`; the module clears it on exit.
+- Drop the module's OLD defensive reef-field clears in `generate()` — snapshot/
+  restore already makes them moot (nothing reads reef arrays while `zone==='whirlpool'`).
+- Remove the whirl-state reset lines from `_restoreReef` (module owns its reset now).
+
+**Steps (TDD):**
+- [ ] **S1** — `tests/minigames/whirlpool.test.mjs`: drive `makeWhirlpool` with a
+  stub host (fake world/economy/audio/particles/input/viewport) + stub reef.
+  Assert: `generate()` builds an endless shaft (`shaft.cx/halfW`, no `bottom`) +
+  bail-out `exit`, arms streaming cursors, empty obstacle/bubble/treasure lists;
+  `spawnRow(y,0)` → exactly 1 obstacle (valid kind, within shaft), ramp 1 → denser,
+  all 3 kinds appear; `hit()` spends lives (survive lives-1, last returns true,
+  i-frames set, struck obstacle removed, HULL toast on a survivor); module source
+  never contains `_loseLife`/`loseLife`; `exit()` resets tier/salvageEarned/
+  bubbles/treasures/speed/score; `whirlpoolReward` monotonic + positive marginals.
+- [ ] **S2** — run S1 → FAIL (no module).
+- [ ] **S3** — implement `src/minigames/whirlpool/index.js` (port the 10 methods,
+  rewiring `this.diver/air/cam`→`host.world`, salvage→`host.economy.earn`,
+  reef-owned→`reef.*`, W/H/WW/WH→`host.viewport`). S1 → PASS.
+- [ ] **S4** — `game.js`: build `this._whirl = makeWhirlpool({host, reef})` in the
+  ctor (guard on `world` present); construct the `reef` facade. Delegate the three
+  seams: enter-detection (~L1699) → `this._whirl.enter(this.whirlEntrance)`; update
+  dispatch (~L1450) → `this._whirl.update(dt)`; draw dispatch (~L2460) →
+  `this._whirl.render(this.ctx)`. Remove the 10 whirl methods, the whirl* field
+  inits (KEEP `whirlEntrance`), and the whirl-reset lines in `_restoreReef`.
+- [ ] **S5** — full suite green; `grep -n 'whirl' src/game.js` shows ONLY
+  `whirlEntrance` (reef portal) + the three delegation lines — no whirl internals.
+- [ ] **S6** — relocate the `_enqueueToast` toast-queue test out of the old
+  `whirlpool-lives.test.mjs` (it's reef-intro, not whirlpool) into a game test;
+  delete `tests/game/whirlpool.test.mjs` + `tests/game/whirlpool-lives.test.mjs`.
+- [ ] **S7** — full suite green again (file count adjusts).
+- [ ] **S8** — browser-verify on a FRESH PORT: reef→whirlpool entry, 3 hull lives,
+  tier salvage credits (`host.economy.state.salvage` rises), bubbles refill air,
+  loot banks on exit, bail-out at the top maw, air-out exit — all identical to
+  baseline; `host.world.diver` is the swept diver; banner `platform-p4`; no errors.
+- [ ] **S9** — bump `BUILD='platform-p4'`; commit; `--no-ff` merge to main; push.
+
 **🧹 CHECKPOINT → /clear.**
 
 ---
