@@ -11,6 +11,7 @@ import { makeHost } from './core/host.js';
 import { makeEconomy } from './core/economy.js';
 import { makeProgression } from './core/progression.js';
 import { makeAchievements } from './core/achievements.js';
+import { makeDiverWorld } from './core/world/index.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { VERSION, BUILD } from './version.js';
 
@@ -38,13 +39,17 @@ const background = new Background();
 const economy = makeEconomy();
 const progression = makeProgression();
 const achievements = makeAchievements();
+// Phase 3: the DiverWorld engine owns the diver/camera/air. It's exposed as
+// host.world AND handed to the legacy game so the game's diver IS the engine's —
+// one diver world, reachable by every future diver-world minigame.
+const world = makeDiverWorld({ viewport: WORLD });
 const host = makeHost({
   audio, input, particles,
   viewport: WORLD, rng: Math.random,
-  economy, progression, achievements,
+  economy, progression, achievements, world,
 });
 const core = new Core({ host });
-const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements });
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world });
 core.register(legacy);
 core.boot('legacy');
 

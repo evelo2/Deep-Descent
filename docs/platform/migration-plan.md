@@ -60,6 +60,36 @@ without front-loading guesses.
 
 ---
 
+## Reorder note (2026-08-22) — DiverWorld engine phased in first
+
+Phase 3 originally read "extract Whirlpool *using `host.world`*", but the
+DiverWorld engine (`host.world`) was not built until the old Phase 6. That
+ordering was inconsistent (P3 used what P6 built). **Approved reorder:** stand up
+the DiverWorld engine *first*, as its own incrementally-phased workstream (born
+from the whirlpool's needs, grown by each later extraction), so the old Phase 6's
+big late refactor dissolves into an incremental build + a consolidation pass.
+
+Design spec: `docs/superpowers/specs/2026-08-22-diverworld-engine-slice1-design.md`.
+
+**Phase renumbering (old → new):**
+
+| New | What | Old |
+|---|---|---|
+| **P3** | DiverWorld engine — slice 1 (kinematic/vital core; makes `host.world` real) | *new* |
+| **P4** | Extract Whirlpool against `host.world` | old P3 |
+| **P5** | Extract remaining zones (trench/temple/stage/whale) — each grows the engine | old P4 |
+| **P6** | Extract the reef as the main diver-world MiniGame | old P5 |
+| **P7** | Consolidate the DiverWorld engine (dedup left by extraction) | old P6, shrunk |
+| **P8** | Type the boundary (JSDoc + `tsc --noEmit`) | old P7 |
+| **P9** | First NEW minigame + build-step trigger | old P8 |
+
+Each engine slice is grown by a **real consumer** (never speculative surface), via
+the **same-refs / instance-accessor seam** (move ownership without rewriting
+`game.js` internals) so "no behavior change" + "all stub tests green" hold at
+every step.
+
+---
+
 ## Checkpoint Protocol (the /compact + /clear discipline)
 
 Between phases and at long-phase midpoints, run a **🧹 CHECKPOINT**:
@@ -255,28 +285,96 @@ methods happens naturally as `game.js` shrinks in P3–P5.)
 
 ---
 
-## Phase 3 — Extract Whirlpool as the first real MiniGame
+## Phase 3 — DiverWorld engine, slice 1 (kinematic/vital core)
 
-**Aim:** Move `_updateWhirlpool/_whirlpoolHit/_whirlHud/_enter/_exit` + whirl
-state out of `game.js` into `src/minigames/whirlpool/` implementing `MiniGame`,
-using `host.world` (diver-world) + `host.economy`. The reef game hands off to it
-via the Core router; on exit it returns rewards through the result flow.
+**Landed:** `feat/platform-p3-diverworld` — `src/core/world/index.js`
+(`makeDiverWorld({viewport})`) owns the diver/camera/air slice + `placeDiver`; it
+is exposed as `host.world` and handed to the legacy `Game`, whose constructor now
+installs **instance accessors** for `diver/camX/camY/air/airMax` routing to the
+engine (and `_placeDiver` delegates) — so `game.js` internals stay byte-identical
+yet the diver world is engine-owned. Proven: `tests/core/world.test.mjs` (engine
+unit, 16) + `tests/core/world-seam.test.mjs` (a real `Game` sourcing
+`game.diver === world.diver`, two-way air/cam routing, `_placeDiver` delegation,
+10). Browser-verified on a fresh port (`:8173`): boots to `platform-p3`, a dive
+runs with the engine-owned diver/camera/air, no console errors. Suite 59/59
+(added the two `core/world*` tests). `BUILD='platform-p3'`.
 
-**Why first:** the whirlpool is the most self-contained zone (its own update/draw
-path, no cave/miner) — smallest safe extraction to prove the pattern.
+**Aim:** Make `host.world` a **real, engine-owned** surface for the smallest
+genuinely shared part of the diver world (diver + camera + air + `placeDiver`),
+with **zero behavior change** and all 57 test files green. This is what the
+whirlpool (P4) extracts against.
 
-**Test gates:** new `tests/minigames/whirlpool.test.mjs` (port + extend the
-existing `whirlpool-lives` logic); `game.js` no longer references whirl internals;
-browser-verify the whirlpool plays identically (3 lives, banking, bail-out).
+**Spec:** `docs/superpowers/specs/2026-08-22-diverworld-engine-slice1-design.md`
+(read it — owned-set, the instance-accessor seam, why stubs survive).
+
+**Deliverables:** `src/core/world/index.js` (`makeDiverWorld({viewport})` owning
+`diver/camX/camY/air/airMax` + `placeDiver`); `Game` constructor gains an optional
+`world` seam arg installing instance accessors that route those fields to the
+engine (byte-identical `game.js` internals); `main.js` + `legacy` minigame wire
+the engine into `host.world` and the game.
+
+**Interfaces produced (P4+ rely on these):**
+- `makeDiverWorld({viewport}) → { diver, camX, camY, air, airMax, placeDiver(x,y,vx) }`
+- `host.world` present + engine-owned
+- `new Game(ctx, input, audio, particles, background, services?, world?)`
+
+**Steps (TDD — write the test, watch it fail, implement, watch it pass):**
+
+- [x] **Step 1** — `tests/core/world.test.mjs`: `makeDiverWorld({viewport})`
+  exposes `diver/camX/camY/air/airMax`; `placeDiver(x,y,vx)` sets diver `x/y/vx`
+  (+ `vy=0`, `invuln`) and clamps the camera to `[0,WW-W]×[0,WH-H]`. Pure — no
+  `Game`, no DOM.
+- [x] **Step 2** — Run it → FAIL (no module).
+- [x] **Step 3** — Implement `src/core/world/index.js`. Run → PASS.
+- [x] **Step 4** — `game.js` constructor: accept an optional `world` arg; when
+  present, **first thing** (before the `this.camX=…`/`this.diver=…`/`this.air=…`
+  assignments at ~L143) `Object.defineProperty` instance accessors for
+  `diver/camX/camY/air/airMax` → `this._world`; and `_placeDiver` delegates to
+  `world.placeDiver` when present (else current body). No other `game.js` line
+  changes. Fallback (no `world`) preserves today's plain-field path.
+- [x] **Step 5** — Full suite green (all 57 — proves the stub tests are untouched).
+- [x] **Step 6** — `minigames/legacy/index.js`: accept optional `world`, pass it
+  as the new `Game` 7th arg.
+- [x] **Step 7** — `main.js`: `makeDiverWorld({viewport: WORLD})`; pass into
+  `makeHost({…, world})` and `createLegacyMiniGame({…, world})`.
+- [x] **Step 8** — Full suite green again.
+- [x] **Step 9** — Browser-verify on a **fresh port**: `game.diver ===
+  host.world.diver`; `host.world.air` tracks in-game air during a dive; a full
+  whirlpool dive + a reef run + another zone all play **identically** to baseline;
+  banner reads `platform-p3`; no console errors.
+- [x] **Step 10** — Bump `BUILD='platform-p3'`; commit.
 
 **🧹 CHECKPOINT → /clear.**
 
 ---
 
-## Phase 4 — Extract the remaining zones (one slice per sub-phase)
+## Phase 4 — Extract Whirlpool as the first real MiniGame
 
-Repeat the Phase-3 pattern, **one zone per checkpoint** (each its own branch +
-merge + `/clear`):
+**Aim:** Move `_updateWhirlpool/_whirlpoolHit/_whirlHud/_enter/_exit` + whirl
+state out of `game.js` into `src/minigames/whirlpool/` implementing `MiniGame`,
+using `host.world` (diver-world, now real from P3) + `host.economy`. The reef game
+hands off to it via the Core router; on exit it returns rewards through the result
+flow.
+
+**Why this next:** the whirlpool is the most self-contained zone (its own
+update/draw path, no cave/miner) — smallest safe extraction to prove the pattern,
+and the first consumer that validates the P3 engine surface.
+
+**Test gates:** new `tests/minigames/whirlpool.test.mjs` (port + extend the
+existing `whirlpool`/`whirlpool-lives` logic); `game.js` no longer references
+whirl internals; browser-verify the whirlpool plays identically (3 lives,
+banking, bail-out). At this phase expand to bite-sized TDD steps first
+(detail-on-demand), informed by the real P3 engine surface.
+
+**🧹 CHECKPOINT → /clear.**
+
+---
+
+## Phase 5 — Extract the remaining zones (one slice per sub-phase)
+
+Repeat the Phase-4 pattern, **one zone per checkpoint** (each its own branch +
+merge + `/clear`). **Each zone grows the DiverWorld engine (P3) with the slice it
+needs** (cave/physics/HUD primitives), via the same-refs/accessor seam:
 
 - [ ] **4a** — Trench / abyss + mini-sub (`minigames/trench/`). Carries sub armor,
   net-only, eject, exit-air. Reuses `host.world`.
@@ -290,7 +388,7 @@ checkpoint. **/clear between each.**
 
 ---
 
-## Phase 5 — Extract the reef as the main diver-world MiniGame
+## Phase 6 — Extract the reef as the main diver-world MiniGame
 
 **Aim:** The core reef loop becomes `minigames/reef/` implementing `MiniGame`.
 `game.js` is now reduced to (or replaced by) the **Core shell** — menu, router,
@@ -303,20 +401,22 @@ services — holding no gameplay. This is the payoff: the god-object is gone.
 
 ---
 
-## Phase 6 — Formalize the shared DiverWorld engine
+## Phase 7 — Consolidate the DiverWorld engine (dedup pass)
 
-**Aim:** Factor the diver + cave + physics + shared-HUD primitives that the
-diver-world minigames use into `src/core/world/`, with a clean surface
-(`host.world`). Removes duplication left after extraction.
+**Aim:** The engine was built incrementally (P3 slice 1, grown by each extraction
+in P4–P6), so there is no big late factor here — only a **consolidation/dedup
+pass**: remove any duplication left by extraction, tighten the `src/core/world/`
+surface, and delete accessor-seam shims in `game.js` that are no longer needed
+once the reef itself runs as a MiniGame.
 
-**Test gates:** diver-world minigames still play identically; new `core/world`
-unit tests for the extracted surface.
+**Test gates:** diver-world minigames still play identically; `core/world` unit
+tests cover the consolidated surface.
 
 **🧹 CHECKPOINT → /clear.**
 
 ---
 
-## Phase 7 — Type the boundary (JSDoc + `tsc --noEmit`)
+## Phase 8 — Type the boundary (JSDoc + `tsc --noEmit`)
 
 **Aim:** Lock the contract with types where drift hurts most. **No build step, no
 runtime change.**
@@ -333,7 +433,7 @@ first, widen opportunistically.
 
 ---
 
-## Phase 8 — First NEW minigame + the build-step trigger
+## Phase 9 — First NEW minigame + the build-step trigger
 
 **Aim:** Prove the platform by building a small **new** minigame against the
 contract. If it's a *diver-world mode*, it needs nothing new. If it's a
@@ -354,7 +454,8 @@ it. A pure diver-world addition does not — keep the no-build posture until the
 ## Self-review (done at authoring)
 
 - Coverage: every architecture.md section maps to a phase (contract→P1, spine→P2,
-  extraction→P3–5, DiverWorld→P6, types→P7, build trigger→P8).
+  DiverWorld engine→P3 slice 1 grown through P4–P6 + consolidated in P7,
+  extraction→P4–P6, types→P8, build trigger→P9). See the 2026-08-22 reorder note.
 - No behavioral change is a hard global constraint with a per-phase parity gate.
 - Detail-on-demand is explicit so later-phase guesses aren't baked in prematurely.
 - /compact vs /clear guidance is concrete and per-phase.
