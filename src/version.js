@@ -12,5 +12,5 @@
 // 'platform-p1', 'platform-p3') so the deployed build self-identifies. VERSION
 // is the player-facing release number.
 export const VERSION = '1.0.0';
-export const BUILD = 'platform-p4';
+export const BUILD = 'platform-p5';
 export const KNOWN_GOOD_BASELINE = 'baseline/v1.0-pre-platform';

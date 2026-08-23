@@ -431,29 +431,47 @@ still the legacy monolith until P6). So:
 
 ---
 
-## Phase 5 — Extract the remaining zones (one slice per sub-phase)
+## Phase 5 — Extract the Platformer Stage (the last self-contained zone)
 
-Repeat the Phase-4 pattern, **one zone per checkpoint** (each its own branch +
-merge + `/clear`). **Each zone grows the DiverWorld engine (P3) with the slice it
-needs** (cave/physics/HUD primitives), via the same-refs/accessor seam:
+**REORDERED 2026-08-23** (evidence-driven, user-approved). The original P5 wanted
+to extract abyss → temple → stage → whale as four standalone modules. But scoping
+after P4 revealed a structural split among the zones:
 
-- [ ] **4a** — Trench / abyss + mini-sub (`minigames/trench/`). Carries sub armor,
-  net-only, eject, exit-air. Reuses `host.world`.
-- [ ] **4b** — Temple (`minigames/temple/`). Vault treasures, gate, exit.
-- [ ] **4c** — Platformer stage (`minigames/stage/`). Uses the `stage/` chunkgen +
-  decor already modular; wrap its update/draw.
-- [ ] **4d** — Whale belly (`minigames/whale/`).
+- **Self-contained zones** (own `update` + own `draw`, bypass the reef's shared
+  cave loop) → cleanly extractable via the P4 delegated-module seam:
+  **whirlpool** (done, P4) and **stage** (own `Stage` engine + `_updateStage` +
+  `drawStageScene`, no `Cave`).
+- **Cave-reusing zones** (`new Cave('abyss'|'temple'|'belly')`, NO own update/draw
+  — they run *through* the shared reef `update()`/`draw()` via scattered
+  `zone==='x'` branches; abyss also weaves the mini-sub into the `weapon` getter,
+  diver movement, `_loseLife`, oxygen, + owns the extraction timer). These are the
+  *same* diver-world mode as the reef with different content — extracting them
+  standalone now would mean duplicating/splitting the reef loop. **They fold into
+  the reef extraction (P6) instead.**
 
-Each: extract → `game.js` shrinks → new module test → browser-verify identical →
-checkpoint. **/clear between each.**
+So P5 extracts **only the stage** (`src/minigames/stage/`), the last self-contained
+zone, same pattern as the whirlpool: module owns `stage`/`enteredEntrance`/
+`upPrev` + enter/update/render/exit; runs against `host.world` (camera/air) +
+`host.input/audio/particles`; reef-owned surface (carried/score/lives/fx,
+snapshot/restore, `_loseLife`, `stageEntrances` consume, `_fireGrace`,
+`controlScheme`) via a `reef` facade. NOTE the stage DOES cost run-lives (unlike
+the whirlpool) — it calls `reef.loseLife('killed')`. `stageEntrances` stay
+reef-owned portals. Steps mirror P4's S1–S9 (module test + a seam test driving a
+real Game, then browser-verify + commit + `--no-ff` merge). Bump `platform-p5`.
+
+**🧹 CHECKPOINT → /clear.**
 
 ---
 
-## Phase 6 — Extract the reef as the main diver-world MiniGame
+## Phase 6 — Extract the reef (absorbing the cave-reusing zones) as the main MiniGame
 
 **Aim:** The core reef loop becomes `minigames/reef/` implementing `MiniGame`.
-`game.js` is now reduced to (or replaced by) the **Core shell** — menu, router,
-services — holding no gameplay. This is the payoff: the god-object is gone.
+`game.js` is reduced to (or replaced by) the **Core shell** — menu, router,
+services — holding no gameplay. This is the payoff: the god-object is gone. **The
+cave-reusing zones (abyss+mini-sub, temple, whale belly) come WITH the reef** as
+its scenarios/sub-modes (they already share its cave update/draw loop), rather than
+being extracted standalone beforehand. This is where the mini-sub untangling +
+extraction-timer live.
 
 **Test gates:** the largest verification — full playthrough parity vs baseline
 (reef → each zone → bank → sail → next reef → game-over → badges). Suite green.
