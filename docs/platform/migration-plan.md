@@ -287,6 +287,18 @@ methods happens naturally as `game.js` shrinks in P3–P5.)
 
 ## Phase 3 — DiverWorld engine, slice 1 (kinematic/vital core)
 
+**Landed:** `feat/platform-p3-diverworld` — `src/core/world/index.js`
+(`makeDiverWorld({viewport})`) owns the diver/camera/air slice + `placeDiver`; it
+is exposed as `host.world` and handed to the legacy `Game`, whose constructor now
+installs **instance accessors** for `diver/camX/camY/air/airMax` routing to the
+engine (and `_placeDiver` delegates) — so `game.js` internals stay byte-identical
+yet the diver world is engine-owned. Proven: `tests/core/world.test.mjs` (engine
+unit, 16) + `tests/core/world-seam.test.mjs` (a real `Game` sourcing
+`game.diver === world.diver`, two-way air/cam routing, `_placeDiver` delegation,
+10). Browser-verified on a fresh port (`:8173`): boots to `platform-p3`, a dive
+runs with the engine-owned diver/camera/air, no console errors. Suite 59/59
+(added the two `core/world*` tests). `BUILD='platform-p3'`.
+
 **Aim:** Make `host.world` a **real, engine-owned** surface for the smallest
 genuinely shared part of the diver world (diver + camera + air + `placeDiver`),
 with **zero behavior change** and all 57 test files green. This is what the
@@ -308,29 +320,29 @@ the engine into `host.world` and the game.
 
 **Steps (TDD — write the test, watch it fail, implement, watch it pass):**
 
-- [ ] **Step 1** — `tests/core/world.test.mjs`: `makeDiverWorld({viewport})`
+- [x] **Step 1** — `tests/core/world.test.mjs`: `makeDiverWorld({viewport})`
   exposes `diver/camX/camY/air/airMax`; `placeDiver(x,y,vx)` sets diver `x/y/vx`
   (+ `vy=0`, `invuln`) and clamps the camera to `[0,WW-W]×[0,WH-H]`. Pure — no
   `Game`, no DOM.
-- [ ] **Step 2** — Run it → FAIL (no module).
-- [ ] **Step 3** — Implement `src/core/world/index.js`. Run → PASS.
-- [ ] **Step 4** — `game.js` constructor: accept an optional `world` arg; when
+- [x] **Step 2** — Run it → FAIL (no module).
+- [x] **Step 3** — Implement `src/core/world/index.js`. Run → PASS.
+- [x] **Step 4** — `game.js` constructor: accept an optional `world` arg; when
   present, **first thing** (before the `this.camX=…`/`this.diver=…`/`this.air=…`
   assignments at ~L143) `Object.defineProperty` instance accessors for
   `diver/camX/camY/air/airMax` → `this._world`; and `_placeDiver` delegates to
   `world.placeDiver` when present (else current body). No other `game.js` line
   changes. Fallback (no `world`) preserves today's plain-field path.
-- [ ] **Step 5** — Full suite green (all 57 — proves the stub tests are untouched).
-- [ ] **Step 6** — `minigames/legacy/index.js`: accept optional `world`, pass it
+- [x] **Step 5** — Full suite green (all 57 — proves the stub tests are untouched).
+- [x] **Step 6** — `minigames/legacy/index.js`: accept optional `world`, pass it
   as the new `Game` 7th arg.
-- [ ] **Step 7** — `main.js`: `makeDiverWorld({viewport: WORLD})`; pass into
+- [x] **Step 7** — `main.js`: `makeDiverWorld({viewport: WORLD})`; pass into
   `makeHost({…, world})` and `createLegacyMiniGame({…, world})`.
-- [ ] **Step 8** — Full suite green again.
-- [ ] **Step 9** — Browser-verify on a **fresh port**: `game.diver ===
+- [x] **Step 8** — Full suite green again.
+- [x] **Step 9** — Browser-verify on a **fresh port**: `game.diver ===
   host.world.diver`; `host.world.air` tracks in-game air during a dive; a full
   whirlpool dive + a reef run + another zone all play **identically** to baseline;
   banner reads `platform-p3`; no console errors.
-- [ ] **Step 10** — Bump `BUILD='platform-p3'`; commit.
+- [x] **Step 10** — Bump `BUILD='platform-p3'`; commit.
 
 **🧹 CHECKPOINT → /clear.**
 
