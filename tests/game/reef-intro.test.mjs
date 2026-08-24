@@ -4,7 +4,7 @@
 
 import { ZONE_FAUNA, FAUNA_INFO, faunaInfo, newFaunaAtReef, faunaKindsUpTo } from '../../src/entities/spawn.js';
 import { RELIC, RELIC_INFO, WHIRL } from '../../src/config.js';
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -13,8 +13,8 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 // the old whirlpool-lives test — it's reef-intro, not whirlpool, functionality) ---
 {
   const s = { toastQueue: [] };
-  Game.prototype._enqueueToast.call(s, '🐟 NEW THREAT: Piranha', '#f00', 2.2);
-  Game.prototype._enqueueToast.call(s, '⚓ RELIC: Anchor', '#0f0', 2.0);
+  Reef.prototype._enqueueToast.call(s, '🐟 NEW THREAT: Piranha', '#f00', 2.2);
+  Reef.prototype._enqueueToast.call(s, '⚓ RELIC: Anchor', '#0f0', 2.0);
   check('two toasts queued', s.toastQueue.length === 2);
   check('queued in order', s.toastQueue[0].name.includes('Piranha') && s.toastQueue[1].name.includes('RELIC'));
   check('toast carries its duration', s.toastQueue[0].dur === 2.2);

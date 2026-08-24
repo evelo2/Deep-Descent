@@ -6,22 +6,22 @@
 // ORDINARY creature at each site must keep its existing one-hit-kill (or, for
 // the shock rod, its existing 2-cumulative-hit-kill) behavior unchanged.
 //
-// Drives the real Game.prototype._collisions() / _explode() / _fireShock()
+// Drives the real Reef.prototype._collisions() / _explode() / _fireShock()
 // against minimal stub `this` objects, mirroring the patterns in
 // tests/game/shock-kill.test.mjs and tests/game/charge-detonate.test.mjs.
 // Run: node tests/game/squid-integration.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { GiantSquid } from '../../src/entities/creatures.js';
 import { CREATURES, SHOCK } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 
-const collisions = Game.prototype._collisions;
-const explode = Game.prototype._explode;
-const fireShock = Game.prototype._fireShock;
-const damageCreature = Game.prototype._damageCreature;
+const collisions = Reef.prototype._collisions;
+const explode = Reef.prototype._explode;
+const fireShock = Reef.prototype._fireShock;
+const damageCreature = Reef.prototype._damageCreature;
 
 const mob = (x, y) => ({ x, y, dead: false, snareT: 0, points: 50, radius: 14, vx: 0, vy: 0 });
 
