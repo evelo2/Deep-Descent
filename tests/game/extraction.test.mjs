@@ -14,7 +14,7 @@ globalThis.document = {
   },
 };
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { ABYSS } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -29,35 +29,35 @@ const mkStub = (over = {}) => ({
 // --- Trip: first grab in the abyss arms the countdown ---
 {
   const s = mkStub();
-  Game.prototype._tripExtraction.call(s);
+  Reef.prototype._tripExtraction.call(s);
   check('tripping arms the countdown', s.extractActive === true && s.extractLapsed === false);
   check('countdown starts at ABYSS.extractSecs', s.extractT === ABYSS.extractSecs);
 
   // Re-trip is a no-op (timer already running).
   s.extractT = 12;
-  Game.prototype._tripExtraction.call(s);
+  Reef.prototype._tripExtraction.call(s);
   check('re-tripping does not reset the timer', s.extractT === 12);
 
   // Not in the abyss → never arms.
   const reef = mkStub({ zone: 'reef' });
-  Game.prototype._tripExtraction.call(reef);
+  Reef.prototype._tripExtraction.call(reef);
   check('never arms outside the abyss', reef.extractActive === false);
 }
 
 // --- Tick: counts down, then lapses ---
 {
   const s = mkStub({ extractActive: true, extractT: 5 });
-  Game.prototype._updateExtraction.call(s, 2);
+  Reef.prototype._updateExtraction.call(s, 2);
   check('ticking decrements the timer', Math.abs(s.extractT - 3) < 1e-9 && !s.extractLapsed);
-  Game.prototype._updateExtraction.call(s, 3);
+  Reef.prototype._updateExtraction.call(s, 3);
   check('hitting zero lapses the extraction', s.extractLapsed === true && s.extractT === 0);
   // Once lapsed, further ticks are a no-op (no negative drift).
-  Game.prototype._updateExtraction.call(s, 5);
+  Reef.prototype._updateExtraction.call(s, 5);
   check('lapsed timer stays at 0', s.extractT === 0 && s.extractLapsed === true);
 
   // Inactive timer never ticks.
   const idle = mkStub({ extractActive: false, extractT: 0 });
-  Game.prototype._updateExtraction.call(idle, 3);
+  Reef.prototype._updateExtraction.call(idle, 3);
   check('inactive timer is untouched', idle.extractT === 0 && !idle.extractLapsed);
 }
 
