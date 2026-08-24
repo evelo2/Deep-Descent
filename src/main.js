@@ -13,6 +13,8 @@ import { makeProgression } from './core/progression.js';
 import { makeAchievements } from './core/achievements.js';
 import { makeDiverWorld } from './core/world/index.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
+import { makeMatch3 } from './minigames/match3/index.js';
+import { boardHitTest, backHitTest } from './render/match3.js';
 import { VERSION, BUILD } from './version.js';
 
 // Boot banner — self-identifies the running build (also confirms which version
@@ -49,8 +51,14 @@ const host = makeHost({
   economy, progression, achievements, world,
 });
 const core = new Core({ host });
-const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world });
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world, host });
 core.register(legacy);
+// Phase 9: resolve the Core↔Host chain so minigames can host.open/close, then
+// register the first NEW minigame (Salvage Match). It's menu-launched over the
+// reef and credits the ONE shared economy per level cleared.
+host._bindCore(core);
+const match3 = makeMatch3({ host });
+core.register(match3);
 core.boot('legacy');
 
 // The live Game instance, for the input-event wiring below (input plumbing is
@@ -85,7 +93,26 @@ resize();
 
 // Menus/pause vs. firing. During play, Space/F/click fire the harpoon; on the
 // menus they start/resume. (Pause is P/Esc, handled inside the game.)
-function action() { audio.ensure(); audio.resume(); game.onAction(); }
+// The input events below drive the LEGACY game directly (dive/menus). When a
+// session minigame (match3) is on top of the Core stack, the legacy is paused
+// underneath — so gate these on the legacy being top-of-stack, and route the
+// pointer to the match-3 board instead when it is active.
+const isLegacyTop = () => core.activeId() === 'legacy';
+
+// Pointer swaps + ✕ quit for match-3 (it hit-tests its own board rather than
+// registering touch buttons). Two taps pick a pair; a tap on ✕ bails out.
+let m3sel = null;
+function handleMatch3Pointer(clientX, clientY) {
+  const p = input.toLogical(clientX, clientY);
+  if (backHitTest(match3, host, p.x, p.y)) { host.close(match3.exit()); m3sel = null; match3.sel = null; return; }
+  if (match3.phase !== 'play') { match3._pointerAdvance(); m3sel = null; match3.sel = null; return; }
+  const cell = boardHitTest(match3, host, p.x, p.y);
+  if (!cell) { m3sel = null; match3.sel = null; return; }
+  if (!m3sel) { m3sel = cell; match3.sel = cell; }
+  else { match3.trySwap(m3sel.r, m3sel.c, cell.r, cell.c); m3sel = null; match3.sel = null; }
+}
+
+function action() { if (!isLegacyTop()) return; audio.ensure(); audio.resume(); game.onAction(); }
 // Space/Enter/F: start/confirm on the menus. During play, firing is driven by
 // the held-fire state the game polls each frame (hold to aim), so we don't fire
 // here. e.repeat is ignored so autorepeat can't spam confirms.
@@ -104,12 +131,22 @@ canvas.addEventListener('mousedown', (e) => {
   // click missed every button, so clicking HELP no longer just starts the game.
   const hit = input.hitButtonAt(e.clientX, e.clientY);
   if (hit) { input.pressButton(hit); return; }
-  if (game.state !== 'playing') game.onAction();
+  if (core.activeId() === 'match3') { handleMatch3Pointer(e.clientX, e.clientY); return; }
+  if (isLegacyTop() && game.state !== 'playing') game.onAction();
 });
 // Touch: tap-to-fire is detected inside Input; a tap on the menus starts the game.
 // (Paused is resumed via the on-screen ▶ button, so tap-anywhere is limited to
 // the menu/gameover screens — otherwise a tap on a HUD button would also resume.)
-canvas.addEventListener('touchstart', () => { audio.ensure(); audio.resume(); if ((game.state === 'menu' || game.state === 'gameover') && !input._btnTouch) game.onAction(); }, { passive: true });
+canvas.addEventListener('touchstart', (e) => {
+  audio.ensure(); audio.resume();
+  if (core.activeId() === 'match3') {
+    if (input._btnTouch) return;   // a HUD/quit touch button was already tapped
+    const t = e.changedTouches && e.changedTouches[0];
+    if (t) handleMatch3Pointer(t.clientX, t.clientY);
+    return;
+  }
+  if (isLegacyTop() && (game.state === 'menu' || game.state === 'gameover') && !input._btnTouch) game.onAction();
+}, { passive: true });
 
 // Ambient bubbles drifting up on the menu, for atmosphere.
 let ambientT = 0;

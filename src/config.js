@@ -633,4 +633,11 @@ export const KEYMAP = {
   flare: ['KeyG'],
   torch: ['KeyT'],
   controls: ['KeyC'],
+  // Platform Phase 9 — the minigame stack. `confirm`/`back` are generic
+  // menu verbs the match-3 module polls (dive uses Space/onAction directly);
+  // `match3` launches Salvage Match from the menu. KeyM is taken by `mute`, so
+  // the launcher is KeyN (menu button reads "(N)").
+  confirm: ['Space', 'Enter'],
+  back: ['Escape', 'Backspace'],
+  match3: ['KeyN'],
 };

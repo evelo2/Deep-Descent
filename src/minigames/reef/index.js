@@ -1196,6 +1196,10 @@ export class Reef {
     // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
     if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._shell._openDryDock(this._shell.state); this.input.endFrame(); return; }
 
+    // Launch Salvage Match (the first NEW minigame) from the menu/game-over via
+    // the Core stack (N or the ⚓ button). host.open pushes it over this reef.
+    if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('match3') || this.input.consumeButton('match3'))) { this.host.open('match3'); this.input.endFrame(); return; }
+
     // Change the on-screen control legend (C / a menu tap; ← → on the menus).
     if (cycleControls) this._shell._cycleScheme();
     else if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('right') || this.input.consumeButton('schemeNext'))) this._shell._cycleScheme();
