@@ -81,7 +81,7 @@ Design spec: `docs/superpowers/specs/2026-08-22-diverworld-engine-slice1-design.
 | **P6** | Extract the reef as the main diver-world MiniGame | old P5 |
 | **P7** | Consolidate the DiverWorld engine (dedup left by extraction) | old P6, shrunk |
 | **P8** | Type the boundary (JSDoc + `tsc --noEmit`) | old P7 |
-| **P9** | First NEW minigame + build-step trigger | old P8 |
+| **P9** | First NEW minigame (Salvage Match) + Core minigame stack — ✅ SHIPPED (BUILD=platform-p9, main `e37e3fb`) | old P8 |
 
 Each engine slice is grown by a **real consumer** (never speculative surface), via
 the **same-refs / instance-accessor seam** (move ownership without rewriting
@@ -550,6 +550,23 @@ console errors.
 ---
 
 ## Phase 9 — First NEW minigame + the build-step trigger
+
+**✅ SHIPPED (BUILD=platform-p9, main `e37e3fb`).** Built **Salvage Match**, a
+Candy-Crush-style match-3 — the first NEW minigame, proving the platform end to
+end. It's a *diver-world-adjacent* bring-your-own-board game: pure Node-testable
+engine (`src/minigames/match3/{board,levels}.js`) + canvas renderer
+(`src/render/match3.js`) + a thin MiniGame module (`.../match3/index.js`),
+menu-launched over the reef via a **new Core minigame stack** (`host.open`/
+`host.close`, `Core._stack`/`_pending`/`activeId`) and crediting the ONE shared
+salvage economy per level cleared. **Decision gate honored:** it needed nothing
+new — **no esbuild, no full-TS, no build step** (kept the P8 `// @ts-check` +
+`tsc --noEmit` posture). The build-step trigger stays parked for a true
+bring-your-own-**engine** game. **Boundary bug caught by browser-verify (not
+tests):** `game.js` handed `makeReef` an inline plain-object host missing
+`open`/`close`/`rng`, so `host.open('match3')` threw — fixed by threading the
+Core-bound Host through `createLegacyMiniGame → Game ctor → reef host`. **Deferred:**
+nested reef special-level embedding of the same module; blocker/score objective
+types; cross-reload level progress; a real cascade animation (v1 pops to settled).
 
 **Aim:** Prove the platform by building a small **new** minigame against the
 contract. If it's a *diver-world mode*, it needs nothing new. If it's a
