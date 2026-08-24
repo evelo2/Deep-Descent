@@ -2,6 +2,8 @@
 
 User-set order: **1) Salvage Log → 2) Mini-sub (deep-dive) → 3) Whirlpool → 4) PCG stages.**
 Build incrementally, push playable milestones ("test as you go"), advise + compress.
+Context-checkpoint discipline (when to `/clear` vs `/compact`): see
+`docs/platform/architecture.md` §8 — the standing practice for every work-unit.
 
 Specs/designs (memory + docs): `meta-progression-design`, `special-levels-design`,
 `pcg-stages-design`; spec `docs/superpowers/specs/2026-08-19-salvage-log-meta-progression-design.md`.

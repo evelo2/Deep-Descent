@@ -92,6 +92,11 @@ every step.
 
 ## Checkpoint Protocol (the /compact + /clear discipline)
 
+> This is the migration-specific instance of the repo-wide checkpoint discipline.
+> The **general, standing practice** (for all future minigames/features, now that
+> the migration has shipped) lives in `architecture.md` §8 — read that for the
+> reusable version; the steps below are the same protocol applied to this plan.
+
 Between phases and at long-phase midpoints, run a **🧹 CHECKPOINT**:
 
 1. Full suite green + browser-verify (fresh port).
