@@ -1,9 +1,12 @@
 // The DiverWorld engine seam (Phase 3): a REAL Game constructed with the engine
-// sources its diver/camera/air FROM the engine — same object, same values, both
+// sources its diver/camera FROM the engine — same object, same values, both
 // directions — so host.world genuinely owns the diver world. Post-P6 the diver is
 // CONSTRUCTED by the reef MiniGame (not the shell), and _placeDiver lives on the
-// reef — but the shell's own camX/camY/air/airMax accessors still route to the
-// engine (main.js reads game.camX). Run: node tests/core/world-seam.test.mjs
+// reef. Post-P7 the shell keeps ONLY the accessors it still reads directly —
+// camX/camY (main.js reads game.camX for ambient bubbles) + diver (touch-button
+// geometry); the air/airMax shell shims were dropped (the reef reads air through
+// its own accessors; the engine's air ownership is covered by core/world.test.mjs).
+// Run: node tests/core/world-seam.test.mjs
 
 // Minimal DOM/storage stubs — the Game constructor reads localStorage and guards
 // document.getElementById; it calls NO methods on input/audio/particles/bg/ctx.
@@ -32,15 +35,17 @@ const game = new Game(stub, stub, stub, stub, stub, services, world);
 check('game.diver === world.diver (same object)', game.diver === world.diver);
 check('the diver was constructed into the engine (by the reef)', game.diver && typeof game.diver.x === 'number');
 
-// --- Two-way routing for the primitives on the SHELL's accessors (air/airMax/camX/camY). ---
-game.airMax = 123;
-check('game.airMax write → world.airMax', world.airMax === 123);
-world.air = 45;
-check('world.air → game.air read', game.air === 45);
+// --- Two-way routing for the camera primitives the shell still owns (camX/camY). ---
 game.camX = 7; game.camY = 9;
 check('game.camX/camY write → world', world.camX === 7 && world.camY === 9);
 world.camX = 99;
 check('world.camX → game.camX read', game.camX === 99);
+
+// --- The air/airMax shell shims were removed in P7: the shell no longer routes
+// them (nothing on the shell reads air). Writing game.air must NOT leak into the
+// engine — it is a plain own-property now, proving the shim was truly dropped. ---
+game.air = 3;
+check('game.air is NOT wired to the engine (shim dropped in P7)', world.air !== 3);
 
 // --- _placeDiver (now on the reef) delegates to the engine: shared diver moved. ---
 game._reef._placeDiver(1380, 300, 5);

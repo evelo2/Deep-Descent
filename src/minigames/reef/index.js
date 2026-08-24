@@ -51,6 +51,7 @@ import { addRun, saveStats } from '../../meta/stats.js';
 import { awardProgress, saveProgress, trackProgress, tierNameById } from '../../meta/progressive.js';
 import { unlockAchievement } from '../../platform/steam.js';
 import { applyLoadout, getRelic, tickEquippedRentals } from '../../meta/relics.js';
+import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
 
 // Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
 let { W, H } = WORLD;
@@ -2597,38 +2598,14 @@ export class Reef {
     ctx.restore();   // end alpha
   }
 
-  _mmss(secs) { const s = Math.max(0, Math.ceil(secs)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
-
+  // Canvas-chrome primitives now live in render/chrome.js (Phase 7 dedup) — these
+  // stay as thin forwarders so every this._text(...) call-site is byte-identical.
+  _mmss(secs) { return mmss(secs); }
   _key(action) { return ctrlPrompt(this._shell.controlScheme, action); }
-
-  _overlay(title, sub) {
-    const cx = W / 2;
-    this._panel(0.4);
-    this._text(title, cx, H / 2 - 10, 44, PAL.hudText, 'center', 'middle', true);
-    this._text(sub, cx, H / 2 + 34, 16, '#bfe6ff', 'center', 'middle');
-  }
-
-  _panel(alpha = 0.55) {
-    const ctx = this.ctx;
-    ctx.fillStyle = `rgba(3,15,30,${alpha})`;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  _keycap(label, x, y) {
-    const ctx = this.ctx, w = 15, h = 15;
-    ctx.save();
-    ctx.fillStyle = 'rgba(20,44,66,0.9)'; ctx.strokeStyle = 'rgba(150,200,240,0.6)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(x, y - h / 2, w, h, 3); ctx.fill(); ctx.stroke();
-    ctx.restore();
-    this._text(label, x + w / 2, y + 0.5, 9, PAL.hudText, 'center', 'middle', true);
-  }
-
+  _overlay(title, sub) { overlay(this.ctx, title, sub); }
+  _panel(alpha = 0.55) { panel(this.ctx, alpha); }
+  _keycap(label, x, y) { keycap(this.ctx, label, x, y); }
   _text(str, x, y, size, color, align = 'left', base = 'alphabetic', bold = false) {
-    const ctx = this.ctx;
-    ctx.font = `${bold ? '800' : '600'} ${size}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-    ctx.textAlign = align; ctx.textBaseline = base;
-    if (bold) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8; }
-    ctx.fillStyle = color; ctx.fillText(str, x, y);
-    ctx.shadowBlur = 0;
+    text(this.ctx, str, x, y, size, color, align, base, bold);
   }
 }
