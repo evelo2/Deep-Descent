@@ -512,7 +512,7 @@ tests cover the consolidated surface.
 
 ---
 
-## Phase 8 — Type the boundary (JSDoc + `tsc --noEmit`)
+## Phase 8 — Type the boundary (JSDoc + `tsc --noEmit`) ✅ SHIPPED
 
 **Aim:** Lock the contract with types where drift hurts most. **No build step, no
 runtime change.**
@@ -524,6 +524,26 @@ a dev-only `tsconfig.json` (`checkJs`, `noEmit`, `strict` to taste) added as a
 first, widen opportunistically.
 
 **Test gates:** `npm run typecheck` clean; runtime + web deploy untouched; suite green.
+
+**SHIPPED (main `2f3319f`, BUILD=platform-p8).** Real `typescript` devDep +
+`npm run typecheck` (tsc --noEmit); `tsconfig.json` with `checkJs` OFF (per-file
+`// @ts-check` opts in) + `noEmit`. **Strictness call (user-approved):** `strict`
+ON, but `noImplicitAny:false` AND `strictNullChecks:false` for this first pass —
+those two alone produced ~340 of the initial 379 errors, all guard/cast grind on
+runtime-guaranteed-but-not-TS-provable legacy gameplay state. Everything else strict
+stays on and still catches real boundary drift; re-enable the two per-file later.
+`// @ts-check` on the 11 boundary files (7 `core/*` + 4 `minigames/*/index.js`).
+The types caught **real drift, not just missing annotations**: (1) the reef `mgHost`
+facade was missing `rng`/`progression`/`achievements` → now built via `makeHost()`;
+(2) the legacy wrapper `exit()` read `won`/`score`/`reef` off the shell but P6 moved
+run-state to the reef → undefined (latent; `exit()` isn't routed yet) → now sourced
+from `game._reef`. Plus honest declarations: `Diver.update` `phys` param (DIVER|SUB),
+`Treasure.locked`, and the reef `_relic*` flags (set externally by `applyLoadout`).
+whirlpool/stage factories return via an intermediate `const` so `this` infers the
+full module shape; the 2 nested `enter(entrance)` sites cast to document the
+reef-driven (not Core-booted) divergence from `MiniGame.enter(host)`. Gates:
+typecheck 0 errors, suite 67/67, browser-smoke (dive + whirlpool + stage) zero
+console errors.
 
 **🧹 CHECKPOINT → /clear.**
 
