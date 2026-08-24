@@ -1,9 +1,9 @@
 // Regression test: the shock rod stuns on the first hit and KILLS on the second.
 // Previously it only ever stunned/knocked; a creature could never be killed with
-// the shock rod. Drives the real Game.prototype._fireShock() against a stub `this`.
+// the shock rod. Drives the real Reef.prototype._fireShock() against a stub `this`.
 // Run: node tests/game/shock-kill.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { SHOCK } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -21,7 +21,7 @@ function makeStub() {
     audio: { fire() {}, kill() {} },
   };
 }
-const fireShock = Game.prototype._fireShock;
+const fireShock = Reef.prototype._fireShock;
 const mob = (x, y) => ({ x, y, dead: false, snareT: 0, points: 50, vx: 0, vy: 0 });
 
 // --- One creature in range: first zap stuns, second zap kills. ----------------

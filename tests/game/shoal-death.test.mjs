@@ -5,11 +5,11 @@
 // mechanic isn't also a stealth score nerf). The shared HP is a scalable knob:
 // with shoalHp > 1 it takes that many hits ANYWHERE on the shoal to clear it.
 //
-// Drives the real Game.prototype._collisions() / _explode() / _fireShock()
+// Drives the real Reef.prototype._collisions() / _explode() / _fireShock()
 // against minimal stubs, mirroring tests/game/squid-integration.test.mjs.
 // Run: node tests/game/shoal-death.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { Piranha } from '../../src/entities/creatures.js';
 import { spawnCreature } from '../../src/entities/spawn.js';
 import { CREATURES, KILL_POINTS } from '../../src/config.js';
@@ -17,10 +17,10 @@ import { CREATURES, KILL_POINTS } from '../../src/config.js';
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 
-const collisions = Game.prototype._collisions;
-const explode = Game.prototype._explode;
-const fireShock = Game.prototype._fireShock;
-const damageCreature = Game.prototype._damageCreature;
+const collisions = Reef.prototype._collisions;
+const explode = Reef.prototype._explode;
+const fireShock = Reef.prototype._fireShock;
+const damageCreature = Reef.prototype._damageCreature;
 
 const PVAL = KILL_POINTS.Piranha ?? 100;
 

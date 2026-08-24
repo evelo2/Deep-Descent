@@ -19,7 +19,7 @@ globalThis.document = {
   },
 };
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { CONSUMABLE, CONSUMABLE_BY_ID } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -40,7 +40,7 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 
 // --- m:ss formatter ---
 {
-  const f = Game.prototype._mmss.bind({});
+  const f = Reef.prototype._mmss.bind({});
   check('_mmss(0) is 0:00', f(0) === '0:00');
   check('_mmss(5) rounds up to 0:05', f(5) === '0:05');
   check('_mmss(65) is 1:05', f(65) === '1:05');
@@ -56,13 +56,13 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
     shopSel: 0, gold: c.cost + 500, buffT: { suit: 0, fins: 0, lantern: 0 },
     diver: { x: 0, y: 0 }, particles: { sparkle() {} }, audio: { bank() {}, gasp() {} },
   };
-  Game.prototype._shopBuy.call(stub);
+  Reef.prototype._shopBuy.call(stub);
   check('buying a consumable deducts its gold cost', stub.gold === 500);
   check('buying sets the buff timer to its full duration', stub.buffT.suit === c.dur);
 
   // Re-buy refreshes (sets, not stacks) the timer even when partly spent.
   stub.gold = c.cost + 10; stub.buffT.suit = 12;
-  Game.prototype._shopBuy.call(stub);
+  Reef.prototype._shopBuy.call(stub);
   check('re-buying refreshes the timer to full (does not stack)', stub.buffT.suit === c.dur);
 
   // Can't afford → no change, no timer set.
@@ -72,7 +72,7 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
     diver: { x: 0, y: 0 }, particles: { sparkle() {} }, audio: { bank() {}, gasp() {} },
     shopDeny: 0,
   };
-  Game.prototype._shopBuy.call(broke);
+  Reef.prototype._shopBuy.call(broke);
   check('cannot buy without enough gold (timer stays 0, gold unchanged)', broke.buffT.fins === 0 && broke.gold === 100);
 }
 

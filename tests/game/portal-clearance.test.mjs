@@ -1,15 +1,15 @@
 // Regression test: creatures must never spawn on a "portal" — a zone entrance
 // (temple gate, whale mouth, stage entrance), a dive station (bell), or a zone
 // exit (whaleExit/templeExit) — otherwise you arrive at / get dropped beside one
-// straight into an enemy. Drives the real Game.prototype._clearCreaturesNearPortals()
+// straight into an enemy. Drives the real Reef.prototype._clearCreaturesNearPortals()
 // against stub state. Run: node tests/game/portal-clearance.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { BELL, STAGE } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
-const clearPortals = Game.prototype._clearCreaturesNearPortals;
+const clearPortals = Reef.prototype._clearCreaturesNearPortals;
 const mob = (x, y, tag) => ({ x, y, radius: 15, tag });
 
 // --- Reef: bell, temple gate, whale mouth, stage entrance all clear a radius. ---

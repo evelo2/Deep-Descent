@@ -15,13 +15,13 @@ globalThis.document = {
   },
 };
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { SUB, GAME } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 
-const weaponGet = Object.getOwnPropertyDescriptor(Game.prototype, 'weapon').get;
+const weaponGet = Object.getOwnPropertyDescriptor(Reef.prototype, 'weapon').get;
 
 // --- Net is the only weapon in the sub ---
 {
@@ -30,7 +30,7 @@ const weaponGet = Object.getOwnPropertyDescriptor(Game.prototype, 'weapon').get;
 
   // Cycling is blocked while piloting.
   const s = { inSub: true, weapons: ['harpoon', 'net'], weaponIdx: 0, weaponSwapT: 0, audio: { select() {} } };
-  Game.prototype._cycleWeapon.call(s, 1);
+  Reef.prototype._cycleWeapon.call(s, 1);
   check('cannot switch weapons in the sub', s.weaponIdx === 0);
 }
 
@@ -44,10 +44,10 @@ const weaponGet = Object.getOwnPropertyDescriptor(Game.prototype, 'weapon').get;
   });
   const s = mk();
   const start = SUB.armor;
-  for (let i = 0; i < start; i++) Game.prototype._hit.call(s);
+  for (let i = 0; i < start; i++) Reef.prototype._hit.call(s);
   check('armored hits do NOT eject', s.ejected === false && s.subArmor === 0);
   check(`armor drained over ${start} hits`, s.subArmor === 0);
-  Game.prototype._hit.call(s);   // armor spent → the next hit ejects
+  Reef.prototype._hit.call(s);   // armor spent → the next hit ejects
   check('the hit after armor is gone ejects the diver', s.ejected === true);
 }
 
@@ -58,7 +58,7 @@ const weaponGet = Object.getOwnPropertyDescriptor(Game.prototype, 'weapon').get;
     flash: 0, shake: 0, puName: '', puCol: '', puT: 0, audio: { gasp() {} },
     _exitAbyss() { this.exited = true; },
   };
-  Game.prototype._ejectFromAbyss.call(s);
+  Reef.prototype._ejectFromAbyss.call(s);
   check('ejection restores carried loot to the entry value', s.carried === 200);
   check('ejection restores carried pearls to the entry value', s.carriedPearls === 1);
   check('ejection surfaces via _exitAbyss', s.exited === true);
@@ -72,12 +72,12 @@ const weaponGet = Object.getOwnPropertyDescriptor(Game.prototype, 'weapon').get;
     air: 10, airMax: 100, zoneFade: 0, reentryT: 0,
     _placeDiver() {}, audio: { bank() {} },
   };
-  Game.prototype._restoreReef.call(s);
+  Reef.prototype._restoreReef.call(s);
   check('exiting refills air by exitAirRefillFrac of the tank', Math.abs(s.air - (10 + 100 * GAME.exitAirRefillFrac)) < 1e-9);
 
   // Never overfills past the tank.
   const full = { savedReef: { returnX: 0, returnY: 0 }, air: 80, airMax: 100, zoneFade: 0, reentryT: 0, _placeDiver() {}, audio: { bank() {} } };
-  Game.prototype._restoreReef.call(full);
+  Reef.prototype._restoreReef.call(full);
   check('the air top-up is capped at airMax', full.air === 100);
 }
 

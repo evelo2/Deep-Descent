@@ -149,6 +149,12 @@ git commit -m "Platform P6 T1: scaffold reef MiniGame module + shell facade + ct
 
 This is the atomic cutover. Behavior flows through the reef module by the end; `game.js`'s original dive methods are left in place as dead code (deleted in Task 3) so this diff is **additive + delegation wiring** and easy to review against the originals.
 
+**Refined approach (user-approved during execution 2026-08-23): "reef owns the loop + router."** `update()`, `draw()`, and `onAction()` move into the reef VERBATIM (lowest byte-identical risk — the frame loop and the menu-painted-over-ocean render are one organism and can't be split cleanly). The reef runs the whole state machine and calls back to the shell for the meta screens via a `shell` facade. Concretely:
+- **Reef owns:** all dive gameplay + run-state; `update`/`render`(was `draw`)/`onAction`; the dive states inline (playing/paused/shop/sailing + stage/whirl zones); the three cave zones + mini-sub + extraction; the nested `_whirl`/`_stage` + `_whirlReef`/`_stageReef` facades. Exports the `Reef` class (for the re-pointed stub tests). Owns module consts `REEF_THEMES`, `WACKY_*`, `PU_INFO`, and `oxygenMultiplier` (moved + exported here). Duplicates the pure chrome helpers `_text/_overlay/_panel/_keycap/_fmtStat/_mmss/_key` (P7 dedupes) so moved code stays byte-identical.
+- **Shell keeps (called back via facade):** menu/help/Trophy-Wall/dry-dock render+nav+open/close (`_menu/_menuButtons/_help*/_badges*/_dryDock*`), control schemes (`_setScheme/_cycleScheme/_autoDetectScheme/_applyHintStrip/_cycleStartReef`), touch buttons (`_syncTouchButtons/_touchBtn/_touchBtns`), `_gameOverScreen` (reads `this._reef.finalStats()`), `state`/`controlScheme`/`hi`/`hiReef`/`pendingStartReef`, services/world refs.
+- **`shell` facade (reef→shell) verbs:** `state` (get/set), `controlScheme` (get), `hi`/`hiReef` (get/set), `saveHi()`, `pendingStartReef` (get), and passthroughs for the shell-resident methods the moved `update`/`draw` call: `_openHelp/_closeHelp/_openBadges/_closeBadges/_openDryDock/_closeDryDock/_dryDockMove/_dryDockAct/_cycleScheme/_setScheme/_cycleStartReef/_autoDetectScheme/_syncTouchButtons/_touchBtn/_touchBtns/_applyHintStrip/_menu/_menuButtons/_helpScreen/_badgesScreen/_dryDockScreen/_gameOverScreen`. (Rewrite rule 5a: within moved code, `this.<shellMethod>` → `this._shell.<shellMethod>` for exactly these names.)
+- **Shell forwarders:** `Game.update(dt){ this._reef.update(dt); }`, `Game.draw(){ this._reef.render(this.ctx); }`, `Game.onAction(){ this._reef.onAction(); }`. `main.js` unchanged (`game.state`/`game.camX` still resolve on the shell).
+
 **Files:**
 - Modify: `src/minigames/reef/index.js` (port all members from the manifest)
 - Modify: `src/game.js` (delegate `update`/`draw`/`onAction`/screens to `this._reef`; move `mgHost` + `_whirl`/`_stage` construction into the reef)
@@ -204,7 +210,11 @@ Pure deletion; `game.js` becomes the shell. The reef module already carries ever
 
 - [ ] **Step 1: Delete the migrated methods + fields from `Game`**
 
-Remove every member in the "move manifest" from `Game` (they now live only in `Reef`). Keep the "stays in the shell" list. Delete dive run-state field initializations from the `Game` ctor/`start` (the shell no longer has `start`; menu→dive goes through `this._reef.start`).
+Remove every member in the "move manifest" from `Game` (they now live only in `Reef`). Keep the "stays in the shell" list (per Task 2's refined approach). Delete dive run-state field initializations from the `Game` ctor (the shell no longer has `start`/`draw`-body/`update`-body; menu→dive goes through `this._reef`). Also delete the moved module consts (`REEF_THEMES`/`WACKY_*`/`PU_INFO`) and the `oxygenMultiplier` export from `game.js`.
+
+- [ ] **Step 1b: Re-point the ~17 dive stub tests to `Reef`**
+
+`tests/game/*.test.mjs` call `Game.prototype._method.call(stub, …)` on moved dive logic (`_bankLoot`, `_collisions`, `fire`, `_fireShock`, `_explode`, extraction, sub-armor, `_enqueueToast`, …). For each affected file, change `import { Game } from '../../src/game.js'` → `import { Reef } from '../../src/minigames/reef/index.js'` and `Game.prototype.X` → `Reef.prototype.X`. Update `abyss-air.test.mjs`'s `oxygenMultiplier` import to the reef module. Add stub fields the moved methods now need (e.g. `_shell`, `host`) only where a test exercises a path that touches them. Run each re-pointed file to confirm green.
 
 - [ ] **Step 2: Drop now-unused imports**
 

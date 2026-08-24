@@ -1,17 +1,17 @@
 // Regression test: auto-aim (the hold-to-lock-onto-nearest-threat assist) is a
 // PAID perk gated behind the Targeting upgrade. It must NOT engage at aimLevel 0
 // (manual fire only), and must engage from aimLevel >= AIM.unlockLevel. Drives
-// the real Game.prototype._acquireAimTarget() (the gate) + _nearestThreat().
+// the real Reef.prototype._acquireAimTarget() (the gate) + _nearestThreat().
 // Run: node tests/game/aim-gate.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { AIM } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 
-const acquire = Game.prototype._acquireAimTarget;
-const nearest = Game.prototype._nearestThreat;
+const acquire = Reef.prototype._acquireAimTarget;
+const nearest = Reef.prototype._nearestThreat;
 
 // A threat 100px from the diver — well within AIM.range (720).
 const mob = (x, y) => ({ x, y, dead: false, snareT: 0 });
