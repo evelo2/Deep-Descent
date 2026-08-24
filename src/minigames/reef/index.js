@@ -1,3 +1,4 @@
+// @ts-check
 // The Reef — the core dive loop extracted as the main MiniGame (Phase 6; see
 // docs/platform/migration-plan.md + the P6 design spec). This is the payoff of
 // the strangler-fig migration: the reef dive loop, its three cave-reusing zones
@@ -44,6 +45,7 @@ import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
 import { makeWhirlpool } from '../whirlpool/index.js';
 import { makeStage } from '../stage/index.js';
+import { makeHost } from '../../core/host.js';
 import { STAGE } from '../../config.js';
 import { saveSalvage, runPayout, bankReefRelic, consumeReefRelic, skipStartGold } from '../../meta/salvage.js';
 import { awardBadges, saveBadges, rankFor } from '../../meta/badges.js';
@@ -161,12 +163,25 @@ export class Reef {
     this.reefName = ''; this.reefTheme = REEF_THEMES[0];
     this.puT = 0; this.puName = ''; this.puCol = '#fff';
     this.diver.reset();
+    // Per-run relic flags (Salvage Log). The authority is applyLoadout() →
+    // resetRelicFlags() in meta/relics.js, which re-sets these every run BEFORE any
+    // read; declared here (mirroring those defaults) so the Reef's shape is explicit
+    // to the type-checker, which can't see the external resetRelicFlags(this) writes.
+    this._relicAirBonus = 0; this._relicSwimMult = 1;
+    this._relicPlating = false; this._relicBellFull = false;
+    this._relicSonar = false; this._relicBarbs = false; this._relicSecondWind = false;
+    this._relicEye = false; this._relicChart = false; this._relicMagnet = false;
     // Nested zone MiniGames (P4 whirlpool, P5 stage) — now built + owned here.
-    const mgHost = {
+    // Built through makeHost so the nested modules receive a COMPLETE Host facade
+    // (the same rng/progression/achievements the reef itself got), not an ad-hoc
+    // subset — the boundary the nested modules type against. Viewport is the live
+    // module-level WORLD; the rest are shared by reference.
+    const mgHost = makeHost({
       world: this._world, economy: host.economy,
       audio: this.audio, input: this.input, particles: this.particles,
-      viewport: WORLD,
-    };
+      viewport: WORLD, rng: host.rng,
+      progression: host.progression, achievements: host.achievements,
+    });
     this._mgHost = mgHost;
     this._whirl = makeWhirlpool({ host: mgHost, reef: this._whirlReef() });
     this._stage = makeStage({ host: mgHost, reef: this._stageReef() });
@@ -1459,13 +1474,16 @@ export class Reef {
       // special zone we just left (the diver is dropped back near its entrance).
       for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
-      for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._stage.enter(e); this.input.endFrame(); return; } }
+      // The nested zone modules' enter() takes a reef ENTRANCE (portal), not a Host
+      // — they are reef-driven, not Core-booted (see each module's header). The cast
+      // documents that intentional divergence from the MiniGame.enter(host) contract.
+      for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._stage.enter(/** @type {any} */ (e)); this.input.endFrame(); return; } }
       if (this.reentryT <= 0 && this.abyssEntrance &&
           Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) {
         this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return;   // board the sub (free)
       }
       if (this.reentryT <= 0 && this.whirlEntrance && Math.hypot(d.x - this.whirlEntrance.x, d.y - this.whirlEntrance.y) < this.whirlEntrance.r + d.radius) {
-        this._whirl.enter(this.whirlEntrance); this.input.endFrame(); return;
+        this._whirl.enter(/** @type {any} */ (this.whirlEntrance)); this.input.endFrame(); return;
       }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;

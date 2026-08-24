@@ -1,0 +1,31 @@
+{
+  // Dev-only type checker for the platform boundary (Phase 8). NOTHING is emitted
+  // and NOTHING new ships to the web build: the browser keeps running the plain
+  // `.js` files untouched. `checkJs` is OFF here on purpose — a file opts in to
+  // checking with a `// @ts-check` directive on its first line, so we type the
+  // Core <-> MiniGame seam without dragging the whole legacy codebase in yet.
+  // Run with `npm run typecheck`. See docs/platform/architecture.md §5.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    // Two strict flags are deliberately relaxed for this first typing pass (P8),
+    // so we type the BOUNDARY without an annotation/guard grind through ~3000
+    // lines of legacy gameplay. Everything else strict stays on and still catches
+    // real boundary drift: arg mismatches, missing/typo props, object-shape gaps.
+    //   noImplicitAny  — untyped legacy params stay `any` (no annotation grind).
+    //   strictNullChecks — gameplay `this`-state is runtime-guaranteed non-null
+    //                      but not TS-provable; ~340 of 379 first-pass errors were
+    //                      this. Re-enable per-file opportunistically later.
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.js"]
+}
