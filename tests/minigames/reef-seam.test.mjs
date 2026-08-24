@@ -67,6 +67,13 @@ reef._gameOver();
 check('reef death sets the shell state to gameover (via facade)', game.state === 'gameover');
 check('the shell game-over screen reads the reef run summary', typeof reef.finalStats().score === 'number');
 
+// --- Rentals tick at run-end: an equipped rented relic drops a dive; lapse benches it. ---
+reef.meta.rentals = { sonar: 1 }; reef.meta.loadout = ['sonar'];
+game.state = 'playing';   // re-arm the _gameOver re-entrancy guard
+reef._gameOver();
+check('equipped rental lapsed at run-end (benched)', !reef.meta.loadout.includes('sonar') && !reef.meta.rentals.sonar);
+check('finalStats surfaces the lapsed rental', reef.finalStats().lapsedRentals.includes('sonar'));
+
 // --- Nested zone MiniGames are built + owned by the reef (reparented in P6). ---
 check('reef owns the whirlpool module', !!reef._whirl && reef._whirl.id === 'whirlpool');
 check('reef owns the stage module', !!reef._stage && reef._stage.id === 'stage');
