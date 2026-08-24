@@ -15,8 +15,8 @@ const noop = new Proxy({}, { get: () => () => {} });
 const host = {
   audio: noop, input: noop, particles: noop, viewport: { W: 900, H: 600 },
   world: { diver: {}, camX: 0, camY: 0, air: 100, airMax: 100, placeDiver() {} },
-  economy: { earn() {}, state: {} },
-  progression: { recordRun: () => ({ newBadges: [], freshTiers: [] }) },
+  economy: { earn() {}, state: { salvage: 0, loadout: [] } },
+  progression: { badges: {}, stats: {}, progress: {} },
   achievements: { unlock() {} },
 };
 const shell = { state: 'menu', controlScheme: 'keyboard', hi: 0, hiReef: 1, saveHi() {} };

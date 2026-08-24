@@ -217,7 +217,15 @@ export class Game {
     // the few shell-owned things it reads (state/controlScheme/hi). Not wired into
     // update/draw yet — Task 2 ports the dive loop in and flips delegation.
     this._reef = (world && services)
-      ? makeReef({ host: mgHost, shell: this._reefShell(), ctx: this.ctx, bg: this.bg })
+      ? makeReef({
+          host: {
+            world: this._world, economy: services.economy,
+            progression: services.progression, achievements: services.achievements,
+            audio: this.audio, input: this.input, particles: this.particles,
+            viewport: WORLD,
+          },
+          shell: this._reefShell(), ctx: this.ctx, bg: this.bg,
+        })
       : null;
   }
 
@@ -233,8 +241,56 @@ export class Game {
       get controlScheme() { return g.controlScheme; },
       get hi() { return g.hi; }, set hi(v) { g.hi = v; },
       get hiReef() { return g.hiReef; }, set hiReef(v) { g.hiReef = v; },
+      get pendingStartReef() { return g.pendingStartReef; }, set pendingStartReef(v) { g.pendingStartReef = v; },
+      get _touchBtns() { return g._touchBtns; },
       saveHi: () => { localStorage.setItem(HI_KEY, g.hi); localStorage.setItem(HI_REEF_KEY, g.hiReef); },
+      // Meta-screen input handlers (help/Trophy Wall/dry-dock) the reef routes to.
+      _updateHelp: (startEdge, cycleControls) => g._updateHelp(startEdge, cycleControls),
+      _updateBadges: (startEdge) => g._updateBadges(startEdge),
+      _updateDryDock: (dt, startEdge) => g._updateDryDock(dt, startEdge),
+      // Meta-screen open/close/nav + control schemes + touch chrome + renders.
+      _openHelp: (from) => g._openHelp(from),
+      _openBadges: (from) => g._openBadges(from),
+      _openDryDock: (from) => g._openDryDock(from),
+      _closeDryDock: () => g._closeDryDock(),
+      _dryDockAct: () => g._dryDockAct(),
+      _cycleScheme: () => g._cycleScheme(),
+      _setScheme: (s) => g._setScheme(s),
+      _cycleStartReef: () => g._cycleStartReef(),
+      _autoDetectScheme: () => g._autoDetectScheme(),
+      _syncTouchButtons: () => g._syncTouchButtons(),
+      _touchBtn: (b) => g._touchBtn(b),
+      _menu: () => g._menu(),
+      _helpScreen: () => g._helpScreen(),
+      _badgesScreen: () => g._badgesScreen(),
+      _dryDockScreen: () => g._dryDockScreen(),
+      _gameOverScreen: () => g._gameOverScreen(),
     };
+  }
+
+  // Meta-screen input handlers, invoked by the reef's state machine via the shell
+  // facade (the reef brackets the frame with input.poll/endFrame). These own the
+  // shell-side screen-state (helpPage/bdPage/ddSel/ddDeny) + HELP_PAGES.
+  _updateHelp(startEdge, cycleControls) {
+    const n = HELP_PAGES.length;
+    if (cycleControls) this._cycleScheme();
+    if (this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.consumeButton('helpnext') || this.input.consumeTapFire()) this.helpPage = (this.helpPage + 1) % n;
+    if (this.input.pressed('left') || this.input.pressed('weaponPrev') || this.input.consumeButton('helpprev')) this.helpPage = (this.helpPage - 1 + n) % n;
+    if (this.input.pressed('help') || this.input.pressed('pause') || startEdge || this.input.consumeButton('helpclose')) this._closeHelp();
+  }
+  _updateBadges(startEdge) {
+    if (this.input.pressed('left') || this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.pressed('weaponPrev') || this.input.consumeButton('badgespage')) {
+      this.bdPage = this.bdPage ? 0 : 1; this.audio.pickup(); return;
+    }
+    if (this.input.pressed('badges') || this.input.pressed('pause') || this.input.pressed('help') || startEdge || this.input.consumeTapFire() || this.input.consumeButton('badgesclose')) this._closeBadges();
+  }
+  _updateDryDock(dt, startEdge) {
+    if (startEdge) this._dryDockAct();
+    if (this.input.pressed('up')) this._dryDockMove(-1);
+    if (this.input.pressed('down')) this._dryDockMove(1);
+    const rows = this._dryDockRows();
+    for (let i = 0; i < rows.length; i++) if (this.input.consumeButton('dd' + i)) { this.ddSel = i; this._dryDockAct(); break; }
+    this.ddDeny = Math.max(0, this.ddDeny - dt);
   }
 
   // The reef-owned surface the Stage MiniGame still touches while the reef is the
@@ -1218,13 +1274,10 @@ export class Game {
   }
 
   // ---- input events (from main) ---------------------------------------
-  onAction() {
-    if (this.state === 'menu' || this.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(this.pendingStartReef); }
-    else if (this.state === 'paused') { this.state = 'playing'; this._fireGrace = 0.3; }
-    else if (this.state === 'playing') this.state = 'paused';
-    else if (this.state === 'shop') this._shopBuy();
-    else if (this.state === 'drydock') this._dryDockAct();
-  }
+  // Phase 6: the shell delegates the dive loop + state machine to the reef
+  // MiniGame. These three forwarders are what main.js + the Core drive each frame
+  // (main.js also reads this.state / this.camX, which stay shell-resolvable).
+  onAction() { this._reef.onAction(); }
 
   // In the sub the net is the ONLY weapon (its launcher is what the hull mounts);
   // everywhere else it's the selected weapon.
@@ -1374,403 +1427,7 @@ export class Game {
   }
 
   // ---- update ----------------------------------------------------------
-  update(dt) {
-    this.t += dt;
-    this.shake = Math.max(0, this.shake - dt * 30);
-    this.flash = Math.max(0, this.flash - dt * 3);
-    this.bankPulse = Math.max(0, this.bankPulse - dt * 2);
-    this.zoneFade = Math.max(0, this.zoneFade - dt * 1.2);
-    this.oneUpT = Math.max(0, this.oneUpT - dt);
-    this.puT = Math.max(0, this.puT - dt);
-    // Drain the flourish queue: load the next toast once the current one clears.
-    if (this.puT <= 0 && this.toastQueue && this.toastQueue.length) {
-      const t = this.toastQueue.shift(); this.puName = t.name; this.puCol = t.col; this.puT = t.dur;
-    }
-    this.reentryT = Math.max(0, (this.reentryT || 0) - dt);
-
-    this.input.poll();   // gamepad
-    this._autoDetectScheme();   // pad plugged in → pad prompts (until picked manually)
-    this._syncTouchButtons();   // on-screen buttons for touch play
-    // Gamepad confirm/start advances menus / resumes (fire handles it in-play).
-    const startEdge = this.input.consumeStart();
-    const cycleControls = this.input.pressed('controls') || this.input.consumeButton('controls');
-
-    // Help screen: page through, cycle the control legend, then close.
-    if (this.state === 'help') {
-      const n = HELP_PAGES.length;
-      if (cycleControls) this._cycleScheme();
-      if (this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.consumeButton('helpnext') || this.input.consumeTapFire()) this.helpPage = (this.helpPage + 1) % n;
-      if (this.input.pressed('left') || this.input.pressed('weaponPrev') || this.input.consumeButton('helpprev')) this.helpPage = (this.helpPage - 1 + n) % n;
-      if (this.input.pressed('help') || this.input.pressed('pause') || startEdge || this.input.consumeButton('helpclose')) this._closeHelp();
-      this.input.endFrame(); return;
-    }
-    // Open help from the menu, pause or game-over screens (H or the ? button).
-    if (this.state !== 'playing' && (this.input.pressed('help') || this.input.consumeButton('help'))) { this._openHelp(this.state); this.input.endFrame(); return; }
-
-    // Trophy Wall: a read-only overlay off the menu/game-over — any key closes it.
-    if (this.state === 'badges') {
-      if (this.input.pressed('left') || this.input.pressed('right') || this.input.pressed('weaponNext') || this.input.pressed('weaponPrev') || this.input.consumeButton('badgespage')) {
-        this.bdPage = this.bdPage ? 0 : 1; this.audio.pickup(); this.input.endFrame(); return;
-      }
-      if (this.input.pressed('badges') || this.input.pressed('pause') || this.input.pressed('help') || startEdge || this.input.consumeTapFire() || this.input.consumeButton('badgesclose')) this._closeBadges();
-      this.input.endFrame(); return;
-    }
-    if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('badges') || this.input.consumeButton('badges'))) { this._openBadges(this.state); this.input.endFrame(); return; }
-
-    // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
-    if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._openDryDock(this.state); this.input.endFrame(); return; }
-
-    // Change the on-screen control legend (C / a menu tap; ← → on the menus).
-    if (cycleControls) this._cycleScheme();
-    else if ((this.state === 'menu' || this.state === 'gameover') && (this.input.pressed('right') || this.input.consumeButton('schemeNext'))) this._cycleScheme();
-    else if ((this.state === 'menu' || this.state === 'gameover') && this.input.pressed('left')) this._setScheme(prevScheme(this.controlScheme));
-    // Reef-skip 'START AT' selector (↑ ↓ on the menus, or its tap target).
-    if ((this.state === 'menu' || this.state === 'gameover') &&
-        (this.input.pressed('up') || this.input.pressed('down') || this.input.consumeButton('skipNext'))) this._cycleStartReef();
-
-    if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this.state === 'shop') this._closeShop(); else if (this.state === 'drydock') this._closeDryDock(); else this.onAction(); }
-    if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
-
-    // Shop: a frozen overlay while docked — navigate, buy, then close.
-    if (this.state === 'shop') {
-      if (startEdge) this._shopBuy();
-      if (this.input.pressed('up')) this._shopMove(-1);
-      if (this.input.pressed('down')) this._shopMove(1);
-      const items = this._shopItems();
-      for (let i = 0; i < items.length; i++) if (this.input.consumeButton('shop' + i)) { this.shopSel = i; this._shopBuy(); break; }
-      this.shopDeny = Math.max(0, this.shopDeny - dt);
-      this.input.endFrame(); return;
-    }
-    // Dry Dock: a frozen overlay off the menu/game-over — navigate, buy/equip, close.
-    if (this.state === 'drydock') {
-      if (startEdge) this._dryDockAct();
-      if (this.input.pressed('up')) this._dryDockMove(-1);
-      if (this.input.pressed('down')) this._dryDockMove(1);
-      const rows = this._dryDockRows();
-      for (let i = 0; i < rows.length; i++) if (this.input.consumeButton('dd' + i)) { this.ddSel = i; this._dryDockAct(); break; }
-      this.ddDeny = Math.max(0, this.ddDeny - dt);
-      this.input.endFrame(); return;
-    }
-    if (startEdge && this.state !== 'playing') { this.audio.ensure(); this.audio.resume(); this.onAction(); }
-
-    // Sailing to a new reef: brief transition, then a fresh cave.
-    if (this.state === 'sailing') {
-      this.sailT += dt;
-      if (this.sailT > 1.8) this._newReef();
-      this.input.endFrame(); return;
-    }
-    if (this.state !== 'playing') { this.input.endFrame(); return; }
-    this.runTime += dt;   // lifetime dive-time accrues only while actually diving
-    if (this.zone === 'stage') { this._stage.update(dt); this.input.endFrame(); return; }
-    if (this.zone === 'whirlpool') { this._whirl.update(dt); this.input.endFrame(); return; }
-    // Switch weapons (keyboard Q/E or [ ], gamepad Y/LB, touch weapon button).
-    if (this.input.pressed('weaponNext') || this.input.consumeButton('weapon')) this._cycleWeapon(1);
-    if (this.input.pressed('weaponPrev')) this._cycleWeapon(-1);
-    this.weaponSwapT = Math.max(0, this.weaponSwapT - dt);
-    // Ease the weapon carousel toward the selected slot (the slide animation).
-    this._carouselPos = (this._carouselPos ?? this.weaponIdx) + (this.weaponIdx - (this._carouselPos ?? this.weaponIdx)) * Math.min(1, dt * 12);
-    // Light a flare (illuminates dark caves).
-    if ((this.input.pressed('flare') || this.input.consumeButton('flare')) && this.flares > 0 && this.flareT <= 0.2) {
-      this.flares -= 1; this.flareT = FLARE.duration; this.audio.pickup(); this.particles.sparkle(this.diver.x, this.diver.y, '#ff7a3c', 24);
-    }
-    this.flareT = Math.max(0, this.flareT - dt);
-    // Toggle the torch (a sustained, battery-powered dark-cave light). It shares
-    // the shock-rod battery, so it's light-now vs. zaps-later.
-    if (this.hasTorch && (this.input.pressed('torch') || this.input.consumeButton('torch'))) {
-      if (!this.torchOn && this.shockBattery <= 0) { this.audio.gasp(); }   // can't light a dead battery
-      else { this.torchOn = !this.torchOn; this.audio.select(); }
-    }
-    // Brief grace after entering play (from a menu/shop) so the fire button
-    // that started the game / closed the shop doesn't waste a shot.
-    this._fireGrace = Math.max(0, (this._fireGrace || 0) - dt);
-    const graced = this._fireGrace > 0;
-    // Touch tap-to-fire (a tap anywhere) shoots once. Keyboard/mouse/gamepad
-    // firing is resolved from the held state below (tap = release; hold = aim).
-    // A charge detonates only on a *fresh* trigger: drop the lock the moment the
-    // fire control is no longer held (covers both touch taps and key/mouse holds).
-    if (!this.input.fireHeld()) this._chargeLock = false;
-    // The steering finger is now steer-only: a brief steer touch used to read as
-    // a "tap fire" and loose off accidental harpoons. Consume the tap so it
-    // can't leak into another state, but DON'T fire — firing on touch is the
-    // 🎯/FIRE button (tap = shot, hold = aim) and the second finger. (No effect
-    // on keyboard/mouse/gamepad, which never set the tap-fire flag.)
-    this.input.consumeTapFire();
-    this.fireCd = Math.max(0, this.fireCd - dt);
-    // Speargun burst: fire the queued shots out over a few frames.
-    if (this.burst > 0) {
-      this.burstT -= dt;
-      if (this.burstT <= 0) {
-        const j = (SPEARGUN.shots - this.burst) - (SPEARGUN.shots - 1) / 2;
-        this._spear(j * SPEARGUN.spread);
-        this.speargunAmmo = Math.max(0, this.speargunAmmo - 1);   // one spear per shot
-        this.burst -= 1; this.burstT = SPEARGUN.interval;
-      }
-    }
-    this.multiFireT = Math.max(0, this.multiFireT - dt);
-    this.shieldT = Math.max(0, this.shieldT - dt);
-    this.speedT = Math.max(0, this.speedT - dt);
-    this.magnetT = Math.max(0, this.magnetT - dt);
-    for (const id in this.buffT) this.buffT[id] = Math.max(0, this.buffT[id] - dt);   // consumable buffs count down (spent on death via start())
-    if (this.zone === 'abyss') this._updateExtraction(dt);   // The Deep's escape countdown
-    this.shockT = Math.max(0, this.shockT - dt);
-    this._ammoFlash = Math.max(0, (this._ammoFlash || 0) - dt);   // out-of-ammo indicator blink
-    // Ominous heartbeat when air runs low (< 25%): the interval tightens the
-    // lower it gets, so the pulse quickens as you approach suffocation.
-    const airFrac = this.air / this.airMax;
-    if (airFrac < 0.25 && airFrac > 0) {
-      this._heartT = (this._heartT || 0) - dt;
-      if (this._heartT <= 0) { this.audio.heartbeat(); this._heartT = 0.55 + airFrac * 3.0; }   // ~1.3s at 25% → ~0.55s near empty
-    } else {
-      this._heartT = 0;
-    }
-    if (this.torchOn) {
-      // Torch burns the shared battery; it cuts out (and stays off) when flat.
-      this.shockBattery = Math.max(0, this.shockBattery - TORCH.drain * dt);
-      if (this.shockBattery <= 0) { this.torchOn = false; this.audio.gasp(); }
-    } else {
-      this.shockBattery = Math.min(SHOCK.batteryMax, this.shockBattery + SHOCK.recharge * dt);   // slow recharge
-    }
-    if (this.shieldT > 0) this.diver.invuln = Math.max(this.diver.invuln, 0.1);   // shield = invulnerable
-
-    // Hold to AIM, RELEASE to fire: while held (past a brief pre-hold) the diver
-    // roots and the reticle swings toward the nearest threat at the aim rate
-    // (slow at L1, faster with Targeting upgrades). Letting go fires ONE shot
-    // along the current reticle — a locked shot if you held long enough for the
-    // swing to land, a miss if you released early. Aim speed and fire rate are
-    // independent (see AIM in config).
-    const holding = graced ? false : this.input.fireHeld();
-    const released = !holding && this._prevHolding;
-    if (holding) this.fireHeldT += dt; else this.fireHeldT = 0;
-    let intent = this.input.vector();
-    const engaged = holding && this.fireHeldT >= AIM.threshold;   // past the brief pre-hold
-    const threat = this._acquireAimTarget(engaged);
-    this.aiming = !!threat; this.aimTarget = threat;
-    if (this.aiming) { intent = { x: 0, y: 0 }; this.diver.vx *= 0.55; this.diver.vy *= 0.55; }   // hold position while aiming
-
-    const finsMult = this.buffT.fins > 0 ? CONSUMABLE_BY_ID.fins.swimMult : 1;   // Turbo Fins consumable
-    this.diver.update(dt, intent, (x, y) => this.particles.bubble(x, y), (this.speedT > 0 ? POWERUP.speedMult : 1) * this._relicSwimMult * finsMult, this.inSub ? SUB : DIVER);
-
-    if (this.aiming) {
-      // Swing the reticle onto the target — but do NOT fire here; release fires.
-      const ta = Math.atan2(threat.y - this.diver.y, threat.x - this.diver.x);
-      const rate = AIM.aimRateBase + AIM.aimRatePerLevel * (this.aimLevel - AIM.unlockLevel);
-      this.aimAngle = this._angleToward(this.aimAngle, ta, rate * dt);
-      this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
-      // Once the reticle swings within lock tolerance, COMMIT to this target: a
-      // release now fires STRAIGHT AT IT (independent of any residual swing lag).
-      if (Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol) this._aimLock = threat;
-    } else if (!(released && this._prevAiming)) {
-      // Sync the reticle to facing — except on the frame we release out of an aim.
-      this.aimAngle = Math.atan2(this.diver.aimY, this.diver.aimX);
-    }
-    // Release fires ONE shot. If a target was LOCKED during the hold, snap the
-    // shot straight at it — the fix for 'release fires straight, not at the
-    // target'. Otherwise (quick tap, or released before lock) fire along the
-    // reticle/facing. `!graced` swallows the zone/game-entry press.
-    if (released && !graced) {
-      const tgt = this._aimLock;
-      if (tgt && !tgt.dead) {
-        const a = Math.atan2(tgt.y - this.diver.y, tgt.x - this.diver.x);
-        this.diver.aimX = Math.cos(a); this.diver.aimY = Math.sin(a);
-      } else {
-        this.diver.aimX = Math.cos(this.aimAngle); this.diver.aimY = Math.sin(this.aimAngle);
-      }
-      this.fire();
-    }
-    if (!holding) this._aimLock = null;   // clear the lock for the next hold
-    this._prevAiming = this.aiming;
-    this._prevHolding = holding;
-    for (const cur of this.currents) cur.apply(this.diver, dt);   // swept by the flow
-    this.cave.collide(this.diver);
-    this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
-
-    // 2D camera follows the diver, clamped to the world.
-    const tx = Math.max(0, Math.min(WW - W, this.diver.x - W / 2));
-    const ty = Math.max(0, Math.min(WH - H, this.diver.y - H / 2));
-    this.camX += (tx - this.camX) * Math.min(1, dt * 6);
-    this.camY += (ty - this.camY) * Math.min(1, dt * 6);
-    this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
-    this.audio.setDepth(Math.min(1, this.camY / WH));
-
-    // Air economy: bank + refill at the boat or a dive bell (reef only); vents
-    // in the deep. Bells are mid-depth safe havens — bank & refuel, but you
-    // still surface to the boat to sail on.
-    const atBoat = this.zone === 'reef' && this.boat.contains(this.diver);
-    let atBell = null;
-    for (const b of this.bells) { b.update(dt); if (!atBell && b.contains(this.diver)) atBell = b; }
-    this.atBell = atBell;
-    const atStation = atBoat || atBell;
-    let inVent = false;
-    for (const v of this.vents) { v.update(dt, this.t, (x, y, r) => this.particles.bubble(x, y, { r })); if (!inVent && v.collects(this.diver, this.t)) inVent = true; }
-
-    if (atStation) {
-      const rate = atBell ? BELL.refillPerSec : AIR.refillPerSec;
-      if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + rate * dt); if (Math.random() < 0.3) this.audio.refill(); }
-      // The boat is home — it auto-banks the haul at full value. A dive bell only
-      // banks on demand (below), at a depth-scaled discount, so you can top up air
-      // there and still carry a rich haul up to the boat for full value.
-      if (atBoat && (this.carried > 0 || this.carriedPearls > 0)) this._bankLoot();
-      // Pressure Plating recharges once you're back home at the boat.
-      if (atBoat && this._relicPlating) this._platingReady = true;
-      // Hold ↑ into the boat to sail on — once you've banked the relic or the goal.
-      if (atBoat && this.carried === 0 && this.canSail && intent.y < -0.3) { this.dockHold += dt; if (this.dockHold > 1.0) this._setSail(); }
-      else this.dockHold = 0;
-      // Touch players tap the on-screen SAIL ON button instead of holding ↑.
-      if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
-    } else {
-      this.dockHold = 0;
-      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty
-      // (negated while piloting the mini-sub).
-      const oxyMult = oxygenMultiplier(this.reef, this.zone, this.inSub);
-      // Sealed Wetsuit consumable eases air drain; a lapsed extraction countdown
-      // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
-      const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
-      const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
-      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
-      if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
-      if (this.air <= 0) { this.air = 0; this._loseLife(); }
-      else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
-    }
-    // Open the shop while docked. The boat auto-banked, so it opens empty-handed;
-    // a dive bell opens with loot too — banking there (at its depth discount) is a
-    // choice offered inside the shop, so you can bank deep or carry up to the boat.
-    if (atStation && (this.input.pressed('shop') || this.input.consumeButton('shop'))) {
-      if (atBell) this._openShop('bell');
-      else if (atBoat && this.carried === 0) this._openShop('boat');
-    }
-
-    // Entities.
-    const emitBig = (x, y) => this.bigBubbles.push(new BigBubble(x, y));
-    for (const s of this.shells) s.update(dt, this.t, emitBig);
-    for (const b of this.bigBubbles) b.update(dt, this.cave);
-    for (const tr of this.treasures) tr.update(dt, this.t);
-    const lit = this.flareT > 0 || (this.torchOn && this.shockBattery > 0);
-    for (const cr of this.creatures) {
-      if (cr.snareT > 0) { cr.snareT -= dt; if (cr.vx !== undefined) { cr.x += cr.vx * dt; cr.y += cr.vy * dt; cr.vx *= 0.9; cr.vy *= 0.9; } this.cave.collide(cr); continue; }  // netted/stunned: held in place
-      cr.update(dt, this.t, this.diver, lit);
-      if (this.cave.collide(cr) && cr.dir !== undefined) cr.dir = cr._nx > 0 ? -1 : 1; // turn off walls
-    }
-    for (const h of this.harpoons) h.update(dt, this.cave);
-    for (const n of this.nets) n.update(dt, this.cave);
-    for (const ch of this.charges) { ch.update(dt, this.cave); if (ch.exploded) this._explode(ch); }
-    if (this.armedCharge && this.armedCharge.dead) this.armedCharge = null;
-    for (const ex of this.explosions) { ex.t += dt; ex.r += (ex.maxR - ex.r) * Math.min(1, dt * 12); }
-    this.explosions = this.explosions.filter((e) => e.t < 0.4);
-    for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
-    for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
-    for (const cr of this.crates) { cr.update(dt, this.t); if (this.zone === 'reef' && cr.reached(this.diver)) { cr.taken = true; this._openCrate(); } }
-    // Relic objective — pick it up, carry it back to the boat to bank it.
-    if (this.relic && !this.relic.taken) {
-      this.relic.update(dt, this.t);
-      if (this.zone === 'reef' && this.relic.reached(this.diver)) {
-        this.relic.taken = true; this.carryingRelic = true; this.carried += RELIC.value;
-        // Bank a one-use reef-skip token the instant it's found (persist now, so
-        // it's kept even if the run ends before sailing on).
-        bankReefRelic(this.meta, this.reef); saveSalvage(this.meta);
-        this.particles.sparkle(this.relic.x, this.relic.y, PAL.key, 30); this.audio.gem();
-      }
-    }
-    // Treasure magnet: pull nearby loot toward the diver. The powerup is a
-    // strong timed burst; the Magnet Core relic is a permanent, gentler pull
-    // that stays on even with no powerup active.
-    if (this.magnetT > 0 || this._relicMagnet || this.buffT.lantern > 0) {
-      const dv = this.diver, powered = this.magnetT > 0;
-      const R = powered ? POWERUP.magnetRadius : POWERUP.magnetRadius * 0.5;
-      const maxPull = powered ? POWERUP.magnetPull : POWERUP.magnetPull * 0.5;
-      for (const tr of this.treasures) {
-        if (tr.locked && !this.hasKey) continue;
-        const dx = dv.x - tr.x, dy = dv.y - tr.baseY, dist = Math.hypot(dx, dy);
-        if (dist > 1 && dist < R) {
-          const speed = 130 + (maxPull - 130) * (1 - dist / R);
-          const step = Math.min(dist, speed * dt);
-          tr.x += (dx / dist) * step; tr.baseY += (dy / dist) * step;
-        }
-      }
-      // The magnet also reaches into OPEN CHESTS within range and pulls their
-      // loot to you — but NOT clams: their pearls you still earn by swimming in.
-      for (const s of this.shells) {
-        if (s instanceof Clam) continue;
-        if (!s.hasLoot || s.open <= SHELL.openGrab) continue;
-        if (Math.hypot(dv.x - s.x, dv.y - s.y) < R) {
-          this.carried += s.takeLoot();
-          this.particles.sparkle(s.x, s.y, s.lootColor, 20);
-          this.audio.pearl();
-        }
-      }
-    }
-
-    // Zone transitions & puzzles.
-    const d = this.diver;
-    if (this.zone === 'reef') {
-      // reentryT: brief grace after returning so we don't instantly re-enter the
-      // special zone we just left (the diver is dropped back near its entrance).
-      for (const w of this.whales) { w.update(dt, this.t); if (this.reentryT <= 0 && w.swallowReady(d)) { this._enterWhale(w); this.input.endFrame(); return; } }
-      if (this.reentryT <= 0 && this.templeGate && Math.hypot(d.x - this.templeGate.x, d.y - this.templeGate.y) < this.templeGate.r + d.radius) { this._enterTemple(this.templeGate); this.input.endFrame(); return; }
-      for (const e of this.stageEntrances) { if (this.reentryT <= 0 && e.contains(d)) { this._stage.enter(e); this.input.endFrame(); return; } }
-      if (this.reentryT <= 0 && this.abyssEntrance &&
-          Math.hypot(d.x - this.abyssEntrance.x, d.y - this.abyssEntrance.y) < this.abyssEntrance.r + d.radius) {
-        this._enterAbyss(this.abyssEntrance); this.input.endFrame(); return;   // board the sub (free)
-      }
-      if (this.reentryT <= 0 && this.whirlEntrance && Math.hypot(d.x - this.whirlEntrance.x, d.y - this.whirlEntrance.y) < this.whirlEntrance.r + d.radius) {
-        this._whirl.enter(this.whirlEntrance); this.input.endFrame(); return;
-      }
-    } else if (this.zone === 'belly' && this.whaleExit) {
-      const e = this.whaleExit;
-      if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
-    } else if (this.zone === 'abyss') {
-      for (const e of this.abyssExits) {
-        if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) {
-          let bonus = e.bonus || 0, msg = `SURFACED · +${bonus}⚙`;
-          // Beat the extraction countdown → a time-scaled Salvage bonus on top.
-          if (this.extractActive && !this.extractLapsed) {
-            const eb = Math.round(ABYSS.extractBonusBase * (this.extractT / ABYSS.extractSecs));
-            if (eb > 0) { bonus += eb; msg = `EXTRACTED! · +${bonus}⚙  (⏱ +${eb})`; }
-          }
-          if (bonus) { this.meta.salvage += bonus; saveSalvage(this.meta); this.puName = msg; this.puCol = PAL.gateGlow; this.puT = 2.4; }
-          this._exitAbyss(); this.input.endFrame(); return;
-        }
-      }
-    } else if (this.zone === 'temple') {
-      // Key: grab it to unlock the door and the vault.
-      if (this.key && !this.key.taken && Math.hypot(d.x - this.key.x, d.y - this.key.y) < this.key.r + d.radius) {
-        this.key.taken = true; this.hasKey = true;
-        // Wake the temple's stone guardians — Sentinels start passive, only
-        // guarding within their territory, until the key is disturbed.
-        for (const cr of this.creatures) if (cr.awake === false) cr.awake = true;
-        this.particles.sparkle(this.key.x, this.key.y, PAL.key, 22); this.audio.pearl();
-      }
-      // Door: opens once you have the key; blocks the passage until then.
-      if (this.door) {
-        if (this.hasKey) this.door.open = Math.min(1, this.door.open + dt * 1.4);
-        if (this.door.open < 0.5) this._blockDoor(d);
-      }
-      const e = this.templeExit;
-      if (e && Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitTemple(); this.input.endFrame(); return; }
-    }
-
-    this._collisions();
-
-    this.treasures = this.treasures.filter((tr) => !tr.taken);
-    for (const cr of this.creatures) if (cr.dead) {   // run kill tally (for badges)
-      this.kills++;
-      if (cr.constructor && cr.constructor.name === 'Shark') this.runSharkKills++;
-    }
-    this.creatures = this.creatures.filter((cr) => !cr.dead);
-    this.harpoons = this.harpoons.filter((h) => !h.dead);
-    this.nets = this.nets.filter((n) => !n.dead);
-    this.charges = this.charges.filter((c) => !c.dead);
-    this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
-    this.krakens = this.krakens.filter((k) => !k.dead);
-    this.powerups = this.powerups.filter((p) => !p.taken);
-    this.crates = this.crates.filter((c) => !c.taken);
-
-    // Extra lives at escalating score thresholds, capped so they can't snowball.
-    while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
-
-    if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.carriedPearls === 0 && this.diver.atSurface) this._win();
-
-    this.input.endFrame();
-  }
+  update(dt) { this._reef.update(dt); }
 
   _collisions() {
     const d = this.diver;
@@ -2201,212 +1858,7 @@ export class Game {
   }
 
   // ---- render ----------------------------------------------------------
-  draw() {
-    if (this.state === 'sailing') { this._sailScreen(); return; }
-    if (this.zone === 'stage') { this._stage.render(this.ctx); return; }
-    if (this.zone === 'whirlpool') { this._whirl.render(this.ctx); return; }
-    const ctx = this.ctx;
-    ctx.save();
-    if (this.shake > 0.2) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
-
-    const cx = this.camX, cy = this.camY;
-    const depthT = Math.min(1, cy / WH);
-    // Distant shoals + sunken-wreck silhouettes only in the open-ocean reef;
-    // enclosed zones (belly/temple/abyss) draw their own backdrops over this.
-    this.bg.draw(ctx, cx, cy, this.t, depthT, { reef: this.zone === 'reef' });
-    // Faint theme tint so each reef has its own mood.
-    if (this.zone === 'reef' && this.state !== 'menu' && this.reefTheme) {
-      const [tr, tg, tb] = this.reefTheme.tint;
-      ctx.fillStyle = `rgba(${tr},${tg},${tb},0.06)`; ctx.fillRect(0, 0, W, H);
-    }
-    this.boat.draw(ctx, cx, cy, this.t);
-
-    if (this.state !== 'menu' && this.cave) {
-      for (const cur of this.currents) cur.draw(ctx, cx, cy, this.t);
-      if (this.flora) this.flora.draw(ctx, cx, cy, this.t);
-      for (const col of this.columns) { ctx.save(); ctx.translate(col.x - cx, col.y - cy); drawColumn(ctx, this.t); ctx.restore(); }
-      for (const r of this.ribs) { ctx.save(); ctx.translate(r.x - cx, r.y - cy); drawRib(ctx, this.t, r.dir); ctx.restore(); }
-      for (const s of this.skeletons) { ctx.save(); ctx.translate(s.x - cx, s.y - cy); drawWhaleSkeleton(ctx, this.t); ctx.restore(); }
-      for (const w of this.wrecks) w.draw(ctx, cx, cy, this.t);
-      for (const tr of this.treasures) tr.draw(ctx, cx, cy, this.t);
-      for (const pu of this.powerups) pu.draw(ctx, cx, cy, this.t);
-      for (const cr of this.crates) if (!cr.taken) cr.draw(ctx, cx, cy, this.t);
-      for (const s of this.shells) s.draw(ctx, cx, cy, this.t);
-      for (const cr of this.creatures) cr.draw(ctx, cx, cy, this.t);
-      // Snared (netted/stunned) creatures wear a shimmering mesh so you can tell
-      // they're safe to pass.
-      for (const cr of this.creatures) {
-        if (cr.snareT > 0) {
-          const scx = cr.x - cx, scy = cr.y - cy, rr = (cr.radius || 16) + 4;
-          ctx.save();
-          ctx.globalAlpha = 0.5 + 0.2 * Math.sin(this.t * 10);
-          ctx.strokeStyle = '#dbe9f2'; ctx.lineWidth = 1.2;
-          ctx.beginPath(); ctx.arc(scx, scy, rr, 0, Math.PI * 2); ctx.stroke();
-          for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3 + this.t; ctx.beginPath(); ctx.moveTo(scx + Math.cos(a) * rr, scy + Math.sin(a) * rr); ctx.lineTo(scx - Math.cos(a) * rr, scy - Math.sin(a) * rr); ctx.stroke(); }
-          ctx.restore();
-        }
-      }
-      if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
-      for (const w of this.whales) w.draw(ctx, cx, cy, this.t);
-      for (const k of this.krakens) k.draw(ctx, cx, cy, this.t);
-      for (const b of this.bells) b.draw(ctx, cx, cy, this.t);
-      for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
-      if (this.whaleExit) { ctx.save(); ctx.translate(this.whaleExit.x - cx, this.whaleExit.y - cy); drawThroat(ctx, this.t, this.whaleExit.r); ctx.restore(); }
-      // Temple gate (reef) / door, key & exit (temple).
-      if (this.templeGate) { ctx.save(); ctx.translate(this.templeGate.x - cx, this.templeGate.y - cy); drawTempleGate(ctx, this.t, this.templeGate.r); ctx.restore(); }
-      for (const e of this.stageEntrances) e.draw(ctx, cx, cy, this.t);
-      if (this.abyssEntrance) {
-        // The entrance IS a submarine resting on the deep floor — swim up to it to
-        // board and pilot it down into The Deep. Bobs gently; a soft glow marks it.
-        const sx = this.abyssEntrance.x - cx, sy = this.abyssEntrance.y - cy + Math.sin(this.t * 2) * 3;
-        ctx.save();
-        const gl = ctx.createRadialGradient(sx, sy, 6, sx, sy, 64);
-        gl.addColorStop(0, 'rgba(120,225,255,0.22)'); gl.addColorStop(1, 'rgba(120,225,255,0)');
-        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(sx, sy, 64, 0, Math.PI * 2); ctx.fill();
-        ctx.translate(sx, sy); ctx.scale(2.1, 2.1); drawSub(ctx, 0, 0, 1); ctx.restore();
-      }
-      if (this.whirlEntrance) { ctx.save(); ctx.translate(this.whirlEntrance.x - cx, this.whirlEntrance.y - cy); drawWhirlMaw(ctx, this.t, this.whirlEntrance.r); ctx.restore(); }
-      if (this.door) { ctx.save(); ctx.translate(this.door.x + this.door.w / 2 - cx, this.door.y + this.door.h / 2 - cy); drawDoor(ctx, this.door.open, this.door.w, this.door.h); ctx.restore(); }
-      if (this.key && !this.key.taken) { ctx.save(); ctx.translate(this.key.x - cx, this.key.y - cy); drawKey(ctx, this.t); ctx.restore(); }
-      if (this.templeExit) { ctx.save(); ctx.translate(this.templeExit.x - cx, this.templeExit.y - cy); drawTempleGate(ctx, this.t, this.templeExit.r); ctx.restore(); }
-      for (const e of this.abyssExits) { ctx.save(); ctx.translate(e.x - cx, e.y - cy); drawAbyssMaw(ctx, this.t, e.r); ctx.restore(); }
-      if (this.relic && !this.relic.taken) this.relic.draw(ctx, cx, cy, this.t);
-      for (const b of this.bigBubbles) b.draw(ctx, cx, cy);
-      for (const h of this.harpoons) h.draw(ctx, cx, cy);
-      for (const n of this.nets) n.draw(ctx, cx, cy);
-      for (const ch of this.charges) ch.draw(ctx, cx, cy);
-      for (const ex of this.explosions) {
-        const a = Math.max(0, 1 - ex.t / 0.4);
-        ctx.save();
-        ctx.globalAlpha = a * 0.5; ctx.fillStyle = PAL.puffer;
-        ctx.beginPath(); ctx.arc(ex.x - cx, ex.y - cy, ex.r, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = a; ctx.strokeStyle = '#ffe9a6'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(ex.x - cx, ex.y - cy, ex.r, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-      }
-      // Depth darkening — the deep swallows the light (drawn under the diver).
-      if (this.zone === 'belly') {
-        const beat = 0.30 + 0.10 * Math.sin(this.t * 2.2) + 0.04 * Math.sin(this.t * 4.4);
-        ctx.fillStyle = `rgba(60,10,18,${beat})`; ctx.fillRect(0, 0, W, H);       // warm, pulsing "inside a body"
-      } else if (depthT > 0.02) {
-        ctx.fillStyle = `rgba(2,7,15,${0.5 * depthT})`; ctx.fillRect(0, 0, W, H);
-      }
-    }
-
-    this.particles.draw(ctx, cx, cy);
-    // In the sub, the diver rides INSIDE the vessel: draw the sub (pilot shows
-    // through its porthole) and skip the free-swimming diver sprite entirely.
-    if (this.state !== 'menu' && this.inSub) drawSub(ctx, this.diver.x - cx, this.diver.y - cy, this.diver.facing);
-    else if (this.state !== 'menu') this.diver.draw(ctx, cx, cy, this.aiming, this.aimAngle);
-    if (this.zone === 'abyss') this._subLighting(ctx, cx, cy);   // dark trench + headlights
-    // Shield bubble (blinks as it runs out).
-    if (this.shieldT > 0 && this.state !== 'menu') {
-      const a = this.shieldT < 1.5 && Math.floor(this.shieldT * 8) % 2 ? 0.15 : 0.42;
-      const sx = this.diver.x - cx, sy = this.diver.y - cy;
-      ctx.save();
-      ctx.strokeStyle = `rgba(143,230,255,${a})`; ctx.lineWidth = 3;
-      ctx.fillStyle = `rgba(143,230,255,${a * 0.22})`;
-      ctx.beginPath(); ctx.arc(sx, sy, this.diver.radius + 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.restore();
-    }
-    // Shock rod: jagged lightning bolts arcing diver → target → target.
-    if (this.shockT > 0 && this.shockBolts && this.shockBolts.length && this.state !== 'menu') {
-      ctx.save();
-      ctx.globalAlpha = Math.min(1, this.shockT / 0.22);
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      for (const b of this.shockBolts) {
-        const x1 = b.x1 - cx, y1 = b.y1 - cy, x2 = b.x2 - cx, y2 = b.y2 - cy;
-        const segs = 6, nx = -(y2 - y1), ny = (x2 - x1), nl = Math.hypot(nx, ny) || 1;
-        const path = (jitter, w, col) => {
-          ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1);
-          for (let i = 1; i < segs; i++) {
-            const tt = i / segs;
-            const off = (Math.sin(i * 12.9 + this.t * 60) * jitter);
-            ctx.lineTo(x1 + (x2 - x1) * tt + (nx / nl) * off, y1 + (y2 - y1) * tt + (ny / nl) * off);
-          }
-          ctx.lineTo(x2, y2); ctx.stroke();
-        };
-        path(9, 5, 'rgba(143,230,255,0.35)');   // glow
-        path(9, 2, '#eaffff');                  // core
-      }
-      ctx.restore();
-    }
-    // Hold-to-aim: guide line + a reticle locking onto the target.
-    if (this.aiming && this.aimTarget && this.state === 'playing') {
-      const dx = this.diver.x - cx, dy = this.diver.y - cy;
-      const tx = this.aimTarget.x - cx, ty = this.aimTarget.y - cy;
-      const ta = Math.atan2(this.aimTarget.y - this.diver.y, this.aimTarget.x - this.diver.x);
-      const locked = Math.abs(this._angleDiff(this.aimAngle, ta)) < AIM.lockTol;
-      ctx.save();
-      ctx.strokeStyle = locked ? PAL.danger : 'rgba(230,245,255,0.55)'; ctx.lineWidth = locked ? 2 : 1.4;
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + Math.cos(this.aimAngle) * 300, dy + Math.sin(this.aimAngle) * 300); ctx.stroke();
-      ctx.setLineDash([]);
-      const rr = (this.aimTarget.radius || 20) + 8;
-      ctx.strokeStyle = locked ? PAL.danger : PAL.gateGlow; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(tx, ty, rr, 0, Math.PI * 2); ctx.stroke();
-      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * rr, ty + Math.sin(a) * rr); ctx.lineTo(tx + Math.cos(a) * (rr + 6), ty + Math.sin(a) * (rr + 6)); ctx.stroke(); }
-      ctx.restore();
-    }
-
-    // Dark caves: black out the scene except a small radius around the diver;
-    // a lit flare widens and warms that pool of light.
-    if (this.state !== 'menu' && this.darkZones && this.darkZones.length) {
-      let darkness = 0;
-      for (const z of this.darkZones) {
-        const dist = Math.hypot(this.diver.x - z.x, this.diver.y - z.y);
-        if (dist < z.r) darkness = Math.max(darkness, Math.min(1, (z.r - dist) / 150));
-      }
-      if (darkness > 0.01) {
-        const dsx = this.diver.x - cx, dsy = this.diver.y - cy;
-        const lit = this.flareT > 0;
-        const torchLit = this.torchOn && this.shockBattery > 0;   // flare wins if both are up
-        const vr = lit ? FLARE.litRadius : (torchLit ? TORCH.litRadius : FLARE.diverRadius);
-        if (lit) {   // warm flare glow
-          const wf = Math.min(1, this.flareT) * 0.3;
-          const g2 = ctx.createRadialGradient(dsx, dsy, 8, dsx, dsy, vr);
-          g2.addColorStop(0, `rgba(255,180,90,${wf})`); g2.addColorStop(1, 'rgba(255,120,40,0)');
-          ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
-        } else if (torchLit) {   // cool, steady torch beam
-          const g2 = ctx.createRadialGradient(dsx, dsy, 8, dsx, dsy, vr);
-          g2.addColorStop(0, 'rgba(190,225,255,0.20)'); g2.addColorStop(1, 'rgba(120,180,255,0)');
-          ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
-        }
-        const darkA = darkness * ((lit || torchLit) ? DARKZONE.litAlpha : DARKZONE.unlitAlpha);
-        const grd = ctx.createRadialGradient(dsx, dsy, vr, dsx, dsy, vr + DARKZONE.falloff);
-        grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, `rgba(2,4,8,${darkA})`);
-        ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-      }
-    }
-
-    // Vignette — subtle at the surface, closing in with depth.
-    if (this.state !== 'menu') {
-      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.34, W / 2, H / 2, H * 0.78);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${0.22 + 0.34 * depthT})`);
-      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
-    }
-
-    if (this.flash > 0.01) {
-      ctx.fillStyle = `rgba(255,40,40,${0.35 * this.flash})`;
-      ctx.fillRect(0, 0, W, H);
-    }
-    // Zone-change wash (swallowed / escaped).
-    if (this.zoneFade > 0.01) {
-      ctx.fillStyle = this.zone === 'belly' ? `rgba(40,6,12,${this.zoneFade})` : `rgba(120,180,220,${0.7 * this.zoneFade})`;
-      ctx.fillRect(0, 0, W, H);
-    }
-    ctx.restore();
-
-    if (this.state === 'playing' || this.state === 'paused') this._hud();
-    if ((this.state === 'playing' || this.state === 'paused') && this.weaponSwapT > 0) this._weaponCarousel();
-    if (this.state === 'menu') this._menu();
-    if (this.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
-    if (this.state === 'shop') this._shopScreen();
-    if (this.state === 'drydock') this._dryDockScreen();
-    if (this.state === 'help') this._helpScreen();
-    if (this.state === 'badges') this._badgesScreen();
-    if (this.state === 'gameover') this._gameOverScreen();
-  }
+  draw() { this._reef.render(this.ctx); }
 
   // Transition screen while the boat carries the diver to a new reef.
   _sailScreen() {
