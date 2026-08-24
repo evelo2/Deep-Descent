@@ -35,6 +35,8 @@
  * @property {*} progression   Badges/ranks/stats (real in Phase 2).
  * @property {*} achievements  Achievement/Steam bridge (real in Phase 2).
  * @property {*} [world]       DiverWorld engine — present only when opted in.
+ * @property {(id: string) => void} open   Push+activate a registered MiniGame by id.
+ * @property {(result?: MiniGameResult) => void} close  Exit+pop the active MiniGame, resume the one beneath.
  */
 
 /**
