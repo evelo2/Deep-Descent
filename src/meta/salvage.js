@@ -3,12 +3,14 @@
 // Node-testable without a DOM: pass a fake `store` (getItem/setItem) in tests;
 // in the browser it defaults to `localStorage`.
 
-import { SALVAGE, SKIP } from '../config.js';
+import { SALVAGE, SKIP, RENTAL } from '../config.js';
+import { getRelic } from './relics.js';
 
-const KEY = 'deepdescent.salvage.v1';
+const KEY_V1 = 'deepdescent.salvage.v1';   // legacy: had permanent `unlocked[]`
+const KEY_V2 = 'deepdescent.salvage.v2';   // current: `rentals{ id -> divesLeft }`
 
 export function defaultSalvage() {
-  return { salvage: 0, unlocked: [], slots: SALVAGE.startSlots, loadout: [], reefRelics: {} };
+  return { salvage: 0, rentals: {}, slots: SALVAGE.startSlots, loadout: [], reefRelics: {} };
 }
 
 function resolveStore(store) {
@@ -44,25 +46,50 @@ function sanitizeReefRelics(o) {
   return out;
 }
 
+// rentals: a bag of relicId → dives-remaining. Keep only real relic ids with a
+// finite integer value ≥ 1, clamped to the sanitize cap (drops expired ≤ 0).
+function sanitizeRentals(o) {
+  const out = {};
+  if (!o || typeof o !== 'object') return out;
+  for (const k of Object.keys(o)) {
+    const v = o[k];
+    if (getRelic(k) && typeof v === 'number' && Number.isFinite(v) && v >= 1) {
+      out[k] = Math.min(RENTAL.maxDives, Math.floor(v));
+    }
+  }
+  return out;
+}
+
+function parse(s, key) {
+  try { const raw = JSON.parse(s.getItem(key)); return (raw && typeof raw === 'object') ? raw : null; }
+  catch (e) { return null; }
+}
+
 export function loadSalvage(store) {
   const s = resolveStore(store);
   const defaults = defaultSalvage();
   if (!s) return defaults;
 
-  let raw = null;
-  try {
-    raw = JSON.parse(s.getItem(KEY));
-  } catch (e) {
-    raw = null;
+  let raw = parse(s, KEY_V2);
+  let rentals;
+  if (raw) {
+    rentals = sanitizeRentals(raw.rentals);
+  } else {
+    // No v2 save: migrate a legacy v1 save (permanent `unlocked[]` → a full rental
+    // period each) so existing players keep their kit. No v1 either → fresh defaults.
+    raw = parse(s, KEY_V1);
+    if (!raw) return defaults;
+    rentals = {};
+    for (const id of sanitizeArray(raw.unlocked)) if (getRelic(id)) rentals[id] = RENTAL.dives;
   }
-  if (!raw || typeof raw !== 'object') return defaults;
 
   const merged = { ...defaults, ...raw };
+  const loadout = sanitizeArray(merged.loadout).filter((id) => rentals[id] > 0);   // prune stale equips
   return {
     salvage: sanitizeSalvage(merged.salvage),
-    unlocked: sanitizeArray(merged.unlocked),
+    rentals,
     slots: clampSlots(merged.slots),
-    loadout: sanitizeArray(merged.loadout),
+    loadout,
     reefRelics: sanitizeReefRelics(merged.reefRelics),
   };
 }
@@ -71,8 +98,8 @@ export function saveSalvage(state, store) {
   const s = resolveStore(store);
   if (!s) return;
   try {
-    const { salvage, unlocked, slots, loadout, reefRelics } = state;
-    s.setItem(KEY, JSON.stringify({ salvage, unlocked, slots, loadout, reefRelics: reefRelics || {} }));
+    const { salvage, rentals, slots, loadout, reefRelics } = state;
+    s.setItem(KEY_V2, JSON.stringify({ salvage, rentals: rentals || {}, slots, loadout, reefRelics: reefRelics || {} }));
   } catch (e) {
     // Persistence must never throw (private-mode / quota / broken store).
   }

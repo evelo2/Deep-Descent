@@ -58,14 +58,14 @@ const store = (init = null) => {
   const r = loadSalvage(s);
   check('partial merge: salvage taken from saved value', r.salvage === 50);
   check('partial merge: slots defaulted', r.slots === SALVAGE.startSlots);
-  check('partial merge: unlocked defaulted to []', Array.isArray(r.unlocked) && r.unlocked.length === 0);
+  check('partial merge: rentals defaulted to {}', r.rentals && typeof r.rentals === 'object' && Object.keys(r.rentals).length === 0);
   check('partial merge: loadout defaulted to []', Array.isArray(r.loadout) && r.loadout.length === 0);
 }
 
 // --- saveSalvage -> loadSalvage round-trip. -------------------------------------
 {
   const s = store();
-  const state = { salvage: 123, unlocked: ['lungs', 'fins'], slots: 3, loadout: ['lungs'], reefRelics: { 1: 2, 3: 1 } };
+  const state = { salvage: 123, rentals: { lungs: 20, fins: 20 }, slots: 3, loadout: ['lungs'], reefRelics: { 1: 2, 3: 1 } };
   saveSalvage(state, s);
   const r = loadSalvage(s);
   check('round-trip: state survives save -> load unchanged', deepEqual(r, state));
@@ -74,31 +74,31 @@ const store = (init = null) => {
 // --- saveSalvage never throws even with no store available. --------------------
 {
   let threw = false;
-  try { saveSalvage({ salvage: 1, unlocked: [], slots: 2, loadout: [] }, { setItem() { throw new Error('boom'); } }); }
+  try { saveSalvage({ salvage: 1, rentals: {}, slots: 2, loadout: [] }, { setItem() { throw new Error('boom'); } }); }
   catch (e) { threw = true; }
   check('saveSalvage: swallows a throwing store (never throws)', !threw);
 }
 
 // --- slots clamp to [startSlots, maxSlots] on load. -----------------------------
 {
-  const s = store(JSON.stringify({ salvage: 0, unlocked: [], slots: 99, loadout: [] }));
+  const s = store(JSON.stringify({ salvage: 0, rentals: {}, slots: 99, loadout: [] }));
   const r = loadSalvage(s);
   check('slots clamp: an out-of-range saved slots clamps to maxSlots', r.slots === SALVAGE.maxSlots);
 }
 {
-  const s = store(JSON.stringify({ salvage: 0, unlocked: [], slots: -5, loadout: [] }));
+  const s = store(JSON.stringify({ salvage: 0, rentals: {}, slots: -5, loadout: [] }));
   const r = loadSalvage(s);
   check('slots clamp: a too-low saved slots clamps up to startSlots', r.slots === SALVAGE.startSlots);
 }
 
 // --- salvage is always a finite number >= 0. ------------------------------------
 {
-  const s = store(JSON.stringify({ salvage: 'not a number', unlocked: [], slots: 2, loadout: [] }));
+  const s = store(JSON.stringify({ salvage: 'not a number', rentals: {}, slots: 2, loadout: [] }));
   const r = loadSalvage(s);
   check('salvage sanity: non-numeric salvage falls back to 0', r.salvage === 0);
 }
 {
-  const s = store(JSON.stringify({ salvage: -50, unlocked: [], slots: 2, loadout: [] }));
+  const s = store(JSON.stringify({ salvage: -50, rentals: {}, slots: 2, loadout: [] }));
   const r = loadSalvage(s);
   check('salvage sanity: negative salvage clamps to 0', r.salvage === 0);
 }
@@ -111,7 +111,7 @@ const store = (init = null) => {
     _shell: { state: 'playing', hi: 100, hiReef: 1, saveHi() {} },   // score<hi so no hi-write
     score: 0,
     reef: 3, bossesFelled: 1, relicsBanked: 0, blackPearlsBanked: 0,
-    meta: { salvage: 0, unlocked: [], slots: 2, loadout: [] },
+    meta: { salvage: 0, rentals: {}, slots: 2, loadout: [] },
     lastPayout: null, newHi: false, audio: { gasp() {} },
   };
   gameOver.call(stub);
@@ -129,7 +129,7 @@ const store = (init = null) => {
     carried: 0, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
     carryingRelic: false, relicBanked: false, relicsBanked: 0,
     carriedPearls: 3, blackPearlsBanked: 0,
-    meta: { salvage: 0, unlocked: [], slots: 2, loadout: [] },
+    meta: { salvage: 0, rentals: {}, slots: 2, loadout: [] },
     audio: { bank() {} },
     puName: '', puCol: '', puT: 0,
   };
@@ -146,7 +146,7 @@ const store = (init = null) => {
     carried: 100, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
     carryingRelic: false, relicBanked: false, relicsBanked: 0,
     carriedPearls: 0, blackPearlsBanked: 0,
-    meta: { salvage: 5, unlocked: [], slots: 2, loadout: [] },
+    meta: { salvage: 5, rentals: {}, slots: 2, loadout: [] },
     audio: { bank() {} },
     puName: '', puCol: '', puT: 0,
   };

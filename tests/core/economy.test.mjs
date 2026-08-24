@@ -23,16 +23,17 @@ function makeStore(seed) {
 
 // --- 1. loads through meta/salvage.js (same key/format) ---
 {
+  // makeStore seeds the legacy v1 key, so this also exercises v1→v2 migration.
   const store = makeStore(JSON.stringify({ salvage: 120, unlocked: ['lungs'], slots: 3, loadout: ['lungs'], reefRelics: { 2: 1 } }));
   const eco = makeEconomy({ store });
   check('state matches loadSalvage of the same store', JSON.stringify(eco.state) === JSON.stringify(loadSalvage(store)));
   check('balance() reads state.salvage', eco.balance() === 120);
-  check('state is the owned salvage bag (unlocked carried through)', eco.state.unlocked.includes('lungs'));
+  check('legacy unlocked migrated into the rentals bag', eco.state.rentals.lungs > 0);
 }
 
 // --- 2. earn credits salvage and persists to the same store/key ---
 {
-  const store = makeStore(JSON.stringify({ salvage: 100, unlocked: [], slots: 2, loadout: [], reefRelics: {} }));
+  const store = makeStore(JSON.stringify({ salvage: 100, rentals: {}, slots: 2, loadout: [], reefRelics: {} }));
   const eco = makeEconomy({ store });
   eco.earn({ salvage: 50 });
   check('earn adds to balance', eco.balance() === 150);
@@ -47,11 +48,11 @@ function makeStore(seed) {
   const store = makeStore();
   const eco = makeEconomy({ store });
   eco.state.salvage += 33;             // a future minigame / legacy game mutates the shared bag
-  eco.state.unlocked.push('fins');
+  eco.state.rentals.fins = 20;
   eco.save();
   const reloaded = loadSalvage(store);
   check('save() persists direct mutations to salvage', reloaded.salvage === 33);
-  check('save() persists direct mutations to unlocked', reloaded.unlocked.includes('fins'));
+  check('save() persists direct mutations to rentals', reloaded.rentals.fins === 20);
 }
 
 // --- 4. reef-relic passthroughs operate on the owned state ---

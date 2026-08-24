@@ -2,6 +2,7 @@
 // Salvage and equipped into the loadout (Phase 3 UI). Each relic's `apply` sets
 // a small flag/modifier on the Game so the hook in game.js stays tiny and
 // localized. Pure logic — Node-testable on a plain stub object, no DOM.
+import { RENTAL } from '../config.js';
 
 export const RELICS = [
   { id: 'lungs', name: 'Reinforced Lungs', desc: '+30 max air for the run.', cost: 120,
@@ -28,6 +29,38 @@ export const RELICS = [
 
 export function getRelic(id) {
   return RELICS.find(r => r.id === id) || null;
+}
+
+// ---- Rentals (timed, dive-metered) ---------------------------------------
+// Relics are RENTED for a number of dives rather than unlocked permanently. A
+// relic is equippable iff its rental is > 0; equipped rentals tick down one dive
+// per run (see tickEquippedRentals) and lapse (auto-bench) at 0.
+
+// Rent or renew a relic: spend its cost, refill its rental to a full period.
+// Returns false (no mutation) if the id is unknown or salvage is insufficient.
+export function rentRelic(state, id) {
+  const r = getRelic(id);
+  if (!r || state.salvage < r.cost) return false;
+  state.salvage -= r.cost;
+  if (!state.rentals || typeof state.rentals !== 'object') state.rentals = {};
+  state.rentals[id] = RENTAL.dives;
+  return true;
+}
+
+// Tick down each EQUIPPED relic's rental by one dive; lapse (remove from rentals
+// AND loadout) any that reach 0. Returns the list of lapsed relic ids. Call
+// exactly once per completed dive.
+export function tickEquippedRentals(state) {
+  const lapsed = [];
+  const rentals = state.rentals || (state.rentals = {});
+  for (const id of [...(state.loadout || [])]) {
+    if (rentals[id] > 0) {
+      rentals[id] -= 1;
+      if (rentals[id] <= 0) { delete rentals[id]; lapsed.push(id); }
+    }
+  }
+  if (lapsed.length) state.loadout = (state.loadout || []).filter((id) => !lapsed.includes(id));
+  return lapsed;
 }
 
 // Reset the per-run relic flags to their defaults. Called at the start of
