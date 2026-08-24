@@ -50,7 +50,7 @@ import { awardBadges, saveBadges, rankFor } from '../../meta/badges.js';
 import { addRun, saveStats } from '../../meta/stats.js';
 import { awardProgress, saveProgress, trackProgress, tierNameById } from '../../meta/progressive.js';
 import { unlockAchievement } from '../../platform/steam.js';
-import { applyLoadout, getRelic } from '../../meta/relics.js';
+import { applyLoadout, getRelic, tickEquippedRentals } from '../../meta/relics.js';
 
 // Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
 let { W, H } = WORLD;
@@ -183,6 +183,7 @@ export class Reef {
       score: this.score, reef: this.reef, deathCause: this.deathCause,
       won: this.won, newHi: this.newHi, lastPayout: this.lastPayout,
       newBadges: this.newBadges, newTiers: this.newTiers, gold: this.gold,
+      lapsedRentals: this.lapsedRentals || [],
     };
   }
 
@@ -271,7 +272,7 @@ export class Reef {
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
-    this.newBadges = []; this.newTiers = [];
+    this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
     this.carriedPearls = 0;   // Black Pearls collected but not yet banked — at risk like loot
@@ -1716,6 +1717,8 @@ export class Reef {
     } else this.newHi = false;
     this.lastPayout = runPayout({ deepestReef: this.reef, bosses: this.bossesFelled, relicsBanked: this.relicsBanked });
     this.meta.salvage += this.lastPayout;
+    // Tick equipped relic rentals down one dive; any that lapse are auto-benched.
+    this.lapsedRentals = tickEquippedRentals(this.meta);
     saveSalvage(this.meta);
     // Award any newly-earned achievement badges from this run's summary.
     if (this.badgeState) {
