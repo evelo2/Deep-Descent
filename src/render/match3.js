@@ -71,8 +71,8 @@ export function drawMatch3(ctx, mod, host) {
   const { W, H } = host.viewport;
   const { cell, x0, y0, n } = geom(mod, host);
 
-  // dim underwater backdrop
-  ctx.fillStyle = 'rgba(4,16,30,0.94)'; ctx.fillRect(0, 0, W, H);
+  // opaque underwater backdrop (fully covers the paused legacy frame beneath)
+  ctx.fillStyle = 'rgb(4,16,30)'; ctx.fillRect(0, 0, W, H);
   boardPanel(ctx, x0 - 12, y0 - 12, cell * n + 24, cell * n + 24);
 
   // grid + tiles

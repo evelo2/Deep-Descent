@@ -51,7 +51,7 @@ const host = makeHost({
   economy, progression, achievements, world,
 });
 const core = new Core({ host });
-const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world });
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world, host });
 core.register(legacy);
 // Phase 9: resolve the Core↔Host chain so minigames can host.open/close, then
 // register the first NEW minigame (Salvage Match). It's menu-launched over the

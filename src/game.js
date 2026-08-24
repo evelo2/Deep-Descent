@@ -79,7 +79,8 @@ const HELP_PAGES = [
 // loop as a MiniGame (this._reef) and forwards update/draw/onAction to it; the
 // reef owns all gameplay + run-state. See docs/platform/migration-plan.md.
 export class Game {
-  constructor(ctx, input, audio, particles, background, services, world) {
+  constructor(ctx, input, audio, particles, background, services, world, host) {
+    this._host = host;   // Core Host (P9) — source of open/close for the reef.
     this.ctx = ctx; this.input = input; this.audio = audio;
     this.particles = particles; this.bg = background;
     this.state = 'menu';                 // menu | playing | paused | gameover
@@ -136,7 +137,12 @@ export class Game {
             world: this._world, economy: services.economy,
             progression: services.progression, achievements: services.achievements,
             audio: this.audio, input: this.input, particles: this.particles,
-            viewport: WORLD,
+            viewport: WORLD, rng: (host && host.rng) || Math.random,
+            // P9: the reef launches sibling minigames (host.open('match3')) via
+            // the Core stack. open/close come from the real Host, Core-bound in
+            // main.js; undefined-safe no-ops under bare/stub construction.
+            open: (id) => host && host.open && host.open(id),
+            close: (result) => host && host.close && host.close(result),
           },
           shell: this._reefShell(), ctx: this.ctx, bg: this.bg,
         })
@@ -596,7 +602,7 @@ export class Game {
     this._text('❔ HELP (H)', xs[0] + w / 2, y + h / 2, 12, PAL.hudText, 'center', 'middle', true);
     this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
     this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 11, PAL.glow, 'center', 'middle', true);
-    this._text('⚓ SALVAGE MATCH (N)', xs[3] + w / 2, y + h / 2, 9, PAL.gold, 'center', 'middle', true);
+    this._text('⚓ MATCH (N)', xs[3] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
   }
 
   _gameOverScreen() {
