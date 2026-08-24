@@ -180,3 +180,38 @@ Detailed phase order + test gates live in `migration-plan.md`.
 `baseline/v1.0-pre-platform` mark the last verified-good monolith. Every phase is
 diffed/verified against it. See `migration-plan.md` for the resumable, phased
 task breakdown with test gates and /compact + /clear checkpoints.
+
+## 8. Development process — context-checkpoint discipline (`/clear` + `/compact`)
+
+This is a **standing practice for all work in this repo** (new minigames,
+features, refactors) — not just the finished platform migration. It keeps each
+unit of work in a tight, cheap context and makes sessions resumable from cold.
+
+**One work-unit ≈ one context.** A "work-unit" is a phase of a plan, or a
+self-contained feature/minigame slice that ships on its own branch. Drive it to a
+clean seam, then reset context before the next one.
+
+**At each clean seam, run a 🧹 CHECKPOINT before moving on:**
+
+1. Full test suite green + browser-verify on a **fresh port** (ES-module cache
+   gotcha — always a new port or hard-refresh).
+2. Commit → `--no-ff` merge to `main` → push. Bump `src/version.js` `BUILD` if the
+   work is phase-marked.
+3. **Update the docs of record** (the driving plan/spec: tick boxes, add a
+   one-line "Landed: <commit> — <note>") and **update memory** (`MEMORY.md` + the
+   relevant note) with the new state.
+4. Then reset context:
+   - **`/clear` — BETWEEN work-units, at a clean seam** (work merged + docs +
+     memory updated). *Preferred.* The plan + this architecture doc + git fully
+     reconstruct context, so a cold start is cheap and keeps each unit tight.
+   - **`/compact` — MID work-unit**, when context is large but you are *not* at a
+     clean seam yet (e.g. halfway through a slice). Preserves the working thread
+     without a full reset.
+
+**Rule of thumb:** aim to `/clear` at each work-unit boundary; reach for
+`/compact` only when a single unit outgrows its context before it reaches a seam.
+
+**Make plans resumable from a cold `/clear`.** Any multi-step plan should carry a
+short "Context Recovery — read first" preamble (what to read, how to find the
+resume point, how to confirm green) so a fresh session can continue with only the
+plan + this doc + git. `migration-plan.md` is the worked exemplar of this shape.
