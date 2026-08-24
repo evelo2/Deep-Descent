@@ -100,16 +100,38 @@ resize();
 const isLegacyTop = () => core.activeId() === 'legacy';
 
 // Pointer swaps + ✕ quit for match-3 (it hit-tests its own board rather than
-// registering touch buttons). Two taps pick a pair; a tap on ✕ bails out.
-let m3sel = null;
-function handleMatch3Pointer(clientX, clientY) {
+// registering touch buttons). Supports BOTH gestures a player expects: a
+// Candy-Crush drag (press a tile, release on an adjacent one) and two taps
+// (tap a tile, then tap its neighbour). A tap on ✕ bails out.
+let m3sel = null;    // currently-selected tile (two-tap first pick / drag origin)
+let m3down = null;   // cell where the active press began (drag origin)
+const m3adjacent = (a, b) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
+
+function m3PointerDown(clientX, clientY) {
   const p = input.toLogical(clientX, clientY);
-  if (backHitTest(match3, host, p.x, p.y)) { host.close(match3.exit()); m3sel = null; match3.sel = null; return; }
-  if (match3.phase !== 'play') { match3._pointerAdvance(); m3sel = null; match3.sel = null; return; }
+  if (backHitTest(match3, host, p.x, p.y)) { host.close(match3.exit()); m3sel = null; m3down = null; match3.sel = null; return; }
+  if (match3.phase !== 'play') { match3._pointerAdvance(); m3sel = null; m3down = null; match3.sel = null; return; }
   const cell = boardHitTest(match3, host, p.x, p.y);
+  m3down = cell;
   if (!cell) { m3sel = null; match3.sel = null; return; }
-  if (!m3sel) { m3sel = cell; match3.sel = cell; }
-  else { match3.trySwap(m3sel.r, m3sel.c, cell.r, cell.c); m3sel = null; match3.sel = null; }
+  // Two-tap: a prior selection + an adjacent tap resolves the swap immediately.
+  if (m3sel && m3adjacent(m3sel, cell)) { match3.trySwap(m3sel.r, m3sel.c, cell.r, cell.c); m3sel = null; m3down = null; match3.sel = null; return; }
+  // Tapping the selected tile again clears it; otherwise (re)select this tile.
+  if (m3sel && m3sel.r === cell.r && m3sel.c === cell.c) { m3sel = null; match3.sel = null; }
+  else { m3sel = cell; match3.sel = cell; }
+}
+
+function m3PointerUp(clientX, clientY) {
+  const origin = m3down; m3down = null;
+  if (!origin || match3.phase !== 'play') return;
+  const p = input.toLogical(clientX, clientY);
+  const cell = boardHitTest(match3, host, p.x, p.y);
+  // Drag: released on a DIFFERENT adjacent cell → swap now. A release on the
+  // same cell is a plain tap — leave it selected for the two-tap path.
+  if (cell && (cell.r !== origin.r || cell.c !== origin.c) && m3adjacent(origin, cell)) {
+    match3.trySwap(origin.r, origin.c, cell.r, cell.c);
+    m3sel = null; match3.sel = null;
+  }
 }
 
 function action() { if (!isLegacyTop()) return; audio.ensure(); audio.resume(); game.onAction(); }
@@ -126,14 +148,19 @@ window.addEventListener('keydown', (e) => {
 });
 canvas.addEventListener('mousedown', (e) => {
   audio.ensure(); audio.resume();
+  // Match-3 on top of the stack owns the pointer (it hit-tests its own board),
+  // so route to it FIRST — before the legacy button gate, whose paused-game
+  // buttons must not swallow board clicks.
+  if (core.activeId() === 'match3') { m3PointerDown(e.clientX, e.clientY); return; }
   // Click an on-screen UI button (menu/help/shop/dry-dock/scheme) — the game
   // consumes it next frame. Only fall back to the start/confirm action when the
   // click missed every button, so clicking HELP no longer just starts the game.
   const hit = input.hitButtonAt(e.clientX, e.clientY);
   if (hit) { input.pressButton(hit); return; }
-  if (core.activeId() === 'match3') { handleMatch3Pointer(e.clientX, e.clientY); return; }
   if (isLegacyTop() && game.state !== 'playing') game.onAction();
 });
+// Match-3 drag release (mouse): completes a press-and-drag swap.
+canvas.addEventListener('mouseup', (e) => { if (core.activeId() === 'match3') m3PointerUp(e.clientX, e.clientY); });
 // Touch: tap-to-fire is detected inside Input; a tap on the menus starts the game.
 // (Paused is resumed via the on-screen ▶ button, so tap-anywhere is limited to
 // the menu/gameover screens — otherwise a tap on a HUD button would also resume.)
@@ -142,10 +169,16 @@ canvas.addEventListener('touchstart', (e) => {
   if (core.activeId() === 'match3') {
     if (input._btnTouch) return;   // a HUD/quit touch button was already tapped
     const t = e.changedTouches && e.changedTouches[0];
-    if (t) handleMatch3Pointer(t.clientX, t.clientY);
+    if (t) m3PointerDown(t.clientX, t.clientY);
     return;
   }
   if (isLegacyTop() && (game.state === 'menu' || game.state === 'gameover') && !input._btnTouch) game.onAction();
+}, { passive: true });
+// Match-3 drag release (touch): completes a press-and-drag swap.
+canvas.addEventListener('touchend', (e) => {
+  if (core.activeId() !== 'match3') return;
+  const t = e.changedTouches && e.changedTouches[0];
+  if (t) m3PointerUp(t.clientX, t.clientY);
 }, { passive: true });
 
 // Ambient bubbles drifting up on the menu, for atmosphere.

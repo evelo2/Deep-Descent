@@ -46,12 +46,93 @@ export function boardHitTest(mod, host, x, y) {
   return { r, c };
 }
 
+// A regular star path (used by the starfish icon and as a shape helper).
+function starPath(ctx, cx, cy, points, outer, inner, rot = -Math.PI / 2) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const rad = i % 2 ? inner : outer;
+    const a = rot + (i * Math.PI) / points;
+    const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+
+// Draw one tile as a distinct, canvas-drawn icon keyed by its type
+// (0 pearl · 1 gem · 2 coin · 3 shell · 4 starfish · 5 coral), then overlay
+// any special marker. No image assets — pure paths so it scales with the cell.
 function drawTile(ctx, cx, cy, cell, tile) {
   if (!tile) return;
   const r = cell * 0.36;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = TILE_COLORS[tile.type] || '#fff'; ctx.fill();
-  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.stroke();
+  const base = TILE_COLORS[tile.type] || '#fff';
+  ctx.save();
+  // soft drop shadow so tiles read as objects, not flat dots
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = cell * 0.08; ctx.shadowOffsetY = cell * 0.03;
+
+  switch (tile.type) {
+    case 0: { // Pearl — pearlescent sphere with a specular highlight
+      const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.15, cx, cy, r);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, base); g.addColorStop(1, '#9fb8cc');
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.beginPath(); ctx.arc(cx - r * 0.32, cy - r * 0.34, r * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
+      break;
+    }
+    case 1: { // Gem — faceted diamond with a bright top facet
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * 0.92, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r * 0.92, cy);
+      ctx.closePath(); ctx.fillStyle = base; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * 0.92, cy); ctx.lineTo(cx, cy); ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.stroke();
+      break;
+    }
+    case 2: { // Coin — gold disc with a milled rim and inner ring
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = base; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(120,80,10,0.6)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      break;
+    }
+    case 3: { // Shell — scallop fan with radiating ridges
+      ctx.beginPath(); ctx.arc(cx, cy + r * 0.35, r, Math.PI * 1.15, Math.PI * 1.85); ctx.lineTo(cx, cy + r * 0.35);
+      ctx.closePath(); ctx.fillStyle = base; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = 'rgba(120,50,30,0.5)'; ctx.lineWidth = 1.4;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath(); ctx.moveTo(cx, cy + r * 0.35);
+        ctx.lineTo(cx + Math.sin(i * 0.42) * r * 0.95, cy + r * 0.35 - Math.cos(i * 0.42) * r * 0.95); ctx.stroke();
+      }
+      break;
+    }
+    case 4: { // Starfish — five-armed star
+      starPath(ctx, cx, cy, 5, r, r * 0.45);
+      ctx.fillStyle = base; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(150,110,20,0.6)'; ctx.stroke();
+      break;
+    }
+    default: { // Coral — branching stalks
+      ctx.strokeStyle = base; ctx.lineWidth = cell * 0.12; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + r); ctx.lineTo(cx, cy - r * 0.2);
+      ctx.moveTo(cx, cy + r * 0.2); ctx.lineTo(cx - r * 0.75, cy - r * 0.7);
+      ctx.moveTo(cx, cy + r * 0.2); ctx.lineTo(cx + r * 0.75, cy - r * 0.7);
+      ctx.stroke();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = base;
+      for (const [dx, dy] of [[0, -0.2], [-0.75, -0.7], [0.75, -0.7]]) {
+        ctx.beginPath(); ctx.arc(cx + dx * r, cy + dy * r, cell * 0.07, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+  }
+  ctx.restore();
+
   // specials: line = horizontal bar, bomb = inner ring
   if (tile.special === 'line') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke(); }
   else if (tile.special === 'bomb') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.stroke(); }
@@ -96,7 +177,7 @@ export function drawMatch3(ctx, mod, host) {
     text(ctx, `Collect ${TILE_NAMES[lv.targetTile]}: ${Math.min(mod.progress, lv.targetCount)}/${lv.targetCount}`, W / 2, y0 - 34, 18, PAL.gold, 'center', 'middle');
     text(ctx, `Moves ${mod.movesLeft}`, x0, y0 + cell * n + 30, 16, PAL.hudText, 'left', 'middle');
     text(ctx, `Score ${mod.score}`, x0 + cell * n, y0 + cell * n + 30, 16, PAL.hudText, 'right', 'middle');
-    text(ctx, host.input.isTouch ? 'Tap two tiles to swap · ✕ to quit' : 'Arrows + Space to swap · Esc to quit', W / 2, H - 24, 12, '#9fc6e0', 'center', 'middle');
+    text(ctx, host.input.isTouch ? 'Drag or tap two tiles to swap · ✕ to quit' : 'Drag or click two tiles to swap · Arrows+Space · Esc to quit', W / 2, H - 24, 12, '#9fc6e0', 'center', 'middle');
   }
 
   // ✕ quit button (top-right) — a bail-out for touch, also clickable on desktop.
