@@ -43,6 +43,7 @@ export function findRuns(board) {
 }
 
 const adjacent = (r1, c1, r2, c2) => Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+const inBounds = (board, r, c) => r >= 0 && c >= 0 && r < board.rows && c < board.cols;
 
 function swapCells(board, r1, c1, r2, c2) {
   const tmp = board.tiles[r1][c1];
@@ -50,8 +51,15 @@ function swapCells(board, r1, c1, r2, c2) {
   board.tiles[r2][c2] = tmp;
 }
 
-/** Would swapping these two create a run? (temp swap, restored) */
+/**
+ * Would swapping these two create a run? (temp swap, restored)
+ * Out-of-range coordinates are rejected up front — this is the single
+ * bounds gate for both wouldMatch and legalSwap (which delegates here),
+ * so swapCells never runs against an out-of-range index and can't grow
+ * a tiles row.
+ */
 export function wouldMatch(board, r1, c1, r2, c2) {
+  if (!inBounds(board, r1, c1) || !inBounds(board, r2, c2)) return false;
   swapCells(board, r1, c1, r2, c2);
   const ok = findRuns(board).length > 0;
   swapCells(board, r1, c1, r2, c2);
