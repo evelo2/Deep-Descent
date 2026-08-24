@@ -1,3 +1,4 @@
+// @ts-check
 // The legacy MiniGame — the entire current Deep Descent (the reef world and all
 // its zones) wrapped, untouched, as a single MiniGame plugged into the Core.
 // This is the strangler-fig anchor: in Phase 1 the platform boots and drives the
@@ -51,8 +52,13 @@ export function createLegacyMiniGame({ ctx, input, audio, particles, background,
     // it (no double-count). outcome maps the terminal state; a still-'playing'
     // state means an early bail-out.
     exit() {
-      const outcome = game.state === 'playing' ? 'bailed' : (game.won ? 'won' : 'lost');
-      return { outcome, score: game.score, reef: game.reef, credited: true };
+      // Post-P6 the run-state (won/score/reef) lives on the reef MiniGame
+      // (game._reef), NOT the shell — reading them off `game` here returned
+      // undefined (a latent bug the Phase 8 types surfaced; exit() isn't routed
+      // yet, so it never fired). Source them from the reef.
+      const r = game._reef;
+      const outcome = game.state === 'playing' ? 'bailed' : (r && r.won ? 'won' : 'lost');
+      return { outcome, score: r ? r.score : 0, reef: r ? r.reef : 1, credited: true };
     },
   };
 }

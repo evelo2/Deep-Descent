@@ -1,3 +1,4 @@
+// @ts-check
 // The Platformer Stage — the second reef zone extracted as its own MiniGame
 // (Phase 5; see docs/platform/migration-plan.md). A themed, single-screen
 // platformer minigame reached through a reef entrance: on foot under gravity,
@@ -40,7 +41,11 @@ import { stageHintStrip } from '../../controls.js';
  * @returns {import('../../core/contract.js').MiniGame}
  */
 export function makeStage({ host, reef }) {
-  return {
+  // Assigned to a local (not returned inline) so `this` inside the methods infers
+  // the module's FULL shape — its zone-local state + private helpers — instead of
+  // being contextually narrowed to the bare MiniGame contract. `return mod` below
+  // still verifies the module satisfies MiniGame. See docs/platform (Phase 8 types).
+  const mod = {
     id: 'stage',
 
     // --- owned state ---
@@ -118,4 +123,5 @@ export function makeStage({ host, reef }) {
       return { outcome: 'complete', credited: true };   // loot self-banks via the reef carried pile
     },
   };
+  return mod;
 }

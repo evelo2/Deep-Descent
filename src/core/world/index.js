@@ -1,3 +1,4 @@
+// @ts-check
 // The DiverWorld engine — the shared "diver world" the diver-world minigames
 // ride. Slice 1 (see docs/superpowers/specs/2026-08-22-diverworld-engine-slice1-
 // design.md) owns only the kinematic + vital core: the diver entity, the camera,

@@ -1,8 +1,9 @@
+// @ts-check
 // The platform contract — the small, stable surface every MiniGame speaks to
 // the Core through. Doc-only in Phase 1: these are JSDoc typedefs, NOT runtime
 // code (this module intentionally exports nothing executable). They exist so the
 // boundary has one authoritative shape that later phases can lock with `tsc`
-// (Phase 7) without a build step today. See docs/platform/architecture.md.
+// (Phase 8) without a build step today. See docs/platform/architecture.md.
 
 /**
  * A MiniGame is a self-contained mode plugged into the Core. The Core owns the

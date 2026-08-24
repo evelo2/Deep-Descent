@@ -1,3 +1,4 @@
+// @ts-check
 // Economy — the Core-owned wallet, promoted from meta/salvage.js. This is a
 // THIN service: it does not reimplement anything, it just loads the salvage bag
 // once (through the existing storage-injectable meta module, so the localStorage

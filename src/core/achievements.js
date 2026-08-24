@@ -1,3 +1,4 @@
+// @ts-check
 // Achievements — the Core-owned bridge to Steam. A THIN forwarder over the
 // existing platform/steam.js seam: unlock(id) hands a badge/tier id to Steam
 // (a no-op on the web build, where window.steam is undefined). The unlock fn is

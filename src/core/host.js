@@ -1,3 +1,4 @@
+// @ts-check
 // makeHost — assembles the Host facade a MiniGame receives (see
 // core/contract.js for the shape). It is a thin bundle: services are exposed
 // by reference, never copied or wrapped, so a MiniGame holding `host.economy`

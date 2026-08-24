@@ -20,6 +20,14 @@ export class Diver {
   get radius() { return DIVER.radius; }
   get atSurface() { return this.y <= WORLD.SURFACE + 60; }
 
+  /**
+   * @param {number} dt
+   * @param {{x:number,y:number}} intent
+   * @param {(x:number,y:number)=>void} emitBubble
+   * @param {number} [speedMul]
+   * @param {*} [phys]  Movement profile (DIVER or SUB — differently shaped, only
+   *                    the common accel/drag/buoyancy/maxSpeed are read here).
+   */
   update(dt, intent, emitBubble, speedMul = 1, phys = DIVER) {
     // Thrust from intent (boosted by speed fins). `phys` swaps the movement
     // profile — e.g. the heavy, gliding, high-top-speed submarine (SUB).
