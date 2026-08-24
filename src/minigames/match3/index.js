@@ -74,6 +74,14 @@ export function makeMatch3({ host }) {
       }
     },
 
+    // Advance a non-play phase from a pointer tap (touch has no confirm key;
+    // mirrors the confirm handling in update()). No-op during play.
+    _pointerAdvance() {
+      if (this.phase === 'intro') this.phase = 'play';
+      else if (this.phase === 'won') this._loadLevel(this.levelIndex + 1);
+      else if (this.phase === 'lost') this._loadLevel(this.levelIndex);
+    },
+
     _advance() {
       // called after an animation completes to settle the board + re-check goal
       this.anim = null;
