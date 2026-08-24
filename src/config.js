@@ -166,6 +166,10 @@ export const GOLD = { rate: 0.2 };       // gold earned per point of loot banked
 // at the end of every run — win OR death — from milestones. Starting values;
 // a later balance pass tunes these.
 export const SALVAGE = { perReef: 8, perBoss: 40, perRelic: 15, perPearl: 30, startSlots: 2, maxSlots: 5, slotCostBase: 200 };
+// Salvage-Log rentals: relics are rented for a number of DIVES (one run each),
+// ticking down only on dives where the relic was equipped. Rent/renew refills to
+// `dives`; `maxDives` is the load-time sanitize cap.
+export const RENTAL = { dives: 20, maxDives: 999 };
 // Reef-skip relics: finding a reef's objective relic banks a one-use token to
 // start a new run one reef deeper, with goldPerReef × (startReef − 1) head-start.
 export const SKIP = { goldPerReef: 500 };
