@@ -19,6 +19,7 @@ export class Treasure {
     this.baseY = y;
     this.taken = false;
     this.pearl = kind === 'blackpearl';     // flags this as the meta-currency collectible
+    this.locked = false;                    // vault loot: gated behind the temple key until opened
   }
 
   update(dt, t) { this.y = this.baseY + Math.sin(t * 1.5 + this.phase) * 4; }

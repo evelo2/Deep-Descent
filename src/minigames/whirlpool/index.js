@@ -1,3 +1,4 @@
+// @ts-check
 // The Whirlpool — the first reef zone extracted as its own MiniGame (Phase 4 of
 // the platform migration; see docs/platform/migration-plan.md). A survival sweep
 // down an accelerating shaft: a forced downward current owns vertical motion, the
@@ -37,7 +38,11 @@ import { drawWhirlMaw } from '../../render/props.js';
  * @returns {import('../../core/contract.js').MiniGame}
  */
 export function makeWhirlpool({ host, reef }) {
-  return {
+  // Assigned to a local (not returned inline) so `this` inside the methods infers
+  // the module's FULL shape — its zone-local state + private helpers — instead of
+  // being contextually narrowed to the bare MiniGame contract. `return whirl` below
+  // still verifies the module satisfies MiniGame. See docs/platform (Phase 8 types).
+  const whirl = {
     id: 'whirlpool',
 
     // --- owned state (armed by generate(), reset by exit()) ---
@@ -402,4 +407,5 @@ export function makeWhirlpool({ host, reef }) {
       }
     },
   };
+  return whirl;
 }
