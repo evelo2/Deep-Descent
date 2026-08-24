@@ -44,11 +44,11 @@ function grid(types) {
     [1, 0, 1],
     [0, 1, 0],
   ]);
-  // swapping (0,0)&(0,1) makes col: (0,1)->0 over (1,1)=0,(2,1)=1 no... test a real one:
+  // hand grid: col2 is 2,2,2 (generation forbids this; test detection directly)
   const b2 = grid([
     [0, 1, 2],
     [1, 0, 2],
-    [0, 1, 2],   // col2 already 2,2,2 — but generation forbids; here it's a hand grid to test detection
+    [0, 1, 2],
   ]);
   check(findRuns(b2).some((r) => r.axis === 'col' && r.type === 2), 'hand grid detects col run');
   // adjacency: non-adjacent is never legal
@@ -57,6 +57,19 @@ function grid(types) {
   const before = JSON.stringify(b.tiles);
   wouldMatch(b, 0, 0, 0, 1);
   check(JSON.stringify(b.tiles) === before, 'wouldMatch does not mutate');
+}
+
+// bounds validation: out-of-range coords are rejected, never mutate/grow tiles
+{
+  const b = makeBoard({ cols: 8, rows: 8, rng: mulberry32(7) });
+  const lenBefore = b.tiles.map((row) => row.length);
+  const snapBefore = JSON.stringify(b.tiles);
+  check(!legalSwap(b, 0, 7, 0, 8), 'legalSwap rejects out-of-range col (8x8, col 8)');
+  check(!legalSwap(b, -1, 0, 0, 0), 'legalSwap rejects negative row');
+  check(!wouldMatch(b, 0, 7, 0, 8), 'wouldMatch rejects out-of-range col directly');
+  const lenAfter = b.tiles.map((row) => row.length);
+  check(JSON.stringify(lenBefore) === JSON.stringify(lenAfter), 'no row array grew from an OOB swap attempt');
+  check(JSON.stringify(b.tiles) === snapBefore, 'board tiles unchanged after OOB swap attempts');
 }
 
 console.log(`ok board.test.mjs part1 (${pass} checks)`);
