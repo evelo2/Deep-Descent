@@ -1,8 +1,10 @@
 // @ts-check
 // Canvas renderer for Salvage Match (Platform Phase 9). A pure draw from the
-// module state — browser-tuned, not unit-tested. The committed engine resolves
-// each swap synchronously (mod.board is already settled while mod.anim plays),
-// so v1 draws the settled board; mod.anim only gates input, not the picture.
+// module state — browser-tuned, not unit-tested. The engine resolves each swap
+// synchronously (mod.board holds the settled result), but while mod.anim is
+// live the renderer replays a short resolution: the two tiles slide together,
+// then the matched run pops (shrinks + sparkles). Once anim clears, it draws
+// the settled board straight.
 import { PAL } from '../config.js';
 import { text, panel } from './chrome.js';
 import { TILE_NAMES } from '../minigames/match3/levels.js';
@@ -138,6 +140,48 @@ function drawTile(ctx, cx, cy, cell, tile) {
   else if (tile.special === 'bomb') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.stroke(); }
 }
 
+// A short expanding-ring sparkle for a popping matched tile (k: 0→1 progress).
+function drawSpark(ctx, cx, cy, cell, k) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, 1 - k);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, cell * (0.18 + 0.5 * k), 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+// Replay the current resolution from the pre-swap snapshot: first the two tiles
+// slide together, then the matched run shrinks + sparkles out. Non-matched tiles
+// hold their pre-swap positions; the settled board takes over when anim clears.
+function drawResolution(ctx, anim, x0, y0, cell, n) {
+  const p = Math.min(1, anim.t / anim.dur);
+  const SWAP = 0.4;                                   // fraction spent sliding
+  const cx = (c) => x0 + c * cell + cell / 2, cy = (r) => y0 + r * cell + cell / 2;
+  const [ar, ac] = anim.a, [br, bc] = anim.b;
+  if (p < SWAP) {
+    const k = p / SWAP;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      if ((r === ar && c === ac) || (r === br && c === bc)) continue;   // moving pair drawn below
+      drawTile(ctx, cx(c), cy(r), cell, anim.pre[r][c]);
+    }
+    drawTile(ctx, cx(ac) + (cx(bc) - cx(ac)) * k, cy(ar) + (cy(br) - cy(ar)) * k, cell, anim.pre[ar][ac]);
+    drawTile(ctx, cx(bc) + (cx(ac) - cx(bc)) * k, cy(br) + (cy(ar) - cy(br)) * k, cell, anim.pre[br][bc]);
+  } else {
+    const k = (p - SWAP) / (1 - SWAP);
+    const post = anim.pre.map((row) => row.slice());
+    const tmp = post[ar][ac]; post[ar][ac] = post[br][bc]; post[br][bc] = tmp;   // apply the swap
+    const clearing = new Set(anim.clears.map(([r, c]) => r * n + c));
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      if (clearing.has(r * n + c)) {
+        const s = 1 - k;
+        if (s > 0.04) drawTile(ctx, cx(c), cy(r), cell * s, post[r][c]);
+        drawSpark(ctx, cx(c), cy(r), cell, k);
+      } else {
+        drawTile(ctx, cx(c), cy(r), cell, post[r][c]);
+      }
+    }
+  }
+}
+
 // Rounded board backdrop (chrome.panel is a full-screen wash, so draw our own box).
 function boardPanel(ctx, x, y, w, h) {
   ctx.save();
@@ -156,18 +200,24 @@ export function drawMatch3(ctx, mod, host) {
   ctx.fillStyle = 'rgb(4,16,30)'; ctx.fillRect(0, 0, W, H);
   boardPanel(ctx, x0 - 12, y0 - 12, cell * n + 24, cell * n + 24);
 
-  // grid + tiles
+  // grid backing (checkerboard) — always drawn
   if (mod.board) {
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
-      const cx = x0 + c * cell + cell / 2, cy = y0 + r * cell + cell / 2;
       ctx.fillStyle = (r + c) % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
       ctx.fillRect(x0 + c * cell, y0 + r * cell, cell, cell);
-      drawTile(ctx, cx, cy, cell, mod.board.tiles[r][c]);
     }
-    // cursor + selection (keyboard/gamepad)
-    const box = (cc, rr, col) => { ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.strokeRect(x0 + cc * cell + 2, y0 + rr * cell + 2, cell - 4, cell - 4); };
-    box(mod.cursor.c, mod.cursor.r, PAL.gold);
-    if (mod.sel) box(mod.sel.c, mod.sel.r, PAL.glow);
+    if (mod.anim) {
+      // Mid-resolution: replay slide→pop from the snapshot (no cursor while busy).
+      drawResolution(ctx, mod.anim, x0, y0, cell, n);
+    } else {
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        drawTile(ctx, x0 + c * cell + cell / 2, y0 + r * cell + cell / 2, cell, mod.board.tiles[r][c]);
+      }
+      // cursor + selection (keyboard/gamepad)
+      const box = (cc, rr, col) => { ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.strokeRect(x0 + cc * cell + 2, y0 + rr * cell + 2, cell - 4, cell - 4); };
+      box(mod.cursor.c, mod.cursor.r, PAL.gold);
+      if (mod.sel) box(mod.sel.c, mod.sel.r, PAL.glow);
+    }
   }
 
   // HUD: title + objective + moves + score + hint

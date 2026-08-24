@@ -56,6 +56,37 @@ function fakeHost() {
   check(mg.phase === 'lost', 'no moves + goal unmet → lost');
 }
 
+// Keyboard confirm (Space) during play selects the cursor tile. Regression:
+// update() read the 'confirm' edge once for phase transitions and pressed()
+// CONSUMES the edge, so _handlePlayInput's re-read saw nothing and Space was
+// dead during play. This models pressed()'s real consume-on-read semantics.
+function scriptInput() {
+  const edges = new Set();
+  return {
+    isTouch: false,
+    _queue(a) { edges.add(a); },
+    pressed(a) { if (edges.has(a)) { edges.delete(a); return true; } return false; },
+    consumeButton() { return false; },
+    endFrame() { edges.clear(); },
+  };
+}
+{
+  const host = fakeHost();
+  const inp = scriptInput();
+  host.input = inp;
+  const mg = makeMatch3({ host });
+  mg.enter(host);
+  mg.phase = 'play'; mg.sel = null; mg.cursor = { r: 0, c: 0 };
+  inp._queue('confirm');
+  mg.update(0.016);
+  check(mg.sel && mg.sel.r === 0 && mg.sel.c === 0, 'Space during play selects the cursor tile');
+  // A second confirm on the (adjacent) neighbour attempts the swap → clears sel.
+  mg.cursor = { r: 0, c: 1 };
+  inp._queue('confirm');
+  mg.update(0.016);
+  check(mg.sel === null, 'second Space attempts the swap and clears the selection');
+}
+
 // exit returns a report-only result (salvage already credited per level)
 {
   const host = fakeHost();
