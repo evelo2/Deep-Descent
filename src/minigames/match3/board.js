@@ -3,7 +3,7 @@
 // injected rng, so the whole model is Node-unit-testable (like the Stage engine).
 // The renderer/module animate the discrete resolution steps this returns.
 
-/** @typedef {{ type:number, special:null|'line'|'bomb' }} Tile */
+/** @typedef {{ type:number, special:null|'line'|'bomb', axis?:'row'|'col' }} Tile */
 /** @typedef {{ cols:number, rows:number, types:number, rng:()=>number, tiles:(Tile|null)[][] }} Board */
 
 export function at(board, r, c) {
@@ -150,13 +150,43 @@ export function reshuffle(board) {
 // specials.test.mjs, which reproduces an OOM this cap prevents).
 const MAX_CASCADE = 100;
 
+/** Fold the board's current tile-type layout into a 32-bit hash (FNV-1a-ish).
+ * Pure function of board state — no ambient Date/Math.random input — so the
+ * same board always hashes the same way. */
+function hashBoard(board) {
+  let h = 2166136261 >>> 0;
+  for (let r = 0; r < board.rows; r++) {
+    for (let c = 0; c < board.cols; c++) {
+      const t = board.tiles[r][c];
+      h = (h ^ (t ? t.type + 1 : 0)) >>> 0;
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+  }
+  return h >>> 0;
+}
+
+/** Tiny local mulberry32-style PRNG seeded from a 32-bit int. Self-contained
+ * (no cross-module import) — used only to escape a degenerate `board.rng`
+ * during cap-hit recovery below, deterministically. */
+function localRng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Swap two adjacent tiles and resolve to a stable board, returning ordered
  * animation steps, per-type cleared counts, and a score. No-op (ok:false) when
  * the swap makes no match. A run of len>=4 spawns a `line` special, len>=5
  * spawns a `bomb`, placed at the swapped-into cell on the first resolution
  * pass (else the run's middle cell). A cleared cell whose `special` is set
- * activates before clearing: `line` adds its full row/col, `bomb` adds its
- * 3x3 neighborhood, expanding the cleared set (chained cascades). */
+ * activates before clearing: `line` adds its full row (if its axis is the
+ * horizontal 'row' axis) or its full column ('col' axis) — orientation
+ * only, matching the spawning run's axis; `bomb` adds its 3x3 neighborhood.
+ * Both expand the cleared set (chained cascades). */
 export function applySwap(board, r1, c1, r2, c2) {
   if (!legalSwap(board, r1, c1, r2, c2)) return { ok: false, steps: [], cleared: {}, score: 0 };
   const steps = [];
@@ -174,11 +204,17 @@ export function applySwap(board, r1, c1, r2, c2) {
       // injected rng itself is the pathology, so reshuffling with that same
       // rng can't reliably escape it (e.g. a truly constant rng forces
       // every refill to the same type, which a same-rng reshuffle would
-      // just reproduce). Recover with a real entropy source instead, so
-      // the board provably lands run-free rather than spinning forever —
-      // applySwap must always return a stable board.
+      // just reproduce). Recover with a rng seeded deterministically from
+      // the current board layout (hashBoard + localRng, both pure/local —
+      // no Math.random, no cross-module import) instead: it has the value
+      // variety fillNoMatch needs to settle run-free, and — because it's a
+      // pure function of board state — the recovery is itself reproducible
+      // (same board ⇒ same escape sequence ⇒ same stable board), keeping
+      // the module's "deterministic via injected rng" contract intact even
+      // on this exceptional path. applySwap must always return a stable
+      // board, never spin forever.
       const badRng = board.rng;
-      board.rng = Math.random;
+      board.rng = localRng(hashBoard(board));
       reshuffle(board);
       board.rng = badRng;
       steps.push({ kind: 'reshuffle' });
@@ -195,8 +231,11 @@ export function applySwap(board, r1, c1, r2, c2) {
       const t = board.tiles[r][c];
       if (!t || !t.special) continue;
       if (t.special === 'line') {
-        for (let x = 0; x < board.cols; x++) set.add(key(r, x));
-        for (let y = 0; y < board.rows; y++) set.add(key(y, c));
+        // axis === run's spawning axis: 'row' (horizontal run) clears the
+        // full row it sits in; 'col' (vertical run) clears the full column.
+        // Orientation-only — never both (spec §3.4).
+        if (t.axis === 'col') { for (let y = 0; y < board.rows; y++) set.add(key(y, c)); }
+        else { for (let x = 0; x < board.cols; x++) set.add(key(r, x)); }
       } else if (t.special === 'bomb') {
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           const rr = r + dy, cc = c + dx;
@@ -226,7 +265,10 @@ export function applySwap(board, r1, c1, r2, c2) {
     score += cells.length * 10 * depth;
 
     // place spawned specials into their (now-empty) cells
-    for (const s of spawns) { const [r, c] = s.at; board.tiles[r][c] = { type: s.type, special: s.special }; }
+    for (const s of spawns) {
+      const [r, c] = s.at;
+      board.tiles[r][c] = { type: s.type, special: s.special, axis: s.special === 'line' ? s.axis : undefined };
+    }
 
     steps.push({ kind: 'clear', cells, spawns: spawns.map(({ at, special, axis }) => ({ at, special, axis })), counts });
     steps.push({ kind: 'fall', moves: applyGravity(board) });
