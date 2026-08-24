@@ -3,7 +3,7 @@
 // mechanics. Storage-injectable, no DOM. Run: node tests/game/rentals.test.mjs
 
 import { loadSalvage, saveSalvage, defaultSalvage } from '../../src/meta/salvage.js';
-import { getRelic } from '../../src/meta/relics.js';
+import { getRelic, rentRelic, tickEquippedRentals } from '../../src/meta/relics.js';
 import { RENTAL } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -66,7 +66,35 @@ const store = (val) => {
   check('equipped-but-unrented pruned from loadout', r.loadout.includes('sonar') && !r.loadout.includes('fins'));
 }
 
-// (rentRelic / tickEquippedRentals mechanics tests are appended in Task 2.)
+// --- rentRelic: spends cost + refills to full; insufficient salvage is a no-op. ---
+{
+  const cost = getRelic('sonar').cost;
+  const st = { salvage: cost + 5, rentals: {}, loadout: [], slots: 2 };
+  check('rentRelic succeeds with enough salvage', rentRelic(st, 'sonar') === true);
+  check('rentRelic charged the cost', st.salvage === 5);
+  check('rentRelic set full period', st.rentals.sonar === RENTAL.dives);
+  check('rentRelic broke = no-op false', rentRelic(st, 'lungs') === false && !('lungs' in st.rentals) && st.salvage === 5);
+  check('rentRelic unknown id = false', rentRelic(st, 'nope') === false);
+}
+
+// --- renew tops a running-low rental back to full. ---
+{
+  const cost = getRelic('fins').cost;
+  const st = { salvage: cost, rentals: { fins: 2 }, loadout: ['fins'], slots: 2 };
+  rentRelic(st, 'fins');
+  check('renew refills to full period', st.rentals.fins === RENTAL.dives);
+}
+
+// --- tick: equipped -1, unequipped frozen, lapse-at-0 removes + returns id. ---
+{
+  const st = { salvage: 0, rentals: { sonar: 2, fins: 5, barbs: 1 }, loadout: ['sonar', 'barbs'], slots: 3 };
+  const lapsed = tickEquippedRentals(st);
+  check('equipped sonar ticked', st.rentals.sonar === 1);
+  check('unequipped fins frozen', st.rentals.fins === 5);
+  check('barbs lapsed (1->0) removed from rentals', !('barbs' in st.rentals));
+  check('lapsed barbs removed from loadout', !st.loadout.includes('barbs'));
+  check('lapsed list returned', lapsed.length === 1 && lapsed[0] === 'barbs');
+}
 
 console.log(`rentals: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
