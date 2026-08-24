@@ -21,6 +21,19 @@ function geom(mod, host) {
 // pearl · gem · coin · shell · starfish · coral
 const TILE_COLORS = ['#eaf6ff', '#61dcff', '#ffcf5c', '#ff8f6b', '#ffe08a', '#b98cff'];
 
+// Top-right ✕ quit button (logical units). Single source of geometry, shared by
+// the draw + the pointer hit-test so touch users (no Esc key) can bail out.
+function quitRect(host) {
+  const { W } = host.viewport;
+  return { x: W - 44, y: 16, w: 28, h: 28 };
+}
+
+/** True if a logical point lands on the ✕ quit button. */
+export function backHitTest(mod, host, x, y) {
+  const q = quitRect(host);
+  return x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h;
+}
+
 /**
  * Map a logical playfield point to a board cell, or null if outside the grid.
  * @returns {{r:number,c:number}|null}
@@ -83,8 +96,16 @@ export function drawMatch3(ctx, mod, host) {
     text(ctx, `Collect ${TILE_NAMES[lv.targetTile]}: ${Math.min(mod.progress, lv.targetCount)}/${lv.targetCount}`, W / 2, y0 - 34, 18, PAL.gold, 'center', 'middle');
     text(ctx, `Moves ${mod.movesLeft}`, x0, y0 + cell * n + 30, 16, PAL.hudText, 'left', 'middle');
     text(ctx, `Score ${mod.score}`, x0 + cell * n, y0 + cell * n + 30, 16, PAL.hudText, 'right', 'middle');
-    text(ctx, host.input.isTouch ? 'Tap two tiles to swap · Esc/back to quit' : 'Arrows + Space to swap · Esc to quit', W / 2, H - 24, 12, '#9fc6e0', 'center', 'middle');
+    text(ctx, host.input.isTouch ? 'Tap two tiles to swap · ✕ to quit' : 'Arrows + Space to swap · Esc to quit', W / 2, H - 24, 12, '#9fc6e0', 'center', 'middle');
   }
+
+  // ✕ quit button (top-right) — a bail-out for touch, also clickable on desktop.
+  const q = quitRect(host);
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,30,50,0.8)'; ctx.strokeStyle = 'rgba(150,200,240,0.5)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(q.x, q.y, q.w, q.h, 6); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  text(ctx, '✕', q.x + q.w / 2, q.y + q.h / 2 + 1, 18, PAL.hudText, 'center', 'middle', true);
 
   // phase overlays (manual — chrome.overlay is a fixed 2-line banner)
   if (mod.phase === 'intro' && lv) {

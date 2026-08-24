@@ -435,10 +435,11 @@ export class Game {
     // #47 fix: on desktop these had no hit-rects, so only the keys worked).
     const screen = [];
     if (this.state === 'menu' || this.state === 'gameover') {
-      // Must match _menuButtons(): y=516, w=124, xs = cx-194 / cx-62 / cx+70.
-      screen.push({ id: 'help', x: W / 2 - 194, y: 516, w: 124, h: 34 });
-      screen.push({ id: 'drydock', x: W / 2 - 62, y: 516, w: 124, h: 34 });
-      screen.push({ id: 'badges', x: W / 2 + 70, y: 516, w: 124, h: 34 });
+      // Must match _menuButtons(): y=516, w=104, xs = cx-220 / cx-108 / cx+4 / cx+116.
+      screen.push({ id: 'help', x: W / 2 - 220, y: 516, w: 104, h: 34 });
+      screen.push({ id: 'drydock', x: W / 2 - 108, y: 516, w: 104, h: 34 });
+      screen.push({ id: 'badges', x: W / 2 + 4, y: 516, w: 104, h: 34 });
+      screen.push({ id: 'match3', x: W / 2 + 116, y: 516, w: 104, h: 34 });
       screen.push({ id: 'schemeNext', x: W / 2 - 150, y: 434, w: 320, h: 32 });
       if (availableSkips(this.meta).length) screen.push({ id: 'skipNext', x: W / 2 - 152, y: 358, w: 344, h: 28 });
     } else if (this.state === 'paused') {
@@ -587,14 +588,15 @@ export class Game {
   // game-over screens. Coordinates here MUST match the hit-rects registered in
   // _syncTouchButtons so both mouse and touch land on the same targets.
   _menuButtons(cx) {
-    const ctx = this.ctx, y = 516, w = 124, h = 34, gap = 8;
-    const xs = [cx - 194, cx - 62, cx + 70];   // help, drydock, badges
+    const ctx = this.ctx, y = 516, w = 104, h = 34;
+    const xs = [cx - 220, cx - 108, cx + 4, cx + 116];   // help, drydock, badges, match3
     ctx.save(); ctx.fillStyle = 'rgba(10,30,50,0.7)'; ctx.strokeStyle = 'rgba(150,200,240,0.4)'; ctx.lineWidth = 1;
     for (const x of xs) { ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill(); ctx.stroke(); }
     ctx.restore();
-    this._text('❔ HELP (H)', xs[0] + w / 2, y + h / 2, 13, PAL.hudText, 'center', 'middle', true);
-    this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 12, PAL.gold, 'center', 'middle', true);
-    this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 12, PAL.glow, 'center', 'middle', true);
+    this._text('❔ HELP (H)', xs[0] + w / 2, y + h / 2, 12, PAL.hudText, 'center', 'middle', true);
+    this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
+    this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 11, PAL.glow, 'center', 'middle', true);
+    this._text('⚓ SALVAGE MATCH (N)', xs[3] + w / 2, y + h / 2, 9, PAL.gold, 'center', 'middle', true);
   }
 
   _gameOverScreen() {
