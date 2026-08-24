@@ -47,17 +47,31 @@ export function makeMatch3({ host }) {
       this.anim = null; this.sel = null; this.cursor = { r: 0, c: 0 };
     },
 
-    // Attempt a swap; on success queue its resolution animation, spend a move,
-    // and fold cleared target-tiles into progress. Returns true if it matched.
+    // Deep-copy the tile grid so the renderer can replay the swap→pop animation
+    // while the engine (which resolves synchronously) already holds the settled
+    // result in this.board.
+    _snapshot() {
+      return this.board.tiles.map((row) => row.map((t) => (t ? { type: t.type, special: t.special, axis: t.axis } : null)));
+    },
+
+    // Attempt a swap; on success capture a short resolution animation, spend a
+    // move, and fold cleared target-tiles into progress. Returns true if it
+    // matched. The engine settles this.board immediately; `anim` drives a
+    // time-based replay (tiles slide together, then the matched run pops) and
+    // gates input until it finishes.
     trySwap(r1, c1, r2, c2) {
       if (this.phase !== 'play' || this.anim) return false;
       if (!legalSwap(this.board, r1, c1, r2, c2)) { host.audio.select && host.audio.select(); return false; }
+      const pre = this._snapshot();                         // grid BEFORE the swap
       const res = applySwap(this.board, r1, c1, r2, c2);
       if (!res.ok) return false;
       this.movesLeft -= 1;
       this.score += res.score;
       this.progress += res.cleared[this.level.targetTile] || 0;
-      this.anim = { steps: res.steps, i: 0, t: 0 };
+      // Pop the direct match (first clear pass); later cascades settle when the
+      // animation ends (kept out of scope so the effect stays snappy).
+      const firstClear = (res.steps.find((s) => s.kind === 'clear') || { cells: [] }).cells;
+      this.anim = { pre, a: [r1, c1], b: [r2, c2], clears: firstClear, t: 0, dur: 0.34 };
       host.audio.select && host.audio.select();
       return true;
     },
@@ -90,18 +104,21 @@ export function makeMatch3({ host }) {
 
     update(dt) {
       const input = host.input;
-      // Advance any running resolution animation (renderer reads anim.i / anim.t).
+      // Advance the resolution animation (a time-based replay; the renderer
+      // reads anim.t / anim.dur). Settle the board once it completes.
       if (this.anim) {
         this.anim.t += dt;
-        if (this.anim.t >= 0.14) { this.anim.t = 0; this.anim.i++; }
-        if (this.anim.i >= this.anim.steps.length) this._advance();
+        if (this.anim.t >= this.anim.dur) this._advance();
       }
-      // Phase transitions on confirm/back.
-      const confirm = input.pressed('confirm') || input.consumeButton('confirm') || input.pressed('match3');
+      // Read the confirm edge ONCE this frame — input.pressed() consumes the
+      // edge, so a second read would return false. Every phase (including the
+      // play-phase swap in _handlePlayInput) uses this single value.
+      const confirm = input.pressed('confirm') || input.consumeButton('confirm');
       const back = input.pressed('back') || input.consumeButton('back') || input.pressed('pause');
       if (back) { host.close(this.exit()); input.endFrame && input.endFrame(); return; }
-      if (this.phase === 'intro') { this.introT += dt; if (confirm || this.introT > 1.2) this.phase = 'play'; }
-      else if (this.phase === 'play') { this._handlePlayInput(input); }
+      // The launch key (N) also begins the intro, but must NOT count as a swap.
+      if (this.phase === 'intro') { this.introT += dt; if (confirm || input.pressed('match3') || this.introT > 1.2) this.phase = 'play'; }
+      else if (this.phase === 'play') { this._handlePlayInput(input, confirm); }
       else if (this.phase === 'won') { this.resultT += dt; if (confirm) this._loadLevel(this.levelIndex + 1); }
       else if (this.phase === 'lost') { this.resultT += dt; if (confirm) this._loadLevel(this.levelIndex); }
       input.endFrame && input.endFrame();
@@ -109,14 +126,16 @@ export function makeMatch3({ host }) {
 
     // Cursor + swap input (keyboard/gamepad); mouse/touch swaps are injected by
     // the renderer/host hit-testing calling trySwap directly (Task 8/9).
-    _handlePlayInput(input) {
+    // `confirm` is the confirm edge already read (once) by update(), passed in
+    // because input.pressed() consumes it and can't be read a second time.
+    _handlePlayInput(input, confirm) {
       if (this.anim) return;
       const move = (dr, dc) => { this.cursor.r = Math.max(0, Math.min(this.board.rows - 1, this.cursor.r + dr)); this.cursor.c = Math.max(0, Math.min(this.board.cols - 1, this.cursor.c + dc)); };
       if (input.pressed('up')) move(-1, 0);
       else if (input.pressed('down')) move(1, 0);
       else if (input.pressed('left')) move(0, -1);
       else if (input.pressed('right')) move(0, 1);
-      if (input.pressed('confirm') || input.consumeButton('confirm')) {
+      if (confirm) {
         if (!this.sel) this.sel = { r: this.cursor.r, c: this.cursor.c };
         else { this.trySwap(this.sel.r, this.sel.c, this.cursor.r, this.cursor.c); this.sel = null; }
       }
