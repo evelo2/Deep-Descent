@@ -90,6 +90,15 @@ export function oxygenMultiplier(reef, zone, inSub = false) {
   return m;
 }
 
+// Pure: the chance a reef offers a bonus-zone portal (temple/stage/abyss/whirl),
+// reef-gated so early reefs are mostly plain and deep reefs usually offer a detour.
+// Linear ramp from GAME.bonusZone.base at reef 1, +perReef each reef, capped.
+// Shared by _generateWorld's spawn roll + unit tests.
+export function bonusZoneChance(reef) {
+  const { base, perReef, cap } = GAME.bonusZone;
+  return Math.min(cap, base + perReef * Math.max(0, reef - 1));
+}
+
 // Poisson-ish thinning: shuffle `list`, keep points at least `minDist` apart, up
 // to `count`. Used across world generation to scatter entities without clumping.
 function spread(list, count, minDist) {
@@ -432,68 +441,65 @@ export class Reef {
       if (Array.isArray(spawned)) this.creatures.push(...spawned); else if (spawned) this.creatures.push(spawned);
     }
 
-    // At most one special encounter per reef, and only sometimes — so each dive
-    // feels different: a whale, a kraken, a temple gate, or just a plain reef.
-    this.templeGate = null;
-    if (Math.random() < 0.7) {
-      const pickOne = (arr) => arr[(Math.random() * arr.length) | 0];
+    const pickOne = (arr) => arr[(Math.random() * arr.length) | 0];
+
+    // Ambient combat encounter (a whale OR a kraken) — a flat, modest roll so
+    // even early reefs feel alive. Separate from the bonus-zone portals below.
+    {
       const roomy = C.chambers(OPEN_BAND + 500);
       const deep = C.chambers(WH * 0.5);
-      const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
-      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WH * 0.72);
       const options = [];
       if (roomy.length) options.push('whale');
       if (deep.length) options.push('kraken');
+      if (options.length && Math.random() < GAME.ambientEncounterChance) {
+        const pick = pickOne(options);
+        if (pick === 'whale') {
+          const s = pickOne(roomy); this.whales.push(new Whale(s.x, s.y - 10));
+        } else {
+          const den = pickOne(deep); this.krakens.push(new Kraken(den.x, den.y));
+          for (let k = 0; k < 6; k++) {
+            const gx = den.x + (Math.random() - 0.5) * 260, gy = den.y + (Math.random() - 0.5) * 200;
+            if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, Math.random() < 0.6 ? 'gem' : 'coin'));
+          }
+        }
+      }
+    }
+
+    // Bonus-zone portal (temple / stage / abyss / whirlpool) — reef-GATED so
+    // early reefs are mostly plain and deep reefs usually offer a detour, and AT
+    // MOST ONE per reef (previously three independent, non-gated rolls stacked ~1.7
+    // portals/reef from reef 1). Chance ramps with depth; see bonusZoneChance().
+    this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null;
+    if (Math.random() < bonusZoneChance(this.reef)) {
+      const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
+      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WH * 0.72);
+      const abyssDeep = C.floors(WH * ABYSS.entranceMinDepthFrac);
+      const whirlSpots = C.floors().filter((f) => f.y > WH * 0.55);
+      const options = [];
       if (gateFloors.length) options.push('temple');
       if (stageFloors.length) options.push('stage');
+      if (abyssDeep.length) options.push('abyss');
+      if (whirlSpots.length) options.push('whirl');
       const pick = options.length ? pickOne(options) : null;
-      if (pick === 'whale') {
-        const s = pickOne(roomy); this.whales.push(new Whale(s.x, s.y - 10));
-      } else if (pick === 'kraken') {
-        const den = pickOne(deep); this.krakens.push(new Kraken(den.x, den.y));
-        for (let k = 0; k < 6; k++) {
-          const gx = den.x + (Math.random() - 0.5) * 260, gy = den.y + (Math.random() - 0.5) * 200;
-          if (!C.isSolid(gx, gy)) this.treasures.push(new Treasure(gx, gy, Math.random() < 0.6 ? 'gem' : 'coin'));
-        }
-      } else if (pick === 'temple') {
+      if (pick === 'temple') {
         const gf = pickOne(gateFloors); this.templeGate = { x: gf.x, y: gf.y - 50, r: 46 };
       } else if (pick === 'stage') {
         const sf = pickOne(stageFloors);
         const theme = THEMES[(Math.random() * THEMES.length) | 0];
         this.stageEntrances.push(new StageEntrance(sf.x, sf.y - STAGE.entranceR, theme));
-      }
-    }
-
-    // The abyss entrance: an independent extra portal (like the stage
-    // entrances) that coexists with whatever special the reef rolled above —
-    // a deep trench off to the side, near the floor, gated by its own chance.
-    // A submarine resting on a DEEP floor is the entrance to The Deep — board it
-    // to pilot it down the dark trench. Placed in a guaranteed-OPEN spot clear of
-    // clams/chests, so it's never buried in a wall or on a biting shell.
-    this.abyssEntrance = null;
-    {
-      const deep = C.floors(WH * ABYSS.entranceMinDepthFrac);
-      if (deep.length && Math.random() < ABYSS.entranceChance) {
+      } else if (pick === 'abyss') {
+        // A submarine on a DEEP floor is the entrance to The Deep — placed in a
+        // guaranteed-OPEN spot clear of clams/chests so it's never buried.
         for (let tries = 0; tries < 40; tries++) {
-          const f = deep[(Math.random() * deep.length) | 0];
+          const f = abyssDeep[(Math.random() * abyssDeep.length) | 0];
           const spot = C.nearestOpen(f.x, f.y - 40) || { x: f.x, y: f.y - 40 };
           if (!C.isSolid(spot.x, spot.y) && this.shells.every((s) => Math.hypot(s.x - spot.x, s.y - spot.y) > s.radius + 74)) {
             this.abyssEntrance = { x: spot.x, y: spot.y, r: 46 };
             break;
           }
         }
-      }
-    }
-
-    // The whirlpool entrance: another independent extra portal, coexisting
-    // with the abyss/stage/temple specials rolled above — a swirling maw near
-    // the floor, gated by its own chance. Mirrors the abyss entrance roll.
-    this.whirlEntrance = null;
-    {
-      const floorSpots = C.floors().filter((f) => f.y > WH * 0.55);
-      if (floorSpots.length && Math.random() < WHIRL.entranceChance) {
-        const wf = floorSpots[(Math.random() * floorSpots.length) | 0];
-        this.whirlEntrance = { x: wf.x, y: wf.y - 50, r: 46 };
+      } else if (pick === 'whirl') {
+        const wf = pickOne(whirlSpots); this.whirlEntrance = { x: wf.x, y: wf.y - 50, r: 46 };
       }
     }
 
