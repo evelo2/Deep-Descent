@@ -26,9 +26,17 @@ export class Core {
     if (creditResult) this.creditResult = creditResult;
     /** @type {Map<string, import('./contract.js').MiniGame>} */
     this.registry = new Map();
-    /** @type {import('./contract.js').MiniGame|null} */
-    this.active = null;
+    /** @type {import('./contract.js').MiniGame[]} the mode stack; base = home */
+    this._stack = [];
+    /** @type {{op:'open',id:string}|{op:'close',result?:any}|null} */
+    this._pending = null;
   }
+
+  /** The active (top-of-stack) minigame, or null before boot. */
+  get active() { return this._stack[this._stack.length - 1] || null; }
+
+  /** The id of the active minigame, or null. */
+  activeId() { return this.active ? this.active.id : null; }
 
   /**
    * Credit a MiniGameResult to the shared spine, uniformly for every mode:
@@ -60,19 +68,46 @@ export class Core {
   boot(id) {
     const mg = this.registry.get(id);
     if (!mg) throw new Error(`Core.boot: no minigame registered as '${id}'`);
-    this.active = mg;
+    this._stack = [mg];
     mg.enter(this.host);
     return mg;
   }
 
+  /** Queue pushing minigame `id` onto the stack (applied next frame). */
+  open(id) { this._pending = { op: 'open', id }; }
+
+  /** Queue popping the top minigame, crediting `result` (applied next frame). */
+  close(result) { this._pending = { op: 'close', result }; }
+
+  /** Apply a queued open/close at the frame boundary. */
+  _applyPending() {
+    const p = this._pending;
+    if (!p) return;
+    this._pending = null;
+    if (p.op === 'open') {
+      const mg = this.registry.get(p.id);
+      if (!mg) throw new Error(`Core.open: no minigame registered as '${p.id}'`);
+      this._stack.push(mg);
+      mg.enter(this.host);
+    } else if (p.op === 'close') {
+      if (this._stack.length <= 1) return;          // never pop the base
+      const mg = this._stack.pop();
+      const result = mg.exit ? mg.exit() : p.result;
+      if (result) this.creditResult(result);
+    }
+  }
+
   /** Advance the active mode one frame. No-op before boot. */
   update(dt) {
-    if (this.active) this.active.update(dt);
+    this._applyPending();
+    const a = this.active;
+    if (a) a.update(dt);
   }
 
   /** Draw the active mode. No-op before boot. */
   render(ctx) {
-    if (this.active) this.active.render(ctx);
+    const a = this.active;
+    if (a) a.render(ctx);
   }
 
   /**

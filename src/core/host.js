@@ -16,13 +16,22 @@
  * @param {*} services.progression
  * @param {*} services.achievements
  * @param {*} [services.world]  Optional DiverWorld engine (opt-in capability).
+ * @param {*} [services.core]   Core back-reference, wired in after construction
+ *                              via host._bindCore(core) (see below).
  * @returns {import('./contract.js').Host}
  */
 export function makeHost({
   audio, input, particles, viewport, rng,
-  economy, progression, achievements, world,
+  economy, progression, achievements, world, core,
 }) {
-  const host = { audio, input, particles, viewport, rng, economy, progression, achievements };
+  const host = {
+    audio, input, particles, viewport, rng, economy, progression, achievements,
+    // Mode switching: minigames request open/close through the Host, never the
+    // Core directly (facade discipline). `core` is wired in after Core is built.
+    open: (id) => core && core.open(id),
+    close: (result) => core && core.close(result),
+  };
   if (world !== undefined) host.world = world;
+  host._bindCore = (c) => { core = c; };
   return host;
 }

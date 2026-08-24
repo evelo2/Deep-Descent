@@ -124,6 +124,15 @@ export class Input {
   hitButtonAt(clientX, clientY) { return this._hitButton(clientX, clientY); }
   pressButton(id) { this._btnHits.add(id); }
 
+  // Map a client (CSS-pixel) point to logical playfield units (WORLD.W×H space).
+  // Same transform as _hitButton — used by minigames that hit-test their own
+  // board (e.g. match-3 pointer swaps) instead of registering touch buttons.
+  toLogical(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return { x: 0, y: 0 };
+    return { x: (clientX - r.left) / r.width * WORLD.W, y: (clientY - r.top) / r.height * WORLD.H };
+  }
+
   _any(action) { return KEYMAP[action].some((c) => this.keys.has(c)); }
 
   // Poll the first connected gamepad. Called once per frame by the game.
