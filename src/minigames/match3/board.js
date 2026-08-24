@@ -107,3 +107,73 @@ export function makeBoard({ cols = 8, rows = 8, types = 6, rng = Math.random } =
   do { fillNoMatch(board); } while (!hasAnyMove(board) && guard++ < 50);
   return board;
 }
+
+/** Collapse each column downward into holes. Returns the moves for animation. */
+export function applyGravity(board) {
+  const moves = [];
+  const { rows, cols, tiles } = board;
+  for (let c = 0; c < cols; c++) {
+    let write = rows - 1;
+    for (let r = rows - 1; r >= 0; r--) {
+      if (tiles[r][c]) {
+        if (r !== write) { tiles[write][c] = tiles[r][c]; tiles[r][c] = null; moves.push({ from: [r, c], to: [write, c] }); }
+        write--;
+      }
+    }
+  }
+  return moves;
+}
+
+/** Spawn new random tiles into the remaining holes (top of each column). */
+export function refill(board) {
+  const spawns = [];
+  const { rows, cols, tiles } = board;
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      if (!tiles[r][c]) { const type = (board.rng() * board.types) | 0; tiles[r][c] = { type, special: null }; spawns.push({ at: [r, c], type }); }
+    }
+  }
+  return spawns;
+}
+
+/** Rearrange existing tiles into a legal, match-free board (dead-board recovery). */
+export function reshuffle(board) {
+  fillNoMatch(board);
+  let guard = 0;
+  while (!hasAnyMove(board) && guard++ < 50) fillNoMatch(board);
+}
+
+/** Swap two adjacent tiles and resolve to a stable board, returning ordered
+ * animation steps, per-type cleared counts, and a score. No-op (ok:false) when
+ * the swap makes no match. Specials are handled in a later pass (Task 4). */
+export function applySwap(board, r1, c1, r2, c2) {
+  if (!legalSwap(board, r1, c1, r2, c2)) return { ok: false, steps: [], cleared: {}, score: 0 };
+  const steps = [];
+  const cleared = {};
+  let score = 0;
+  swapCells(board, r1, c1, r2, c2);
+  steps.push({ kind: 'swap', a: [r1, c1], b: [r2, c2] });
+  let depth = 0;
+  while (true) {
+    const runs = findRuns(board);
+    if (!runs.length) break;
+    depth++;
+    const key = (r, c) => r * board.cols + c;
+    const set = new Set();
+    for (const run of runs) for (const [r, c] of run.cells) set.add(key(r, c));
+    // (special activation footprints expand `set` here in Task 4)
+    const cells = [];
+    const counts = {};
+    for (const k of set) {
+      const r = (k / board.cols) | 0, c = k % board.cols;
+      const t = board.tiles[r][c];
+      if (t) { cleared[t.type] = (cleared[t.type] || 0) + 1; counts[t.type] = (counts[t.type] || 0) + 1; cells.push([r, c]); board.tiles[r][c] = null; }
+    }
+    score += cells.length * 10 * depth;
+    steps.push({ kind: 'clear', cells, spawns: [], counts });   // spawns filled in Task 4
+    steps.push({ kind: 'fall', moves: applyGravity(board) });
+    steps.push({ kind: 'refill', spawns: refill(board) });
+  }
+  if (!hasAnyMove(board)) { reshuffle(board); steps.push({ kind: 'reshuffle' }); }
+  return { ok: true, steps, cleared, score };
+}
