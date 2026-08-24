@@ -68,6 +68,13 @@ export const GAME = {
   oxygenPenaltyCap: 8,
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
   exitAirRefillFrac: 0.5,    // leaving ANY special level tops up air by up to this fraction of the tank
+  // Ambient combat encounter (a whale OR a kraken) — a flat, modest roll so even
+  // early reefs feel alive without piling on bonus-zone portals.
+  ambientEncounterChance: 0.35,
+  // Bonus-zone portals (temple / stage / abyss / whirlpool) are reef-GATED: rare
+  // early, ramping with depth, and AT MOST ONE per reef. Chance of a portal
+  // appearing = min(cap, base + perReef * (reef - 1)). See bonusZoneChance().
+  bonusZone: { base: 0.02, perReef: 0.07, cap: 0.60 },
 };
 
 // 2D cave system. A grid is carved by "miner" agents into tunnels, drop-offs
