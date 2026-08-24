@@ -304,15 +304,17 @@ export class Game {
       ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill(); ctx.stroke();
       if (row.kind === 'relic') {
         const rented = row.dives > 0;
-        const label = `${rented ? '' : '🔒 '}${row.name} — ${row.desc}`;
+        // Clip the name+desc so it never runs into the right-aligned rent/equip text.
+        let label = `${rented ? '' : '🔒 '}${row.name} — ${row.desc}`;
+        if (label.length > 52) label = label.slice(0, 51) + '…';
         this._text(label, r.x + 16, cy, 14, rented ? PAL.hudText : 'rgba(180,200,215,0.7)', 'left', 'middle', sel);
         if (rented) {
           // remaining dives (warn-tinted when low) + an equip chip on the right
           const low = row.dives <= 3;
-          this._text(`${row.dives}d`, r.x + r.w - 96, cy, 13, low ? PAL.danger : '#9fc6e0', 'right', 'middle', true);
-          this._text(row.equipped ? '[✓]' : '[equip]', r.x + r.w - 16, cy, 13, row.equipped ? PAL.gold : '#9fc6e0', 'right', 'middle', true);
+          this._text(`${row.dives}d`, r.x + r.w - 92, cy, 13, low ? PAL.danger : '#9fc6e0', 'right', 'middle', true);
+          this._text(row.equipped ? '✓ equipped' : 'equip', r.x + r.w - 16, cy, 13, row.equipped ? PAL.gold : '#9fc6e0', 'right', 'middle', true);
         } else {
-          this._text(`RENT ${RENTAL.dives}d · ⚙${row.cost}`, r.x + r.w - 16, cy, 13, afford ? PAL.gold : '#c88', 'right', 'middle', true);
+          this._text(`RENT ⚙${row.cost}`, r.x + r.w - 16, cy, 13, afford ? PAL.gold : '#c88', 'right', 'middle', true);
         }
       } else {
         this._text(row.label, r.x + 16, cy, 15, afford ? PAL.hudText : 'rgba(210,130,130,0.85)', 'left', 'middle', sel);
