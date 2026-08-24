@@ -1,3 +1,4 @@
+// @ts-check
 // Core — the platform shell. It owns the roster of MiniGames, the active-mode
 // pointer, the per-frame delegation (update/render), and the result→credit flow
 // when a mode exits. It holds NO gameplay: modes implement the MiniGame

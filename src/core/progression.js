@@ -1,3 +1,4 @@
+// @ts-check
 // Progression — the Core-owned achievement/stats spine, promoted from
 // meta/badges.js + meta/stats.js + meta/progressive.js. A THIN service: it loads
 // the three states once (through the existing storage-injectable meta modules, so
