@@ -1,6 +1,6 @@
 // Game orchestration: state machine, 2D world generation, 2D camera, collisions,
 // air/score/lives economy, and the HUD. Rendered onto a fixed logical canvas.
-import { WORLD, AIR, PAL } from './config.js';
+import { WORLD, AIR, PAL, RENTAL } from './config.js';
 import { Harpoon } from './entities/harpoon.js';
 import { Net } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
@@ -10,7 +10,7 @@ import { loadSalvage, saveSalvage, availableSkips, skipStartGold } from './meta/
 import { BADGES, BADGE_BY_ID, loadBadges, rankFor } from './meta/badges.js';
 import { loadStats } from './meta/stats.js';
 import { TRACKS, loadProgress, trackProgress } from './meta/progressive.js';
-import { RELICS } from './meta/relics.js';
+import { RELICS, getRelic, rentRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
@@ -198,8 +198,12 @@ export class Game {
     if (startEdge) this._dryDockAct();
     if (this.input.pressed('up')) this._dryDockMove(-1);
     if (this.input.pressed('down')) this._dryDockMove(1);
+    if (this.input.pressed('left') || this.input.pressed('right')) this._dryDockEquipToggle();
     const rows = this._dryDockRows();
-    for (let i = 0; i < rows.length; i++) if (this.input.consumeButton('dd' + i)) { this.ddSel = i; this._dryDockAct(); break; }
+    for (let i = 0; i < rows.length; i++) {
+      if (this.input.consumeButton('dd' + i)) { this.ddSel = i; this._dryDockAct(); break; }
+      if (this.input.consumeButton('ddeq' + i)) { this.ddSel = i; this._dryDockEquipToggle(); break; }
+    }
     this.ddDeny = Math.max(0, this.ddDeny - dt);
   }
 
@@ -208,6 +212,9 @@ export class Game {
 
   // Format a seconds count as m:ss (for long consumable-buff timers).
   _mmss(secs) { const s = Math.max(0, Math.ceil(secs)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+  // Doubling cost per level (loadout-slot pricing). (Also lives in the reef for the
+  // shop; a tiny pure helper duplicated on the shell — P7 dedup candidate.)
+  _dblCost(base, level) { return Math.round(base * Math.pow(2, level)); }
 
 
 
@@ -217,11 +224,8 @@ export class Game {
   _dryDockRows() {
     const rows = [];
     for (const r of RELICS) {
-      if (this.meta.unlocked.includes(r.id)) {
-        rows.push({ kind: 'relic', id: r.id, label: `${r.name} — ${r.desc}`, cost: 0, equipped: this.meta.loadout.includes(r.id) });
-      } else {
-        rows.push({ kind: 'buy', id: r.id, label: `🔒 ${r.name} — ${r.desc}`, cost: r.cost });
-      }
+      const dives = this.meta.rentals[r.id] || 0;
+      rows.push({ kind: 'relic', id: r.id, name: r.name, desc: r.desc, cost: r.cost, dives, equipped: this.meta.loadout.includes(r.id) });
     }
     if (this.meta.slots < SALVAGE.maxSlots) {
       rows.push({ kind: 'slot', id: 'slot', label: `➕ Loadout slot (${this.meta.slots} → ${this.meta.slots + 1})`, cost: this._dblCost(SALVAGE.slotCostBase, this.meta.slots - SALVAGE.startSlots) });
@@ -246,28 +250,41 @@ export class Game {
   _closeBadges() { this.state = this.bdReturn || 'menu'; this.audio.select(); }
   _dryDockMove(dir) { const n = this._dryDockRows().length; this.ddSel = (this.ddSel + dir + n) % n; this.audio.pickup(); }
 
+  // Confirm on a Dry Dock row = rent/renew a relic (spend cost, refill to a full
+  // period) or buy a loadout slot. A first rent of an idle relic auto-equips it if
+  // a slot is free, so the common case is one press. Equip/bench is ← / → (see
+  // _dryDockEquipToggle).
   _dryDockAct() {
     const rows = this._dryDockRows();
     const row = rows[this.ddSel]; if (!row) return;
     if (row.kind === 'close') { this._closeDryDock(); return; }
-    if (row.kind === 'buy') {
-      if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
-      this.meta.salvage -= row.cost; this.meta.unlocked.push(row.id); saveSalvage(this.meta); this.audio.bank();
-    } else if (row.kind === 'slot') {
+    if (row.kind === 'slot') {
       if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
       this.meta.salvage -= row.cost; this.meta.slots += 1; saveSalvage(this.meta); this.audio.bank();
     } else if (row.kind === 'relic') {
-      if (row.equipped) {
-        this.meta.loadout = this.meta.loadout.filter((id) => id !== row.id);
-      } else if (this.meta.loadout.length < this.meta.slots) {
+      const wasRented = (this.meta.rentals[row.id] || 0) > 0;
+      if (!rentRelic(this.meta, row.id)) { this.ddDeny = 0.6; this.audio.gasp(); return; }
+      // First rent of an idle relic auto-equips if a slot is free (one-press flow).
+      if (!wasRented && !this.meta.loadout.includes(row.id) && this.meta.loadout.length < this.meta.slots) {
         this.meta.loadout.push(row.id);
-      } else {
-        this.ddDeny = 0.6; this.audio.gasp(); return;   // loadout full
       }
-      saveSalvage(this.meta); this.audio.pickup();
+      saveSalvage(this.meta); this.audio.bank();
     }
     const n = this._dryDockRows().length;
     if (this.ddSel >= n) this.ddSel = n - 1;
+  }
+
+  // ← / → on a Dry Dock relic row = equip / bench (no cost). Needs an active
+  // rental and a free slot to equip.
+  _dryDockEquipToggle() {
+    const row = this._dryDockRows()[this.ddSel];
+    if (!row || row.kind !== 'relic') return;
+    if (row.equipped) {
+      this.meta.loadout = this.meta.loadout.filter((id) => id !== row.id);
+    } else if ((this.meta.rentals[row.id] || 0) > 0 && this.meta.loadout.length < this.meta.slots) {
+      this.meta.loadout.push(row.id);
+    } else { this.ddDeny = 0.6; this.audio.gasp(); return; }
+    saveSalvage(this.meta); this.audio.pickup();
   }
 
   _dryDockScreen() {
@@ -280,18 +297,29 @@ export class Game {
     if (this.ddSel >= rows.length) this.ddSel = rows.length - 1;
     rows.forEach((row, i) => {
       const r = this._ddRow(i), sel = i === this.ddSel;
-      const afford = row.kind === 'close' || row.kind === 'relic' || this.meta.salvage >= row.cost;
+      const cy = r.y + r.h / 2;
+      const afford = row.kind === 'relic' ? this.meta.salvage >= row.cost : (row.kind === 'close' || this.meta.salvage >= row.cost);
       ctx.fillStyle = sel ? 'rgba(30,84,124,0.92)' : 'rgba(8,26,44,0.82)';
       ctx.strokeStyle = sel ? PAL.gold : 'rgba(120,200,255,0.22)'; ctx.lineWidth = sel ? 2 : 1;
       ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill(); ctx.stroke();
-      this._text(row.label, r.x + 16, r.y + r.h / 2, 15, afford ? PAL.hudText : 'rgba(210,130,130,0.85)', 'left', 'middle', sel);
-      if (row.kind === 'buy' || row.kind === 'slot') {
-        this._text(`⚙${row.cost}`, r.x + r.w - 16, r.y + r.h / 2, 14, afford ? PAL.gold : '#c88', 'right', 'middle', true);
-      } else if (row.kind === 'relic') {
-        this._text(row.equipped ? '[EQUIPPED]' : '[equip]', r.x + r.w - 16, r.y + r.h / 2, 13, row.equipped ? PAL.gold : '#9fc6e0', 'right', 'middle', true);
+      if (row.kind === 'relic') {
+        const rented = row.dives > 0;
+        const label = `${rented ? '' : '🔒 '}${row.name} — ${row.desc}`;
+        this._text(label, r.x + 16, cy, 14, rented ? PAL.hudText : 'rgba(180,200,215,0.7)', 'left', 'middle', sel);
+        if (rented) {
+          // remaining dives (warn-tinted when low) + an equip chip on the right
+          const low = row.dives <= 3;
+          this._text(`${row.dives}d`, r.x + r.w - 96, cy, 13, low ? PAL.danger : '#9fc6e0', 'right', 'middle', true);
+          this._text(row.equipped ? '[✓]' : '[equip]', r.x + r.w - 16, cy, 13, row.equipped ? PAL.gold : '#9fc6e0', 'right', 'middle', true);
+        } else {
+          this._text(`RENT ${RENTAL.dives}d · ⚙${row.cost}`, r.x + r.w - 16, cy, 13, afford ? PAL.gold : '#c88', 'right', 'middle', true);
+        }
+      } else {
+        this._text(row.label, r.x + 16, cy, 15, afford ? PAL.hudText : 'rgba(210,130,130,0.85)', 'left', 'middle', sel);
+        if (row.kind === 'slot') this._text(`⚙${row.cost}`, r.x + r.w - 16, cy, 14, afford ? PAL.gold : '#c88', 'right', 'middle', true);
       }
     });
-    const hint = this.input.isTouch ? 'Tap a row to unlock/equip · tap Close to leave' : '↑ / ↓ select   ·   Space / A buy/equip   ·   R / Esc close';
+    const hint = this.input.isTouch ? 'Tap a row to rent/renew · tap ✓ to equip · Close to leave' : '↑ / ↓ select   ·   Space / A rent/renew   ·   ← / → equip   ·   R / Esc close';
     this._text(hint, W / 2, this._ddRow(rows.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
   }
 
@@ -415,7 +443,11 @@ export class Game {
     }
     if (this.state === 'drydock') {
       const rows = this._dryDockRows();
-      rows.forEach((row, i) => { const r = this._ddRow(i); screen.push({ id: 'dd' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
+      rows.forEach((row, i) => {
+        const r = this._ddRow(i); screen.push({ id: 'dd' + i, x: r.x, y: r.y, w: r.w, h: r.h });
+        // A rented relic gets a small equip-chip touch target at its right edge.
+        if (row.kind === 'relic' && row.dives > 0) screen.push({ id: 'ddeq' + i, x: r.x + r.w - 70, y: r.y, w: 70, h: r.h });
+      });
     }
     if (this.state === 'help') {
       const r = this._helpRects(); screen.push(r.prev, r.next, r.close);
@@ -557,34 +589,42 @@ export class Game {
   _gameOverScreen() {
     const cx = W / 2;
     this._panel();
-    const title = this.won ? 'HAUL SECURED!' : this.deathCause === 'killed' ? 'YOU DIED' : 'OUT OF AIR';
-    this._text(title, cx, 220, 48, this.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
-    if (!this.won) {
-      const sub = this.deathCause === 'killed' ? 'The wildlife got you' : 'You ran out of air';
+    // Post-P6 the run summary lives on the reef MiniGame; the shell reads it back.
+    const s = (this._reef && this._reef.finalStats()) || {};
+    const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : 'OUT OF AIR';
+    this._text(title, cx, 220, 48, s.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
+    if (!s.won) {
+      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : 'You ran out of air';
       this._text(sub, cx, 256, 15, '#ff9a6b', 'center', 'middle');
     }
-    this._text(`SCORE ${this.score}`, cx, 290, 30, PAL.hudText, 'center', 'middle');
-    this._text(`DEEPEST ${Math.round(this.depthReached / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
-    if (this.newHi) this._text(`★ NEW BEST · REEF ${this.reef} ★`, cx, 360, 20, PAL.glow, 'center', 'middle', true);
+    this._text(`SCORE ${s.score || 0}`, cx, 290, 30, PAL.hudText, 'center', 'middle');
+    this._text(`DEEPEST ${Math.round((s.depthReached || 0) / 10)} m`, cx, 326, 16, '#bfe6ff', 'center', 'middle');
+    if (s.newHi) this._text(`★ NEW BEST · REEF ${s.reef} ★`, cx, 360, 20, PAL.glow, 'center', 'middle', true);
     else this._text(`BEST ${this.hi} · REEF ${this.hiReef}`, cx, 360, 16, '#bfe6ff', 'center', 'middle');
-    if (this.lastPayout != null) {
-      const pearlNote = this.blackPearlsBanked > 0 ? `  ·  ${this.blackPearlsBanked} pearl${this.blackPearlsBanked === 1 ? '' : 's'}` : '';
-      this._text(`⚙ SALVAGE +${this.lastPayout}  ·  ${this.meta.salvage} banked${pearlNote}`, cx, 394, 15, PAL.gold, 'center', 'middle');
+    if (s.lastPayout != null) {
+      const pearlNote = s.blackPearlsBanked > 0 ? `  ·  ${s.blackPearlsBanked} pearl${s.blackPearlsBanked === 1 ? '' : 's'}` : '';
+      this._text(`⚙ SALVAGE +${s.lastPayout}  ·  ${this.meta.salvage} banked${pearlNote}`, cx, 394, 15, PAL.gold, 'center', 'middle');
     }
     // New badges earned this run — a bright callout so the unlock lands.
     let cy = 420;
-    if (this.newBadges && this.newBadges.length) {
-      const glyphs = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].glyph).filter(Boolean).join(' ');
-      const names = this.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].name).filter(Boolean).join(', ');
-      this._text(`🎖 NEW BADGE${this.newBadges.length > 1 ? 'S' : ''}: ${glyphs}`, cx, cy, 17, PAL.glow, 'center', 'middle', true);
+    if (s.newBadges && s.newBadges.length) {
+      const glyphs = s.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].glyph).filter(Boolean).join(' ');
+      const names = s.newBadges.map((id) => BADGE_BY_ID[id] && BADGE_BY_ID[id].name).filter(Boolean).join(', ');
+      this._text(`🎖 NEW BADGE${s.newBadges.length > 1 ? 'S' : ''}: ${glyphs}`, cx, cy, 17, PAL.glow, 'center', 'middle', true);
       this._text(names, cx, cy + 20, 13, '#bfe6ff', 'center', 'middle');
       cy += 38;
     }
     // Progressive tiers crossed this run.
-    if (this.newTiers && this.newTiers.length) {
-      this._text(`⭐ ${this.newTiers.join('   ')}`, cx, cy, 14, PAL.gold, 'center', 'middle', true);
+    if (s.newTiers && s.newTiers.length) {
+      this._text(`⭐ ${s.newTiers.join('   ')}`, cx, cy, 14, PAL.gold, 'center', 'middle', true);
+      cy += 24;
     }
-    const blink = Math.floor(this.t * 2) % 2 === 0;
+    // Relic rentals that ran out this dive (auto-benched) — nudge to renew.
+    if (s.lapsedRentals && s.lapsedRentals.length) {
+      const names = s.lapsedRentals.map((id) => getRelic(id) && getRelic(id).name).filter(Boolean).join(', ');
+      this._text(`⚙ ${names} rental${s.lapsedRentals.length > 1 ? 's' : ''} expired`, cx, cy, 13, '#ff9a6b', 'center', 'middle');
+    }
+    const blink = Math.floor(((this._reef && this._reef.t) || 0) * 2) % 2 === 0;
     if (blink) this._text('PRESS SPACE / TAP TO DIVE AGAIN', cx, 470, 20, PAL.gold, 'center', 'middle', true);
     this._text(this.input.isTouch ? '🛠 DRY DOCK for relics  ·  🎖 BADGES for trophies' : 'R = DRY DOCK  ·  B = BADGES', cx, 500, 12, '#9fc6e0', 'center', 'middle');
     this._menuButtons(cx);

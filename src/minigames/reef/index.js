@@ -183,7 +183,8 @@ export class Reef {
       score: this.score, reef: this.reef, deathCause: this.deathCause,
       won: this.won, newHi: this.newHi, lastPayout: this.lastPayout,
       newBadges: this.newBadges, newTiers: this.newTiers, gold: this.gold,
-      lapsedRentals: this.lapsedRentals || [],
+      depthReached: this.depthReached, blackPearlsBanked: this.blackPearlsBanked,
+      t: this.t, lapsedRentals: this.lapsedRentals || [],
     };
   }
 
