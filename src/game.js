@@ -26,6 +26,7 @@ import { StageEntrance } from './entities/stageentrance.js';
 import { THEMES } from './stage/themes.js';   // reef-side: placing stage-entrance portals in _generateReef
 import { makeWhirlpool } from './minigames/whirlpool/index.js';
 import { makeStage } from './minigames/stage/index.js';
+import { makeReef } from './minigames/reef/index.js';
 import { STAGE } from './config.js';
 import { loadSalvage, saveSalvage, runPayout, bankReefRelic, consumeReefRelic, availableSkips, skipStartGold } from './meta/salvage.js';
 import { BADGES, BADGE_BY_ID, loadBadges, saveBadges, awardBadges, rankFor } from './meta/badges.js';
@@ -210,6 +211,30 @@ export class Game {
     } : null;
     this._whirl = (world && services) ? makeWhirlpool({ host: mgHost, reef: this._whirlReef() }) : null;
     this._stage = world ? makeStage({ host: mgHost, reef: this._stageReef() }) : null;
+    // The reef itself as a MiniGame (Phase 6). Built only with the engine + the
+    // meta spine (it credits the run at game-over). It OWNS the run-state; the
+    // shell reaches into it via `this._reef.*` and hands it the `shell` facade for
+    // the few shell-owned things it reads (state/controlScheme/hi). Not wired into
+    // update/draw yet — Task 2 ports the dive loop in and flips delegation.
+    this._reef = (world && services)
+      ? makeReef({ host: mgHost, shell: this._reefShell(), ctx: this.ctx, bg: this.bg })
+      : null;
+  }
+
+  // The shell-owned surface the reef MiniGame reaches back for (Phase 6): the
+  // top-level `state` (the reef sets it on dive transitions — gameover/shop/sail),
+  // the `controlScheme` for HUD hints, and the persisted best-record `hi`/`hiReef`
+  // (the menu displays them; the reef updates them at game-over and the shell owns
+  // the persistence keys). Getters/setters route to this Game.
+  _reefShell() {
+    const g = this;
+    return {
+      get state() { return g.state; }, set state(v) { g.state = v; },
+      get controlScheme() { return g.controlScheme; },
+      get hi() { return g.hi; }, set hi(v) { g.hi = v; },
+      get hiReef() { return g.hiReef; }, set hiReef(v) { g.hiReef = v; },
+      saveHi: () => { localStorage.setItem(HI_KEY, g.hi); localStorage.setItem(HI_REEF_KEY, g.hiReef); },
+    };
   }
 
   // The reef-owned surface the Stage MiniGame still touches while the reef is the
