@@ -465,6 +465,23 @@ real Game, then browser-verify + commit + `--no-ff` merge). Bump `platform-p5`.
 
 ## Phase 6 — Extract the reef (absorbing the cave-reusing zones) as the main MiniGame
 
+**✅ SHIPPED (BUILD=platform-p6).** The reef dive loop + its three cave-reusing
+zones (abyss+mini-sub, temple, whale belly) + the extraction timer + the nested
+whirlpool/stage moved into `src/minigames/reef/index.js` (`makeReef`/`class Reef`).
+The reef OWNS the run-state and runs the whole state machine (update/render/onAction
+moved verbatim); `game.js` shrank 3224→713 lines to a Core shell that forwards
+update/draw/onAction to the reef and keeps only menu/help/Trophy-Wall/dry-dock +
+control schemes + chrome, reached back via a `shell` facade + three `_update*`
+helpers. Nested-module facades (`_whirlReef`/`_stageReef`) reparented onto the reef.
+Design/plan: `docs/superpowers/specs/2026-08-23-reef-minigame-extraction-p6-design.md`
++ `docs/superpowers/plans/2026-08-23-reef-minigame-extraction-p6.md`. Suite 64 green
+(`tests/minigames/reef.test.mjs` + `reef-seam.test.mjs`; ~15 dive stub tests
+re-pointed to `Reef.prototype`; world-seam updated for the P6 boundary). Browser-
+verified platform-p6: menu/dive/HUD/minimap/shop render + live sim, zero console
+errors. Salvage stays byte-identical (`reef.meta === host.economy.state`); the
+`economy.earn` cleanup for the abyss bonus was DEFERRED (the wallet is already the
+shared object, so it was cosmetic — a P7 nicety).
+
 **Aim:** The core reef loop becomes `minigames/reef/` implementing `MiniGame`.
 `game.js` is reduced to (or replaced by) the **Core shell** — menu, router,
 services — holding no gameplay. This is the payoff: the god-object is gone. **The
