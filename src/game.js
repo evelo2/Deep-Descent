@@ -6,6 +6,7 @@ import { Net } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
 import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE } from './config.js';
 import { makeReef } from './minigames/reef/index.js';
+import { text, panel, overlay, keycap, mmss } from './render/chrome.js';
 import { loadSalvage, saveSalvage, availableSkips, skipStartGold } from './meta/salvage.js';
 import { BADGES, BADGE_BY_ID, loadBadges, rankFor } from './meta/badges.js';
 import { loadStats } from './meta/stats.js';
@@ -82,16 +83,19 @@ export class Game {
     this.ctx = ctx; this.input = input; this.audio = audio;
     this.particles = particles; this.bg = background;
     this.state = 'menu';                 // menu | playing | paused | gameover
-    // DiverWorld engine seam (Phase 3, slice 1): when the platform hands us the
-    // engine, the diver/camera/air are OWNED by it — install instance accessors
-    // so every `this.diver`/`this.camX`/`this.air` line below stays byte-identical
-    // yet reads/writes engine state (host.world). This MUST run before the first
-    // such assignment (this.camX just below). Bare construction (no world) keeps
-    // plain own fields, exactly as before. Instance-level (not prototype) so the
-    // many prototype-call stub tests, which never `new Game`, are untouched.
+    // DiverWorld engine seam (Phase 3, slice 1): the diver/camera live in the
+    // engine (host.world). Since P6 the reef MiniGame owns the dive loop + its own
+    // world accessors, so the SHELL only needs the fields it still reads directly:
+    // `camX`/`camY` (main.js paints ambient bubbles at game.camX/Y) and `diver`
+    // (the shell's touch-button geometry hit-tests boat.contains(this.diver)). The
+    // `air`/`airMax` shims were dropped in P7 — nothing on the shell reads them
+    // (the reef reads air through its OWN accessors). These read/write host.world
+    // so the values stay the single engine-owned copy. Instance-level (not
+    // prototype) so the prototype-call stub tests, which never `new Game`, are
+    // untouched. Bare construction (no world) keeps plain own fields, as before.
     this._world = world;
     if (world) {
-      for (const key of ['diver', 'camX', 'camY', 'air', 'airMax']) {
+      for (const key of ['diver', 'camX', 'camY']) {
         Object.defineProperty(this, key, {
           get() { return this._world[key]; },
           set(v) { this._world[key] = v; },
@@ -211,7 +215,7 @@ export class Game {
 
 
   // Format a seconds count as m:ss (for long consumable-buff timers).
-  _mmss(secs) { const s = Math.max(0, Math.ceil(secs)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+  _mmss(secs) { return mmss(secs); }
   // Doubling cost per level (loadout-slot pricing). (Also lives in the reef for the
   // shop; a tiny pure helper duplicated on the shell — P7 dedup candidate.)
   _dblCost(base, level) { return Math.round(base * Math.pow(2, level)); }
@@ -394,31 +398,36 @@ export class Game {
     // SCREEN buttons draw their own chrome, so they live in `screen` below and
     // are added for hit-testing only (which is what makes them mouse-clickable).
     const gameplay = [];
-    if (this.input.isTouch) {
+    // Phase 6 moved the dive run-state (zone/boat/carried/weapons/…) into the reef
+    // MiniGame, so the in-play touch buttons read it off `this._reef`, not the shell
+    // (reading the shell here silently hid every gameplay button on touch — the P7
+    // fix). `this.diver` stays: it is world-shimmed and shell-resolvable.
+    const r = this._reef;
+    if (this.input.isTouch && r) {
       if (this.state === 'playing' || this.state === 'paused') {
         gameplay.push({ id: 'pause', x: 300, y: 8, w: 46, h: 34 });
         gameplay.push({ id: 'mute', x: 352, y: 8, w: 46, h: 34 });
       }
-      if (this.state === 'playing' && this.zone === 'reef' &&
-          this.boat.contains(this.diver) && this.canSail && this.carried === 0) {
+      if (this.state === 'playing' && r.zone === 'reef' &&
+          r.boat.contains(this.diver) && r.canSail && r.carried === 0) {
         gameplay.push({ id: 'sail', x: W / 2 - 90, y: H - 80, w: 180, h: 40 });
       }
       if (this.state === 'playing') {
         // Primary FIRE button — enlarged for thumb reach at the bottom-right,
         // left of the weapon/flare/torch column. Tap = shot, hold = aim.
         gameplay.push({ id: 'aim', x: W - 142, y: H - 96, w: 72, h: 64 });
-        if (this.weapons.length > 1) gameplay.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
-        if (this.flares > 0) gameplay.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
-        if (this.hasTorch) gameplay.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
+        if (r.weapons.length > 1) gameplay.push({ id: 'weapon', x: W - 66, y: H - 74, w: 52, h: 44 });
+        if (r.flares > 0) gameplay.push({ id: 'flare', x: W - 66, y: H - 124, w: 52, h: 44 });
+        if (r.hasTorch) gameplay.push({ id: 'torch', x: W - 66, y: H - 174, w: 52, h: 44 });
       }
-      if (this.state === 'playing' && this.zone === 'stage') {
+      if (this.state === 'playing' && r.zone === 'stage') {
         gameplay.push({ id: 'jump', x: W - 96, y: H - 84, w: 72, h: 56 });
       }
       // A SHOP button: at the boat once the hold is empty (auto-banked), or at a
       // dive bell any time (the shop offers banking there).
-      const onReef = this.state === 'playing' && this.zone === 'reef';
-      const atBoatEmpty = onReef && this.carried === 0 && this.boat.contains(this.diver);
-      const atAnyBell = onReef && this.bells.some((b) => b.contains(this.diver));
+      const onReef = this.state === 'playing' && r.zone === 'reef';
+      const atBoatEmpty = onReef && r.carried === 0 && r.boat.contains(this.diver);
+      const atAnyBell = onReef && r.bells.some((b) => b.contains(this.diver));
       if (atBoatEmpty || atAnyBell) gameplay.push({ id: 'shop', x: W / 2 - 60, y: H - 128, w: 120, h: 38 });
     }
 
@@ -721,35 +730,12 @@ export class Game {
     this._text(this.input.isTouch ? 'CLOSE' : 'CLOSE  (B)', cx, by + bh / 2, 14, PAL.hudText, 'center', 'middle', true);
   }
 
-  _overlay(title, sub) {
-    const cx = W / 2;
-    this._panel(0.4);
-    this._text(title, cx, H / 2 - 10, 44, PAL.hudText, 'center', 'middle', true);
-    this._text(sub, cx, H / 2 + 34, 16, '#bfe6ff', 'center', 'middle');
-  }
-
-  _panel(alpha = 0.55) {
-    const ctx = this.ctx;
-    ctx.fillStyle = `rgba(3,15,30,${alpha})`;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // Small keycap box with a letter, for control hints.
-  _keycap(label, x, y) {
-    const ctx = this.ctx, w = 15, h = 15;
-    ctx.save();
-    ctx.fillStyle = 'rgba(20,44,66,0.9)'; ctx.strokeStyle = 'rgba(150,200,240,0.6)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(x, y - h / 2, w, h, 3); ctx.fill(); ctx.stroke();
-    ctx.restore();
-    this._text(label, x + w / 2, y + 0.5, 9, PAL.hudText, 'center', 'middle', true);
-  }
-
+  // Canvas-chrome primitives now live in render/chrome.js (Phase 7 dedup) — these
+  // stay as thin forwarders so every this._text(...) call-site is byte-identical.
+  _overlay(title, sub) { overlay(this.ctx, title, sub); }
+  _panel(alpha = 0.55) { panel(this.ctx, alpha); }
+  _keycap(label, x, y) { keycap(this.ctx, label, x, y); }
   _text(str, x, y, size, color, align = 'left', base = 'alphabetic', bold = false) {
-    const ctx = this.ctx;
-    ctx.font = `${bold ? '800' : '600'} ${size}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-    ctx.textAlign = align; ctx.textBaseline = base;
-    if (bold) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8; }
-    ctx.fillStyle = color; ctx.fillText(str, x, y);
-    ctx.shadowBlur = 0;
+    text(this.ctx, str, x, y, size, color, align, base, bold);
   }
 }
