@@ -21,7 +21,7 @@ globalThis.document = {
   },
 };
 
-import { Game, oxygenMultiplier } from '../../src/game.js';
+import { Reef, oxygenMultiplier } from '../../src/minigames/reef/index.js';
 import { GAME, ABYSS } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -64,15 +64,15 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 {
   const s = {
     reef: 1, zone: 'abyss', cave: null,
-    // _generateAbyss calls a few other Game.prototype methods on `this`
+    // _generateAbyss calls a few other Reef.prototype methods on `this`
     // (currents, powerups, portal clearance) — bind the real ones so this
     // drives the actual generation logic, not a reimplementation of it.
-    _makeCurrents: Game.prototype._makeCurrents,
-    _makePowerups: Game.prototype._makePowerups,
-    _orientShells: Game.prototype._orientShells,
-    _clearCreaturesNearPortals: Game.prototype._clearCreaturesNearPortals,
+    _makeCurrents: Reef.prototype._makeCurrents,
+    _makePowerups: Reef.prototype._makePowerups,
+    _orientShells: Reef.prototype._orientShells,
+    _clearCreaturesNearPortals: Reef.prototype._clearCreaturesNearPortals,
   };
-  Game.prototype._generateAbyss.call(s);
+  Reef.prototype._generateAbyss.call(s);
   check('abyss exit hatches are placed', Array.isArray(s.abyssExits) && s.abyssExits.length > 0 && typeof s.abyssExits[0].x === 'number' && typeof s.abyssExits[0].bonus === 'number');
   check('the abyss seeds treasure', Array.isArray(s.treasures) && s.treasures.length > 0);
   const pearlCount = s.treasures.filter((t) => t.kind === 'blackpearl').length;

@@ -6,11 +6,11 @@
 // detonation ahead of the cooldown guard, gated by `_chargeLock` so a *held* fire
 // control can't throw-then-instantly-detonate at the diver's feet.
 //
-// We exercise the real Game.prototype.fire() against a minimal stub `this`, and
+// We exercise the real Reef.prototype.fire() against a minimal stub `this`, and
 // model the per-frame lock-clear that game.update() performs (drop the lock when
 // the fire control is not held). Run: node tests/game/charge-detonate.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 
 let passed = 0, failed = 0;
 function check(name, cond) {
@@ -21,7 +21,7 @@ function check(name, cond) {
 // A fresh charge-armed diver stub with just the fields fire()/_fireCharge touch.
 function makeStub() {
   return {
-    state: 'playing',
+    _shell: { state: 'playing' },   // fire() reads this._shell.state (post-P6)
     fireCd: 0,
     weapon: 'charge',
     weaponLevel: { charge: 1 },
@@ -35,10 +35,10 @@ function makeStub() {
     diver: { x: 100, y: 100, aimX: 1, aimY: 0 },
     audio: { fire() {}, gasp() {} },
     // fire() delegates the throw to _fireCharge — bind the real one.
-    _fireCharge: Game.prototype._fireCharge,
+    _fireCharge: Reef.prototype._fireCharge,
   };
 }
-const fire = Game.prototype.fire;
+const fire = Reef.prototype.fire;
 // Model the frame-loop lock release: the lock drops whenever fire isn't held.
 const releaseFire = (s) => { s._chargeLock = false; };
 

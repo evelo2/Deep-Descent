@@ -2,7 +2,7 @@
 // the escalating+capped extra-life thresholds, and the on-hit loot penalty.
 // Run: node tests/game/economy.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { GAME, GOLD, RELIC, BELL } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -29,27 +29,27 @@ check('second bonus life at 14000 (8000+6000)', livesAfter(14000, 3) === 5);
 check('lives cap at maxLives — no snowball', livesAfter(1_000_000, 3) === GAME.maxLives);
 check('cap holds even from a high start', livesAfter(1_000_000, 5) === 5);
 
-// --- On-hit loot penalty: driving the real Game.prototype._hit(). -------------
+// --- On-hit loot penalty: driving the real Reef.prototype._hit(). -------------
 function hitStub(carried, lives) {
   return {
     carried, lives, air: 100, state: 'playing', deathCause: null,
     flash: 0, shake: 0, puName: '', puCol: '', puT: 0,
     diver: { hit() {}, invuln: 0, y: 500 },
     audio: { hit() {}, bank() {}, gasp() {} },
-    _loseLife: Game.prototype._loseLife,
-    _gameOver: Game.prototype._gameOver,
+    _loseLife: Reef.prototype._loseLife,
+    _gameOver: Reef.prototype._gameOver,
   };
 }
 {
   const s = hitStub(1000, 3);
-  Game.prototype._hit.call(s);
+  Reef.prototype._hit.call(s);
   check('a hit drops ~30% of carried loot', s.carried === 700);
   check('a hit still costs a life', s.lives === 2);
   check('the loss is surfaced to the player', s.puName.includes('LOOT'));
 }
 {
   const s = hitStub(0, 3);
-  Game.prototype._hit.call(s);
+  Reef.prototype._hit.call(s);
   check('no penalty text when carrying nothing', s.carried === 0 && !s.puName.includes('LOOT'));
 }
 

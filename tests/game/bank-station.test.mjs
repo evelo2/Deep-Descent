@@ -1,18 +1,18 @@
 // Regression test: the banking DECISION. The boat banks a haul at full value;
 // a dive bell banks it at a depth-scaled discount (deeper bell = bigger cut) of
 // BOTH score and gold — so carrying a deep haul up to the boat is a real gamble
-// against the safe-but-lossy bell. Drives the real Game.prototype._bankLoot()
+// against the safe-but-lossy bell. Drives the real Reef.prototype._bankLoot()
 // and the pure bellBankRate() formula.
 // Run: node tests/game/bank-station.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { WORLD, BELL, GOLD, bellBankRate } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
 
-const bank = Game.prototype._bankLoot;
+const bank = Reef.prototype._bankLoot;
 
 function stub(carried, carryingRelic = false) {
   return {

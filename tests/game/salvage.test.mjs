@@ -5,7 +5,7 @@
 
 import { loadSalvage, saveSalvage, runPayout, defaultSalvage } from '../../src/meta/salvage.js';
 import { SALVAGE } from '../../src/config.js';
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -105,9 +105,11 @@ const store = (init = null) => {
 
 // --- _gameOver is idempotent: a same-frame double death awards Salvage once. --
 {
-  const gameOver = Game.prototype._gameOver;
+  const gameOver = Reef.prototype._gameOver;
   const stub = {
-    state: 'playing', score: 0, hi: 100, hiReef: 1,   // score<hi so no localStorage hi-write
+    // Post-P6 the reef reads/writes best-score via the shell facade.
+    _shell: { state: 'playing', hi: 100, hiReef: 1, saveHi() {} },   // score<hi so no hi-write
+    score: 0,
     reef: 3, bossesFelled: 1, relicsBanked: 0, blackPearlsBanked: 0,
     meta: { salvage: 0, unlocked: [], slots: 2, loadout: [] },
     lastPayout: null, newHi: false, audio: { gasp() {} },
@@ -122,7 +124,7 @@ const store = (init = null) => {
 
 // --- _bankLoot converts carried Black Pearls to Salvage immediately. -----------
 {
-  const bankLoot = Game.prototype._bankLoot;
+  const bankLoot = Reef.prototype._bankLoot;
   const stub = {
     carried: 0, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
     carryingRelic: false, relicBanked: false, relicsBanked: 0,
@@ -139,7 +141,7 @@ const store = (init = null) => {
 }
 {
   // Empty case: no pearls collected banks exactly as before — no Salvage change.
-  const bankLoot = Game.prototype._bankLoot;
+  const bankLoot = Reef.prototype._bankLoot;
   const stub = {
     carried: 100, score: 0, gold: 0, reefBanked: 0, bankPulse: 0,
     carryingRelic: false, relicBanked: false, relicsBanked: 0,

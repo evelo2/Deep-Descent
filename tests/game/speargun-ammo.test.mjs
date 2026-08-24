@@ -1,9 +1,9 @@
 // Regression test: the speargun now draws from limited ammo (start 20, max 100,
 // shop-only refills). fire() must gate on ammo and cap the burst by what's left;
-// each shot in the burst consumes one spear. Drives the real Game.prototype.fire().
+// each shot in the burst consumes one spear. Drives the real Reef.prototype.fire().
 // Run: node tests/game/speargun-ammo.test.mjs
 
-import { Game } from '../../src/game.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 import { SPEARGUN } from '../../src/config.js';
 
 let passed = 0, failed = 0;
@@ -11,7 +11,7 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 
 function makeStub(ammo, lvl = 1) {
   return {
-    state: 'playing', fireCd: 0,
+    _shell: { state: 'playing' }, fireCd: 0,   // fire() reads this._shell.state (post-P6)
     weapon: 'speargun', weaponLevel: { speargun: lvl },
     armedCharge: null,
     speargunAmmo: ammo, harpoonAmmo: 0, chargeAmmo: 0, shockBattery: 0,
@@ -19,7 +19,7 @@ function makeStub(ammo, lvl = 1) {
     audio: { fire() {}, gasp() {}, click() {} },
   };
 }
-const fire = Game.prototype.fire;
+const fire = Reef.prototype.fire;
 
 // --- Config invariants match the spec (start 20, +20 packs, cap 100). ---------
 check('startAmmo is 20', SPEARGUN.startAmmo === 20);
