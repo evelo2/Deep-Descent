@@ -33,6 +33,18 @@ export const TRACKS = [
     tiers: [1, 10, 40],        names: ['Monster Hunter I', 'Monster Hunter II', 'Monster Hunter III'] },
   { id: 'score',  stat: 'careerScore', glyph: '🏆', label: 'Point Chaser',   unit: '',
     tiers: [50000, 500000, 5000000], names: ['Point Chaser I', 'Point Chaser II', 'Point Chaser III'] },
+  { id: 'm3pearls', stat: 'm3Pearls', glyph: '🫧', label: 'Pearl Diver',   unit: '',
+    tiers: [100, 500, 2000], names: ['Pearl Diver I', 'Pearl Diver II', 'Pearl Diver III'] },
+  { id: 'm3gems',   stat: 'm3Gems',   glyph: '💎', label: 'Gem Cutter',    unit: '',
+    tiers: [100, 500, 2000], names: ['Gem Cutter I', 'Gem Cutter II', 'Gem Cutter III'] },
+  { id: 'm3coins',  stat: 'm3Coins',  glyph: '🪙', label: 'Coin Collector', unit: '',
+    tiers: [100, 500, 2000], names: ['Coin Collector I', 'Coin Collector II', 'Coin Collector III'] },
+  { id: 'm3boom',   stat: 'm3Explosions', glyph: '💥', label: 'Demolitionist', unit: '',
+    tiers: [25, 150, 600], names: ['Demolitionist I', 'Demolitionist II', 'Demolitionist III'] },
+  { id: 'chests',   stat: 'chestsOpened', glyph: '🧰', label: 'Treasure Hunter', unit: '',
+    tiers: [1, 10, 50], names: ['Treasure Hunter I', 'Treasure Hunter II', 'Treasure Hunter III'] },
+  { id: 'guardian', stat: 'guardiansFelled', glyph: '🐉', label: 'Leviathan Slayer', unit: '',
+    tiers: [1, 10, 50], names: ['Leviathan Slayer I', 'Leviathan Slayer II', 'Leviathan Slayer III'] },
 ];
 
 // Flattened tier id for a track + tier index (0-based).
