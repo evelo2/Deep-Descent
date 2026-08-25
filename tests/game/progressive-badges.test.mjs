@@ -14,10 +14,10 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 const fakeStore = () => { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); } }; };
 
 // --- Shape ---
-check('10 tracks', TRACKS.length === 10);
+check('16 tracks', TRACKS.length === 16);
 check('every track has exactly 3 tiers', TRACKS.every((t) => t.tiers.length === 3 && t.names.length === 3));
-check('30 flattened tier ids', PROGRESSIVE_IDS.length === 30);
-check('tier ids are unique', new Set(PROGRESSIVE_IDS).size === 30);
+check('48 flattened tier ids', PROGRESSIVE_IDS.length === 48);
+check('tier ids are unique', new Set(PROGRESSIVE_IDS).size === 48);
 check('every track binds a real stat key', TRACKS.every((t) => STAT_KEYS.includes(t.stat)));
 check('tiers ascend within each track', TRACKS.every((t) => t.tiers[0] < t.tiers[1] && t.tiers[1] < t.tiers[2]));
 check('tierId format', tierId(TRACKS[0], 0) === 'shark_1' && tierId(TRACKS[0], 2) === 'shark_3');
