@@ -1841,6 +1841,8 @@ export class Reef {
       pearlsBanked: this.blackPearlsBanked,
       bossesFelled: this.bossesFelled,
       careerScore: this.score,
+      chestsOpened: this.runChestsOpened,
+      guardiansFelled: this.runGuardiansFelled,
     };
   }
 
@@ -1850,6 +1852,7 @@ export class Reef {
       score: this.score, kills: this.kills, spawned: this.creaturesSpawned,
       bosses: this.bossesFelled, pearls: this.blackPearlsBanked,
       cleanSweep: this.didCleanSweep, tookDamage: this.tookDamage,
+      chestsOpened: this.runChestsOpened, guardiansFelled: this.runGuardiansFelled,
     };
   }
 
