@@ -64,6 +64,14 @@ export class Core {
     return this;
   }
 
+  /** Registered minigames' identity for the About screen: id, display name,
+   *  and version (falling back to the id / '—' when a minigame omits them). */
+  versions() {
+    return [...this.registry.values()].map((m) => ({
+      id: m.id, name: m.name || m.id, version: m.version || '—',
+    }));
+  }
+
   /** Activate a registered mode by id and hand it the Host via enter(). */
   boot(id) {
     const mg = this.registry.get(id);

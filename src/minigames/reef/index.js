@@ -1193,6 +1193,10 @@ export class Reef {
     if (this._shell.state === 'badges') { this._shell._updateBadges(startEdge); this.input.endFrame(); return; }
     if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('badges') || this.input.consumeButton('badges'))) { this._shell._openBadges(this._shell.state); this.input.endFrame(); return; }
 
+    // About / versions overlay: read-only, opened by the menu's corner link.
+    if (this._shell.state === 'about') { this._shell._updateAbout(startEdge); this.input.endFrame(); return; }
+    if (this._shell.state === 'menu' && this.input.consumeButton('about')) { this._shell._openAbout('menu'); this.input.endFrame(); return; }
+
     // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
     if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._shell._openDryDock(this._shell.state); this.input.endFrame(); return; }
 
@@ -2161,6 +2165,7 @@ export class Reef {
     if (this._shell.state === 'drydock') this._shell._dryDockScreen();
     if (this._shell.state === 'help') this._shell._helpScreen();
     if (this._shell.state === 'badges') this._shell._badgesScreen();
+    if (this._shell.state === 'about') this._shell._aboutScreen();
     if (this._shell.state === 'gameover') this._shell._gameOverScreen();
   }
 

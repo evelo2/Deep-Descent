@@ -17,6 +17,8 @@ import { drawMatch3 } from '../../render/match3.js';
 export function makeMatch3({ host }) {
   const mod = {
     id: 'match3',
+    name: 'Treasure Chest Madness',   // About-screen display name + version
+    version: '1.1.0',                 // 1.1: chest special + ambient + theme + gamepad
 
     // --- state (armed by enter/_loadLevel) ---
     phase: 'intro',            // 'intro' | 'play' | 'won' | 'lost'
