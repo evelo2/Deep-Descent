@@ -1,0 +1,38 @@
+name: Deploy to GitHub Pages
+
+# Static site (no build step) — deploy the repo as-is via the GitHub Actions
+# Pages pipeline. Replaces the legacy branch builder, which wedged (builds
+# stuck in "building" indefinitely). Triggers on push to main + manual dispatch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a new push supersede an in-flight deploy rather than queueing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'   # fully static; index.html + src/ served from the repo root
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
