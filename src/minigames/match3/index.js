@@ -26,6 +26,9 @@ export function makeMatch3({ host }) {
     progress: 0,               // count of target tiles collected this level
     movesLeft: 0,
     score: 0,
+    chestSalvage: 0,           // bonus salvage banked from chest detonations this level
+    lastPayout: 0,             // actual salvage credited on the most recent level clear
+    clock: 0,                  // free-running seconds — drives ambient side critters (all phases)
     introT: 0, resultT: 0,     // phase timers
     anim: null,                // active resolution animation (steps + cursor + t)
     cursor: { r: 0, c: 0 }, sel: null,   // keyboard/gamepad cursor + first-picked cell
@@ -33,6 +36,7 @@ export function makeMatch3({ host }) {
     enter() {
       this.levelIndex = 0;
       this._loadLevel(0);
+      host.audio.startMatchTheme && host.audio.startMatchTheme();   // looping treasure theme
     },
 
     _loadLevel(i) {
@@ -42,6 +46,7 @@ export function makeMatch3({ host }) {
       this.level = lv;
       this.board = makeBoard({ cols: 8, rows: 8, types: lv.tiles, rng: host.rng });
       this.progress = 0;
+      this.chestSalvage = 0;
       this.movesLeft = lv.moves;
       this.phase = 'intro';
       this.introT = 0; this.resultT = 0;
@@ -70,12 +75,19 @@ export function makeMatch3({ host }) {
       if (!res.ok) return false;
       this.movesLeft -= 1;
       this.score += res.score;
+      this.chestSalvage += (res.chests || 0) * 3;   // each chest banks a little bonus salvage
       const progressStart = this.progress;
       this.progress += res.cleared[this.level.targetTile] || 0;
       const tl = buildTimeline(pre, res.steps, this.level.targetTile, this.board.tiles);
       // Hold the animation until both the cascade beats AND the flyers finish.
       this.anim = { ...tl, t: 0, progressStart, dur: Math.max(tl.totalDur, tl.flyersEndT) };
       host.audio.select && host.audio.select();
+      // Match SFX: a chime when a special is created, a boom when one detonates,
+      // and a sparkle when a treasure chest pops.
+      const madeSpecial = res.steps.some((s) => s.kind === 'clear' && (s.spawns || []).some((sp) => sp.special));
+      if (madeSpecial) host.audio.specialSpawn && host.audio.specialSpawn();
+      if (res.blasts) host.audio.detonate && host.audio.detonate();
+      if (res.chests) host.audio.chestJingle && host.audio.chestJingle();
       return true;
     },
 
@@ -85,7 +97,9 @@ export function makeMatch3({ host }) {
       if (this.progress >= this.level.targetCount) {
         this.phase = 'won'; this.resultT = 0;
         const bonus = leftoverBonus(this.movesLeft);
-        host.economy.earn({ salvage: this.level.reward + bonus });   // per-level credit (banks on quit)
+        this.lastPayout = this.level.reward + bonus + this.chestSalvage;
+        host.economy.earn({ salvage: this.lastPayout });   // per-level credit (banks on quit)
+        host.audio.levelClear && host.audio.levelClear();
       } else if (this.movesLeft <= 0) {
         this.phase = 'lost'; this.resultT = 0;
       }
@@ -107,6 +121,7 @@ export function makeMatch3({ host }) {
 
     update(dt) {
       const input = host.input;
+      this.clock += dt;   // free-running; drives the ambient side critters every phase
       // Advance the resolution animation (a time-based replay; the renderer
       // reads anim.t / anim.dur). Settle the board once it completes.
       if (this.anim) {
@@ -146,7 +161,10 @@ export function makeMatch3({ host }) {
 
     render(ctx) { drawMatch3(ctx, this, host); },
 
-    exit() { return { outcome: this.phase === 'won' ? 'won' : 'bailed', credited: true }; },
+    exit() {
+      host.audio.stopMatchTheme && host.audio.stopMatchTheme();   // silence the looping theme on close
+      return { outcome: this.phase === 'won' ? 'won' : 'bailed', credited: true };
+    },
   };
   return mod;
 }

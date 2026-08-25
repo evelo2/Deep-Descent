@@ -136,9 +136,61 @@ function drawTile(ctx, cx, cy, cell, tile) {
   }
   ctx.restore();
 
-  // specials: line = horizontal bar, bomb = inner ring
-  if (tile.special === 'line') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke(); }
-  else if (tile.special === 'bomb') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.stroke(); }
+  if (tile.special) drawSpecialMarker(ctx, cx, cy, cell, r, tile);
+}
+
+// Overlay that marks a tile as a special. line = a glowing directional bar
+// (oriented by its axis), bomb = a spiked naval mine, chest = a golden treasure
+// chest. Drawn over the type icon so the tile keeps its colour identity.
+function drawSpecialMarker(ctx, cx, cy, cell, r, tile) {
+  ctx.save();
+  if (tile.special === 'line') {
+    const horiz = tile.axis !== 'col';                 // 'row'(default)→horizontal bar
+    ctx.shadowColor = '#8ff0ff'; ctx.shadowBlur = cell * 0.3;
+    ctx.strokeStyle = '#eaffff'; ctx.lineWidth = cell * 0.09; ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (horiz) { ctx.moveTo(cx - r * 1.05, cy); ctx.lineTo(cx + r * 1.05, cy); }
+    else { ctx.moveTo(cx, cy - r * 1.05); ctx.lineTo(cx, cy + r * 1.05); }
+    ctx.stroke();
+    // arrow heads to read as "clears a line"
+    ctx.lineWidth = cell * 0.05;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      if (horiz) { ctx.moveTo(cx + s * r * 1.05, cy); ctx.lineTo(cx + s * r * 0.7, cy - r * 0.3); ctx.moveTo(cx + s * r * 1.05, cy); ctx.lineTo(cx + s * r * 0.7, cy + r * 0.3); }
+      else { ctx.moveTo(cx, cy + s * r * 1.05); ctx.lineTo(cx - r * 0.3, cy + s * r * 0.7); ctx.moveTo(cx, cy + s * r * 1.05); ctx.lineTo(cx + r * 0.3, cy + s * r * 0.7); }
+      ctx.stroke();
+    }
+  } else if (tile.special === 'bomb') {
+    ctx.shadowColor = 'rgba(255,120,60,0.8)'; ctx.shadowBlur = cell * 0.25;
+    ctx.fillStyle = '#1c2733';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#39506a'; ctx.lineWidth = cell * 0.05; ctx.lineCap = 'round';
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r * 0.58, cy + Math.sin(a) * r * 0.58); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(255,220,180,0.9)';
+    ctx.beginPath(); ctx.arc(cx - r * 0.2, cy - r * 0.22, r * 0.14, 0, Math.PI * 2); ctx.fill();
+  } else if (tile.special === 'chest') {
+    // A golden treasure chest — the star of the show.
+    ctx.shadowColor = 'rgba(255,210,90,0.9)'; ctx.shadowBlur = cell * 0.35;
+    const w = r * 1.5, h = r * 1.15, x = cx - w / 2, y = cy - h * 0.35;
+    // body
+    ctx.fillStyle = '#7a4b1e';
+    ctx.beginPath(); ctx.roundRect(x, y, w, h * 0.75, cell * 0.04); ctx.fill();
+    // lid
+    ctx.fillStyle = '#8a5a26';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y - h * 0.05); ctx.quadraticCurveTo(cx, y - h * 0.5, x, y - h * 0.05); ctx.closePath(); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // gold bands + trim
+    ctx.strokeStyle = '#ffd25a'; ctx.lineWidth = cell * 0.045;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h * 0.75, cell * 0.04); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.stroke();
+    // lock
+    ctx.fillStyle = '#ffe08a';
+    ctx.beginPath(); ctx.arc(cx, y + h * 0.28, r * 0.16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a4b1e';
+    ctx.beginPath(); ctx.arc(cx, y + h * 0.28, r * 0.06, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 // A short expanding-ring sparkle for a popping non-target tile (k: 0→1).
@@ -161,6 +213,30 @@ function drawBurst(ctx, cx, cy, cell, k) {
   for (let i = 0; i < 6; i++) {
     const ang = (i / 6) * Math.PI * 2 + k * 0.6;
     const r0 = cell * (0.2 + 0.3 * k), r1 = cell * (0.35 + 0.62 * k);
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
+    ctx.lineTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// A big shockwave for a detonating special (bomb/chest). `big` widens it for a
+// chest's 5x5 blast. k: 0→1 progress.
+function drawDetonation(ctx, cx, cy, cell, k, big) {
+  ctx.save();
+  const reach = (big ? 2.4 : 1.5) * cell;
+  ctx.globalAlpha = Math.max(0, 1 - k);
+  // white-hot core flash early on
+  if (k < 0.4) { ctx.globalAlpha = (0.4 - k) * 2; ctx.fillStyle = '#fff7e0'; ctx.beginPath(); ctx.arc(cx, cy, cell * (0.3 + k), 0, Math.PI * 2); ctx.fill(); }
+  ctx.globalAlpha = Math.max(0, 1 - k);
+  ctx.strokeStyle = big ? '#ffd25a' : '#ff9a5a'; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.arc(cx, cy, reach * (0.25 + 0.75 * k), 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 2.5;
+  const shards = big ? 10 : 8;
+  for (let i = 0; i < shards; i++) {
+    const ang = (i / shards) * Math.PI * 2 + k;
+    const r0 = reach * (0.2 + 0.3 * k), r1 = reach * (0.4 + 0.7 * k);
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
     ctx.lineTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
@@ -209,6 +285,11 @@ function drawBeats(ctx, anim, mod, x0, y0, cell, n) {
       if (s > 0.05) drawTile(ctx, cx(cl.c), cy(cl.r), cell * s, G[cl.r][cl.c]);
       if (cl.target) drawBurst(ctx, cx(cl.c), cy(cl.r), cell, k);
       else drawSpark(ctx, cx(cl.c), cy(cl.r), cell, k);
+    }
+    // Detonating specials (bomb/chest) throw a big shockwave from their cell.
+    for (const cl of beat.clears) {
+      const sp = G[cl.r][cl.c] && G[cl.r][cl.c].special;
+      if (sp === 'bomb' || sp === 'chest') drawDetonation(ctx, cx(cl.c), cy(cl.r), cell, k, sp === 'chest');
     }
   } else if (beat.kind === 'fall') {
     const moving = new Set(beat.moves.map((m) => m.from[0] * n + m.from[1]));
@@ -259,6 +340,98 @@ function drawFlyers(ctx, anim, x0, y0, cell, tx, ty) {
   return { landed, lastLand };
 }
 
+// --- Ambient side life ------------------------------------------------------
+// Decorative critters that drift in the empty gutters beside the square board.
+// Pure canvas paths, no assets; motion is driven by mod.clock (free-running
+// seconds). Skipped when a gutter is too narrow (portrait / small screens).
+
+function drawOctopus(ctx, cx, cy, s, t) {
+  ctx.save();
+  // eight tentacles curling below the head
+  ctx.strokeStyle = '#9a6cff'; ctx.lineWidth = s * 0.15; ctx.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const bx = cx + (i - 3.5) * s * 0.14;
+    const ph = t * 2.2 + i * 0.7;
+    ctx.beginPath(); ctx.moveTo(bx, cy + s * 0.32);
+    for (let k = 1; k <= 4; k++) ctx.lineTo(bx + Math.sin(ph + k * 0.9) * s * 0.12 * k * 0.4, cy + s * 0.32 + k * s * 0.17);
+    ctx.stroke();
+  }
+  // head/mantle
+  const g = ctx.createRadialGradient(cx - s * 0.15, cy - s * 0.2, s * 0.1, cx, cy, s * 0.6);
+  g.addColorStop(0, '#d9bcff'); g.addColorStop(1, '#9a6cff');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.5, s * 0.56, 0, 0, Math.PI * 2); ctx.fill();
+  // eyes (blink on a slow cycle)
+  const blink = (Math.sin(t * 1.3) > 0.96) ? 0.02 : 0.13;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.ellipse(cx - s * 0.19, cy - s * 0.04, s * 0.13, s * blink * 1.0 + s * 0.02, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + s * 0.19, cy - s * 0.04, s * 0.13, s * blink * 1.0 + s * 0.02, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#22103a';
+  ctx.beginPath(); ctx.arc(cx - s * 0.16, cy - s * 0.02, s * 0.06, 0, Math.PI * 2);
+  ctx.arc(cx + s * 0.22, cy - s * 0.02, s * 0.06, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawFish(ctx, cx, cy, s, dir, col) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(dir, 1);
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(0, 0, s, s * 0.6, 0, 0, Math.PI * 2); ctx.fill();      // body
+  ctx.beginPath(); ctx.moveTo(-s * 0.8, 0); ctx.lineTo(-s * 1.5, -s * 0.6); ctx.lineTo(-s * 1.5, s * 0.6); ctx.closePath(); ctx.fill();   // tail
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(s * 0.45, -s * 0.12, s * 0.14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0a2030';
+  ctx.beginPath(); ctx.arc(s * 0.48, -s * 0.12, s * 0.06, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawKelp(ctx, x, baseY, h, t, phase) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(70,180,140,0.55)'; ctx.lineWidth = h * 0.06; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, baseY);
+  for (let k = 1; k <= 6; k++) { const yy = baseY - (h / 6) * k; ctx.lineTo(x + Math.sin(t * 1.5 + phase + k * 0.5) * h * 0.05 * k / 6 * 3, yy); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Draw one gutter column of ambient life. `withOcto` places the octopus here.
+function drawGutter(ctx, gx0, gx1, H, t, withOcto, seed) {
+  const gw = gx1 - gx0; if (gw < 46) return;
+  const cx = (gx0 + gx1) / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(gx0, 0, gw, H); ctx.clip();     // keep critters out of the board
+  // faint light rays
+  ctx.globalAlpha = 0.06; ctx.fillStyle = '#bfe6ff';
+  for (let i = 0; i < 3; i++) { const rx = gx0 + gw * (0.2 + 0.3 * i) + Math.sin(t * 0.2 + i) * 8; ctx.beginPath(); ctx.moveTo(rx, 0); ctx.lineTo(rx + 22, 0); ctx.lineTo(rx + 46, H); ctx.lineTo(rx + 8, H); ctx.closePath(); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  // kelp along the bottom
+  const kelpH = Math.min(H * 0.34, 150);
+  for (let i = 0; i < 3; i++) drawKelp(ctx, gx0 + gw * (0.25 + i * 0.28), H, kelpH * (0.7 + 0.3 * ((i + seed) % 2)), t, i + seed);
+  // rising bubbles
+  ctx.fillStyle = 'rgba(200,235,255,0.35)';
+  for (let i = 0; i < 6; i++) {
+    const bx = gx0 + gw * ((i * 0.37 + seed * 0.13) % 1);
+    const by = H - ((t * (18 + i * 5) + i * 120 + seed * 60) % (H + 40));
+    const br = 2 + (i % 3);
+    ctx.beginPath(); ctx.arc(bx + Math.sin(by * 0.03 + i) * 5, by, br, 0, Math.PI * 2); ctx.fill();
+  }
+  // a drifting fish
+  const fw = Math.max(0, gw + 60);
+  const fx = gx0 - 30 + ((t * 26 + seed * 200) % fw);
+  drawFish(ctx, fx, H * 0.32 + Math.sin(t + seed) * 14, Math.min(gw * 0.16, 16), 1, seed % 2 ? '#ff8f6b' : '#ffcf5c');
+  // octopus (one side only)
+  if (withOcto) drawOctopus(ctx, cx, H * 0.6 + Math.sin(t * 0.8) * 14, Math.min(gw * 0.42, 44), t);
+  ctx.restore();
+}
+
+function drawAmbient(ctx, mod, host, x0, cell, n) {
+  const { W, H } = host.viewport;
+  const t = mod.clock || 0;
+  const boardL = x0 - 12, boardR = x0 + cell * n + 12;
+  drawGutter(ctx, 8, boardL, H, t, true, 0);          // left gutter — octopus lives here
+  drawGutter(ctx, boardR, W - 8, H, t, false, 1);     // right gutter
+}
+
 // Rounded board backdrop (chrome.panel is a full-screen wash, so draw our own box).
 function boardPanel(ctx, x, y, w, h) {
   ctx.save();
@@ -277,6 +450,7 @@ export function drawMatch3(ctx, mod, host) {
 
   // opaque underwater backdrop (fully covers the paused legacy frame beneath)
   ctx.fillStyle = 'rgb(4,16,30)'; ctx.fillRect(0, 0, W, H);
+  drawAmbient(ctx, mod, host, x0, cell, n);            // octopus + fish + kelp in the side gutters
   boardPanel(ctx, x0 - 12, y0 - 12, cell * n + 24, cell * n + 24);
 
   // grid backing (checkerboard) — always drawn
@@ -308,7 +482,7 @@ export function drawMatch3(ctx, mod, host) {
 
   // HUD: title + objective + moves + score + hint
   if (lv) {
-    text(ctx, `SALVAGE MATCH — Level ${lv.id}`, W / 2, 40, 22, PAL.glow, 'center', 'middle', true);
+    text(ctx, `TREASURE CHEST MADNESS — Level ${lv.id}`, W / 2, 40, 22, PAL.glow, 'center', 'middle', true);
     // The objective counter grows + goes glow-coloured for a beat as each flyer lands.
     text(ctx, `Collect ${TILE_NAMES[lv.targetTile]}: ${displayed}/${lv.targetCount}`, counterX, counterY, 18 + 6 * pulse, pulse > 0 ? PAL.glow : PAL.gold, 'center', 'middle', pulse > 0.3);
     text(ctx, `Moves ${mod.movesLeft}`, x0, y0 + cell * n + 30, 16, PAL.hudText, 'left', 'middle');
@@ -333,7 +507,7 @@ export function drawMatch3(ctx, mod, host) {
   } else if (mod.phase === 'won' && lv) {
     panel(ctx, 0.6);
     text(ctx, 'LEVEL CLEARED', W / 2, H / 2 - 20, 40, PAL.gold, 'center', 'middle', true);
-    text(ctx, `⚙ SALVAGE +${lv.reward}  ·  ${host.economy.state.salvage} banked`, W / 2, H / 2 + 24, 18, PAL.gold, 'center', 'middle');
+    text(ctx, `⚙ SALVAGE +${mod.lastPayout || lv.reward}  ·  ${host.economy.state.salvage} banked`, W / 2, H / 2 + 24, 18, PAL.gold, 'center', 'middle');
     text(ctx, 'Space: next level', W / 2, H / 2 + 56, 14, '#9fc6e0', 'center', 'middle');
   } else if (mod.phase === 'lost') {
     panel(ctx, 0.6);

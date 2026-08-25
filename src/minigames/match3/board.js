@@ -3,7 +3,7 @@
 // injected rng, so the whole model is Node-unit-testable (like the Stage engine).
 // The renderer/module animate the discrete resolution steps this returns.
 
-/** @typedef {{ type:number, special:null|'line'|'bomb', axis?:'row'|'col' }} Tile */
+/** @typedef {{ type:number, special:null|'line'|'bomb'|'chest', axis?:'row'|'col' }} Tile */
 /** @typedef {{ cols:number, rows:number, types:number, rng:()=>number, tiles:(Tile|null)[][] }} Board */
 
 export function at(board, r, c) {
@@ -188,10 +188,12 @@ function localRng(seed) {
  * only, matching the spawning run's axis; `bomb` adds its 3x3 neighborhood.
  * Both expand the cleared set (chained cascades). */
 export function applySwap(board, r1, c1, r2, c2) {
-  if (!legalSwap(board, r1, c1, r2, c2)) return { ok: false, steps: [], cleared: {}, score: 0 };
+  if (!legalSwap(board, r1, c1, r2, c2)) return { ok: false, steps: [], cleared: {}, score: 0, chests: 0 };
   const steps = [];
   const cleared = {};
   let score = 0;
+  let chests = 0;   // chest specials that detonated (drives bonus salvage + jingle)
+  let blasts = 0;   // bomb OR chest detonations (drives the boom sound)
   swapCells(board, r1, c1, r2, c2);
   steps.push({ kind: 'swap', a: [r1, c1], b: [r2, c2] });
   let depth = 0;
@@ -237,20 +239,44 @@ export function applySwap(board, r1, c1, r2, c2) {
         if (t.axis === 'col') { for (let y = 0; y < board.rows; y++) set.add(key(y, c)); }
         else { for (let x = 0; x < board.cols; x++) set.add(key(r, x)); }
       } else if (t.special === 'bomb') {
+        blasts++;
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const rr = r + dy, cc = c + dx;
+          if (rr >= 0 && cc >= 0 && rr < board.rows && cc < board.cols) set.add(key(rr, cc));
+        }
+      } else if (t.special === 'chest') {
+        chests++; blasts++;   // bonus salvage + jingle in the module
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
           const rr = r + dy, cc = c + dx;
           if (rr >= 0 && cc >= 0 && rr < board.rows && cc < board.cols) set.add(key(rr, cc));
         }
       }
     }
 
-    // decide special spawns from runs of length ≥4 (before clearing)
+    // decide special spawns (before clearing).
     const spawns = [];
+    // Treasure Chest: any cell shared by a horizontal run and a vertical run
+    // (a T / L / + intersection). Collect each axis's cells, then intersect.
+    const rowCells = new Set(), colCells = new Set();
+    for (const run of runs) {
+      const s = run.axis === 'row' ? rowCells : colCells;
+      for (const [r, c] of run.cells) s.add(key(r, c));
+    }
+    const chestCells = new Set();
+    for (const k of rowCells) if (colCells.has(k)) chestCells.add(k);
+    for (const k of chestCells) {
+      const r = (k / board.cols) | 0, c = k % board.cols;
+      const t = board.tiles[r][c];
+      spawns.push({ at: [r, c], special: 'chest', type: t ? t.type : runs[0].type });
+    }
+    // Straight-line specials from runs of length ≥4 — but never on a cell a
+    // chest already claimed (the intersection); the chest wins that pivot.
     for (const run of runs) {
       if (run.len < 4) continue;
       const special = run.len >= 5 ? 'bomb' : 'line';
       // prefer a swapped cell on the first pass, else the run's middle
       let at = run.cells.find(([r, c]) => swapCellsSet.has(key(r, c))) || run.cells[Math.floor(run.cells.length / 2)];
+      if (chestCells.has(key(at[0], at[1]))) continue;
       spawns.push({ at, special, axis: run.axis, type: run.type });
     }
 
@@ -276,5 +302,6 @@ export function applySwap(board, r1, c1, r2, c2) {
     swapCellsSet.clear();   // only the first pass uses swap-cell preference
   }
   if (!hasAnyMove(board)) { reshuffle(board); steps.push({ kind: 'reshuffle' }); }
-  return { ok: true, steps, cleared, score };
+  score += chests * 200;   // treasure-chest detonation bonus
+  return { ok: true, steps, cleared, score, chests, blasts };
 }
