@@ -11,6 +11,8 @@
  *
  * @typedef {Object} MiniGame
  * @property {string} id                 Stable unique key used by Core.boot(id).
+ * @property {string} [name]             Player-facing display name (About screen).
+ * @property {string} [version]          Semver, bumped per-minigame (About screen).
  * @property {(host: Host) => void} enter Called once when the Core activates it;
  *                                        receives the Host facade (its only door
  *                                        to shared services).

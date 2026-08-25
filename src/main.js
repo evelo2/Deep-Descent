@@ -15,7 +15,7 @@ import { makeDiverWorld } from './core/world/index.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { makeMatch3 } from './minigames/match3/index.js';
 import { boardHitTest, backHitTest } from './render/match3.js';
-import { VERSION, BUILD } from './version.js';
+import { VERSION, BUILD, ENGINE_VERSION } from './version.js';
 
 // Boot banner — self-identifies the running build (also confirms which version
 // the browser actually loaded, e.g. after a deploy or a cache purge).
@@ -64,6 +64,10 @@ core.boot('legacy');
 // The live Game instance, for the input-event wiring below (input plumbing is
 // formalized in a later phase; the frame loop already runs through the Core).
 const game = legacy.game;
+
+// About-screen data: engine + app identity from version.js, minigame versions
+// enumerated from the Core registry (single source; auto-covers future games).
+game.aboutInfo = { engine: ENGINE_VERSION, app: VERSION, build: BUILD, games: core.versions() };
 
 // The visible logical viewport flexes to the screen aspect so the canvas FILLS
 // it (no letterbox bars) instead of sitting centred in a fixed 3:2 box — the

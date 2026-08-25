@@ -1,6 +1,7 @@
 // Game orchestration: state machine, 2D world generation, 2D camera, collisions,
 // air/score/lives economy, and the HUD. Rendered onto a fixed logical canvas.
 import { WORLD, AIR, PAL, RENTAL } from './config.js';
+import { VERSION } from './version.js';
 import { Harpoon } from './entities/harpoon.js';
 import { Net } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
@@ -185,6 +186,9 @@ export class Game {
       _badgesScreen: () => g._badgesScreen(),
       _dryDockScreen: () => g._dryDockScreen(),
       _gameOverScreen: () => g._gameOverScreen(),
+      _updateAbout: (startEdge) => g._updateAbout(startEdge),
+      _openAbout: (from) => g._openAbout(from),
+      _aboutScreen: () => g._aboutScreen(),
     };
   }
 
@@ -258,6 +262,15 @@ export class Game {
   // The Trophy Wall — a read-only grid of achievement badges (earned vs. locked).
   _openBadges(from) { this.bdReturn = from; this.bdPage = 0; this.state = 'badges'; this.audio.select(); }
   _closeBadges() { this.state = this.bdReturn || 'menu'; this.audio.select(); }
+
+  // About / versions overlay — same open/close/route pattern as Badges.
+  _openAbout(from) { this.aboutReturn = from; this.state = 'about'; this.audio.select(); }
+  _closeAbout() { this.state = this.aboutReturn || 'menu'; this.audio.select(); }
+  _updateAbout(startEdge) {
+    // Any confirm / back / tap closes it (read-only screen).
+    if (this.input.pressed('confirm') || this.input.pressed('back') || this.input.pressed('pause') ||
+        startEdge || this.input.consumeTapFire() || this.input.consumeButton('aboutclose')) this._closeAbout();
+  }
   _dryDockMove(dir) { const n = this._dryDockRows().length; this.ddSel = (this.ddSel + dir + n) % n; this.audio.pickup(); }
 
   // Confirm on a Dry Dock row = rent/renew a relic (spend cost, refill to a full
@@ -451,10 +464,12 @@ export class Game {
     } else if (this.state === 'paused') {
       screen.push({ id: 'help', x: W / 2 - 66, y: 516, w: 132, h: 34 });
     }
+    if (this.state === 'menu') screen.push(this._aboutLinkRect());   // corner "ⓘ version" link
     if (this.state === 'badges') {
       screen.push({ id: 'badgespage', x: W / 2 - 85, y: 520, w: 170, h: 26 });
       screen.push({ id: 'badgesclose', x: W / 2 - 85, y: 552, w: 170, h: 34 });
     }
+    if (this.state === 'about') screen.push({ id: 'aboutclose', x: 0, y: 0, w: W, h: H });   // tap anywhere closes
     if (this.state === 'shop' && this._reef) {
       const items = this._reef._shopItems();   // shop is reef-owned (P6)
       items.forEach((it, i) => { const r = this._reef._shopRow(i); screen.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
@@ -594,6 +609,10 @@ export class Game {
     // Help / Dry Dock / Badges buttons + prompt.
     this._menuButtons(cx);
     this._text(this.input.isTouch ? 'Tap 🛠 DRY DOCK for relics  ·  🎖 BADGES for trophies' : 'R = DRY DOCK (relics)  ·  B = BADGES (trophies)', cx, 505, 11, '#9fc6e0', 'center', 'middle');
+    // "ⓘ version" link, bottom-right corner → opens the About screen.
+    const al = this._aboutLinkRect();
+    const ver = (this.aboutInfo && this.aboutInfo.app) || VERSION;
+    this._text(`ⓘ v${ver} · about`, al.x + al.w, al.y + al.h / 2, 12, '#7fb0d0', 'right', 'middle');
   }
 
   // The shared three-button bar (Help / Dry Dock / Badges) on the menu and
@@ -609,6 +628,37 @@ export class Game {
     this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
     this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 11, PAL.glow, 'center', 'middle', true);
     this._text('💰 CHEST (N)', xs[3] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
+  }
+
+  // The small "ⓘ version" link in the menu's bottom-right corner. Single source
+  // of geometry, shared by the draw (_menu) and the hit-rect (_syncTouchButtons)
+  // so mouse + touch land on the same target.
+  _aboutLinkRect() { return { id: 'about', x: W - 150, y: H - 30, w: 140, h: 22 }; }
+
+  // Read-only About / versions overlay: engine (Core platform) + app/build, then
+  // every registered minigame's version (from Core.versions(), injected as
+  // this.aboutInfo in main.js). Opened by the corner link; any key/tap closes it.
+  _aboutScreen() {
+    const cx = W / 2;
+    this._panel(0.92);
+    const info = this.aboutInfo || { engine: '—', app: '—', build: '—', games: [] };
+    this._text('ⓘ ABOUT', cx, 78, 30, PAL.gold, 'center', 'middle', true);
+    this._text('DEEP DESCENT', cx, 120, 22, PAL.glow, 'center', 'middle', true);
+    this._text("a modern homage to Durell's SCUBA DIVE (1983)", cx, 146, 12, '#9fc6e0', 'center', 'middle');
+
+    let y = 196;
+    this._text('ENGINE', cx, y, 13, '#7fb0d0', 'center', 'middle', true); y += 24;
+    this._text(`Core Platform  v${info.engine}`, cx, y, 16, PAL.hudText, 'center', 'middle', true); y += 22;
+    this._text(`app v${info.app}   ·   build ${info.build}`, cx, y, 12, '#bfe6ff', 'center', 'middle'); y += 44;
+
+    this._text('MINIGAMES', cx, y, 13, '#7fb0d0', 'center', 'middle', true); y += 28;
+    for (const gm of info.games) {
+      this._text(gm.name, cx - 12, y, 15, PAL.gold, 'right', 'middle', true);
+      this._text(`v${gm.version}`, cx + 12, y, 15, PAL.hudText, 'left', 'middle');
+      y += 26;
+    }
+
+    this._text(this.input.isTouch ? 'Tap to close' : 'Space / Esc to close', cx, H - 40, 13, '#9fc6e0', 'center', 'middle');
   }
 
   _gameOverScreen() {

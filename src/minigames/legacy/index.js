@@ -45,6 +45,8 @@ export function createLegacyMiniGame({ ctx, input, audio, particles, background,
   const game = new Game(ctx, input, audio, particles, background, services, world, host);
   return {
     id: 'legacy',
+    name: 'Reef Dive',      // About-screen display name + version (Core.versions())
+    version: '1.0.0',
     game,
     enter(_host) { /* Game self-boots to the menu; nothing to do here. */ },
     update(dt) { game.update(dt); },
