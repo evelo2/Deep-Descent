@@ -34,11 +34,35 @@ export function makeMatch3({ host }) {
     introT: 0, resultT: 0,     // phase timers
     anim: null,                // active resolution animation (steps + cursor + t)
     cursor: { r: 0, c: 0 }, sel: null,   // keyboard/gamepad cursor + first-picked cell
+    guide: null,               // active first-time special-guide toast { special, t, dur }
+    guideQueue: [],            // pending guides (if several new specials land at once)
+    seenSpecials: null,        // Set of special ids the player has already been taught
 
     enter() {
       this.levelIndex = 0;
+      this.seenSpecials = this._loadSeenSpecials();
+      this.guide = null; this.guideQueue = [];
       this._loadLevel(0);
       host.audio.startMatchTheme && host.audio.startMatchTheme();   // looping treasure theme
+    },
+
+    // First-time special guides are remembered across sessions in localStorage
+    // (browser-only; guarded so headless/Node never throws).
+    _loadSeenSpecials() {
+      try { const s = JSON.parse(localStorage.getItem('tcm.specialsSeen') || '[]'); return new Set(Array.isArray(s) ? s : []); }
+      catch (e) { return new Set(); }
+    },
+    _persistSeenSpecials() {
+      try { localStorage.setItem('tcm.specialsSeen', JSON.stringify([...this.seenSpecials])); } catch (e) { /* private mode / no storage */ }
+    },
+    // Queue a guide toast for each special in `created` the player hasn't seen.
+    _queueSpecialGuides(created) {
+      let fresh = false;
+      for (const sp of created) {
+        if (this.seenSpecials.has(sp)) continue;
+        this.seenSpecials.add(sp); this.guideQueue.push(sp); fresh = true;
+      }
+      if (fresh) this._persistSeenSpecials();
     },
 
     _loadLevel(i) {
@@ -86,10 +110,13 @@ export function makeMatch3({ host }) {
       host.audio.select && host.audio.select();
       // Match SFX: a chime when a special is created, a boom when one detonates,
       // and a sparkle when a treasure chest pops.
-      const madeSpecial = res.steps.some((s) => s.kind === 'clear' && (s.spawns || []).some((sp) => sp.special));
-      if (madeSpecial) host.audio.specialSpawn && host.audio.specialSpawn();
+      const created = new Set();
+      for (const s of res.steps) if (s.kind === 'clear') for (const sp of (s.spawns || [])) if (sp.special) created.add(sp.special);
+      if (created.size) host.audio.specialSpawn && host.audio.specialSpawn();
       if (res.blasts) host.audio.detonate && host.audio.detonate();
       if (res.chests) host.audio.chestJingle && host.audio.chestJingle();
+      // First time a player makes each special, flash up a guide for what it does.
+      this._queueSpecialGuides(created);
       return true;
     },
 
@@ -130,6 +157,9 @@ export function makeMatch3({ host }) {
       // pressed()/consumeStart() below.
       input.poll && input.poll();
       this.clock += dt;   // free-running; drives the ambient side critters every phase
+      // Advance / dequeue the first-time special guide toast (non-blocking).
+      if (this.guide) { this.guide.t += dt; if (this.guide.t >= this.guide.dur) this.guide = null; }
+      if (!this.guide && this.guideQueue.length) this.guide = { special: this.guideQueue.shift(), t: 0, dur: 4.5 };
       // Advance the resolution animation (a time-based replay; the renderer
       // reads anim.t / anim.dur). Settle the board once it completes.
       if (this.anim) {

@@ -247,6 +247,36 @@ function drawDetonation(ctx, cx, cy, cell, k, big) {
 
 const easeOut = (k) => 1 - (1 - k) * (1 - k);
 
+// An animated backlit halo behind an objective (target-type) tile, so the
+// tiles that count toward the level goal glow and read at a glance. Additive
+// so it reads as light coming from behind the tile; breathes off mod.clock,
+// with a per-tile phase so the board shimmers rather than pulsing in lockstep.
+function drawTargetHalo(ctx, cx, cy, cell, clock, phase) {
+  const pulse = 0.5 + 0.5 * Math.sin(clock * 3 + phase);
+  const hr = cell * (0.5 + 0.14 * pulse);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(cx, cy, hr * 0.15, cx, cy, hr);
+  g.addColorStop(0, `rgba(255,240,175,${0.28 + 0.30 * pulse})`);
+  g.addColorStop(0.55, `rgba(255,214,110,${0.12 + 0.15 * pulse})`);
+  g.addColorStop(1, 'rgba(255,210,120,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Halo pass over a settled grid: one glow behind every tile whose type is the
+// level objective. `grid` is a tiles[][]; skips specials (they have their own
+// marker). Draw BEFORE the tiles so the glow sits behind them.
+function drawTargetHalos(ctx, grid, targetTile, x0, y0, cell, n, clock) {
+  if (targetTile == null || targetTile < 0) return;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const tl = grid[r][c];
+    if (tl && tl.type === targetTile && !tl.special)
+      drawTargetHalo(ctx, x0 + c * cell + cell / 2, y0 + r * cell + cell / 2, cell, clock, (r * 7 + c * 13) * 0.3);
+  }
+}
+
 // Replay the resolution beat-by-beat from the timeline (anim = buildTimeline()
 // output + a running clock `t`). Each beat draws its own `gridBefore` snapshot
 // with per-kind motion: the swap slides the pair together; a clear shrinks +
@@ -257,6 +287,7 @@ function drawBeats(ctx, anim, mod, x0, y0, cell, n) {
   const cx = (c) => x0 + c * cell + cell / 2, cy = (r) => y0 + r * cell + cell / 2;
   const t = anim.t;
   if (t >= anim.totalDur) {
+    if (mod.level) drawTargetHalos(ctx, mod.board.tiles, mod.level.targetTile, x0, y0, cell, n, mod.clock || 0);
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) drawTile(ctx, cx(c), cy(r), cell, mod.board.tiles[r][c]);
     return;
   }
@@ -345,30 +376,59 @@ function drawFlyers(ctx, anim, x0, y0, cell, tx, ty) {
 // Pure canvas paths, no assets; motion is driven by mod.clock (free-running
 // seconds). Skipped when a gutter is too narrow (portrait / small screens).
 
-function drawOctopus(ctx, cx, cy, s, t) {
+// A huge decorative KRAKEN anchored in the bottom-left corner, drawn like the
+// sea-monsters inked into the corners of antique treasure maps: faded teal
+// chart-ink, sprawling curling arms with suckers, gently swaying off the clock.
+// Semi-transparent + drawn behind the board panel, so it reads as a backdrop
+// motif rather than clutter. `S` scales the whole beast.
+function drawKraken(ctx, W, H, t) {
+  const S = Math.min(W * 0.85, H) * 0.7;         // huge — fills the corner
+  const ox = S * 0.14, oy = H - S * 0.12;         // body anchored into the corner
+  const ink = (a) => `rgba(150,205,215,${a})`;    // faded nautical-chart ink
   ctx.save();
-  // eight tentacles curling below the head
-  ctx.strokeStyle = '#9a6cff'; ctx.lineWidth = s * 0.15; ctx.lineCap = 'round';
-  for (let i = 0; i < 8; i++) {
-    const bx = cx + (i - 3.5) * s * 0.14;
-    const ph = t * 2.2 + i * 0.7;
-    ctx.beginPath(); ctx.moveTo(bx, cy + s * 0.32);
-    for (let k = 1; k <= 4; k++) ctx.lineTo(bx + Math.sin(ph + k * 0.9) * s * 0.12 * k * 0.4, cy + s * 0.32 + k * s * 0.17);
+  ctx.translate(ox, oy);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // Sprawling arms fanning up and to the right, toward the board.
+  const arms = 7;
+  for (let i = 0; i < arms; i++) {
+    const base = -Math.PI * 0.92 + (i / (arms - 1)) * Math.PI * 0.92;   // up-left → right
+    const len = S * (0.9 + 0.18 * ((i * 37) % 5) / 5);
+    const sway = Math.sin(t * 0.7 + i * 0.8) * 0.16;
+    let x = 0, y = -S * 0.18, ang = base + sway;
+    const pts = [[x, y]];
+    const segs = 11;
+    for (let k = 1; k <= segs; k++) {
+      const f = k / segs;
+      ang += (0.17 + sway * 0.25) * (0.6 + f);          // progressive curl
+      const step = (len / segs) * (1 - f * 0.4);
+      x += Math.cos(ang) * step; y += Math.sin(ang) * step;
+      pts.push([x, y]);
+    }
+    ctx.strokeStyle = ink(0.16); ctx.lineWidth = S * 0.055;
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
     ctx.stroke();
+    ctx.fillStyle = ink(0.22);
+    for (let k = 2; k < pts.length; k++) {
+      const rr = S * 0.02 * (1 - k / pts.length);
+      if (rr > 0.5) { ctx.beginPath(); ctx.arc(pts[k][0], pts[k][1], rr, 0, Math.PI * 2); ctx.fill(); }
+    }
   }
-  // head/mantle
-  const g = ctx.createRadialGradient(cx - s * 0.15, cy - s * 0.2, s * 0.1, cx, cy, s * 0.6);
-  g.addColorStop(0, '#d9bcff'); g.addColorStop(1, '#9a6cff');
+
+  // Mantle / head.
+  const g = ctx.createRadialGradient(-S * 0.06, -S * 0.28, S * 0.05, 0, -S * 0.18, S * 0.42);
+  g.addColorStop(0, 'rgba(150,205,215,0.24)'); g.addColorStop(1, 'rgba(150,205,215,0.05)');
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.5, s * 0.56, 0, 0, Math.PI * 2); ctx.fill();
-  // eyes (blink on a slow cycle)
-  const blink = (Math.sin(t * 1.3) > 0.96) ? 0.02 : 0.13;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.ellipse(cx - s * 0.19, cy - s * 0.04, s * 0.13, s * blink * 1.0 + s * 0.02, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + s * 0.19, cy - s * 0.04, s * 0.13, s * blink * 1.0 + s * 0.02, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#22103a';
-  ctx.beginPath(); ctx.arc(cx - s * 0.16, cy - s * 0.02, s * 0.06, 0, Math.PI * 2);
-  ctx.arc(cx + s * 0.22, cy - s * 0.02, s * 0.06, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, -S * 0.18, S * 0.3, S * 0.4, -0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = ink(0.2); ctx.lineWidth = S * 0.01;
+  ctx.beginPath(); ctx.ellipse(0, -S * 0.18, S * 0.3, S * 0.4, -0.16, 0, Math.PI * 2); ctx.stroke();
+
+  // Big map-monster eyes.
+  for (const sx of [-0.13, 0.15]) {
+    ctx.fillStyle = ink(0.3); ctx.beginPath(); ctx.arc(sx * S, -S * 0.26, S * 0.058, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(6,20,34,0.55)'; ctx.beginPath(); ctx.arc(sx * S + S * 0.012, -S * 0.26, S * 0.026, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -394,8 +454,8 @@ function drawKelp(ctx, x, baseY, h, t, phase) {
   ctx.restore();
 }
 
-// Draw one gutter column of ambient life. `withOcto` places the octopus here.
-function drawGutter(ctx, gx0, gx1, H, t, withOcto, seed) {
+// Draw one gutter column of ambient life (light rays, kelp, bubbles, a fish).
+function drawGutter(ctx, gx0, gx1, H, t, seed) {
   const gw = gx1 - gx0; if (gw < 46) return;
   const cx = (gx0 + gx1) / 2;
   ctx.save();
@@ -419,8 +479,6 @@ function drawGutter(ctx, gx0, gx1, H, t, withOcto, seed) {
   const fw = Math.max(0, gw + 60);
   const fx = gx0 - 30 + ((t * 26 + seed * 200) % fw);
   drawFish(ctx, fx, H * 0.32 + Math.sin(t + seed) * 14, Math.min(gw * 0.16, 16), 1, seed % 2 ? '#ff8f6b' : '#ffcf5c');
-  // octopus (one side only)
-  if (withOcto) drawOctopus(ctx, cx, H * 0.6 + Math.sin(t * 0.8) * 14, Math.min(gw * 0.42, 44), t);
   ctx.restore();
 }
 
@@ -428,8 +486,9 @@ function drawAmbient(ctx, mod, host, x0, cell, n) {
   const { W, H } = host.viewport;
   const t = mod.clock || 0;
   const boardL = x0 - 12, boardR = x0 + cell * n + 12;
-  drawGutter(ctx, 8, boardL, H, t, true, 0);          // left gutter — octopus lives here
-  drawGutter(ctx, boardR, W - 8, H, t, false, 1);     // right gutter
+  drawGutter(ctx, 8, boardL, H, t, 0);                // left gutter (fish/kelp/bubbles)
+  drawGutter(ctx, boardR, W - 8, H, t, 1);            // right gutter
+  drawKraken(ctx, W, H, t);                            // huge map-ink kraken, bottom-left corner
 }
 
 // Rounded board backdrop (chrome.panel is a full-screen wash, so draw our own box).
@@ -439,6 +498,35 @@ function boardPanel(ctx, x, y, w, h) {
   ctx.strokeStyle = 'rgba(150,200,240,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+// First-time-per-player explanation for each special. Shown once when a player
+// first creates that special (persisted in the module); ids match board.js.
+const SPECIAL_GUIDE = {
+  line:  { name: 'LINE BLAST',     desc: 'Clears its whole row or column.' },
+  bomb:  { name: 'SEA MINE',       desc: 'Detonates a 3×3 area.' },
+  chest: { name: 'TREASURE CHEST', desc: 'Blows a 5×5 hole — bonus salvage!' },
+};
+
+// A non-blocking banner that flashes up the first time a player makes a special:
+// its icon (drawn on a sample tile) + name + one-line description. Fades in/out
+// over mod.guide.t / dur.
+function drawSpecialGuide(ctx, mod, host) {
+  if (!mod.guide) return;
+  const info = SPECIAL_GUIDE[mod.guide.special];
+  if (!info) return;
+  const { W, H } = host.viewport;
+  const p = mod.guide.t / mod.guide.dur;
+  const a = Math.max(0, Math.min(1, Math.min(p * 6, (1 - p) * 6)));   // ease in + out
+  const bw = 440, bh = 92, bx = W / 2 - bw / 2, by = H / 2 - bh / 2 - 8;   // centred over the board
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(8,26,44,0.94)'; ctx.strokeStyle = PAL.gold; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 12); ctx.fill(); ctx.stroke();
+  drawTile(ctx, bx + 52, by + bh / 2, 64, { type: 0, special: mod.guide.special, axis: 'row' });
+  text(ctx, `NEW! ${info.name}`, bx + 98, by + 32, 19, PAL.gold, 'left', 'middle', true);
+  text(ctx, info.desc, bx + 98, by + 60, 14, PAL.hudText, 'left', 'middle');
   ctx.restore();
 }
 
@@ -470,6 +558,7 @@ export function drawMatch3(ctx, mod, host) {
       if (fl.lastLand >= 0) pulse = Math.max(0, 1 - (mod.anim.t - fl.lastLand) / 0.25);
     } else {
       displayed = Math.min(mod.progress, lv ? lv.targetCount : mod.progress);
+      if (lv) drawTargetHalos(ctx, mod.board.tiles, lv.targetTile, x0, y0, cell, n, mod.clock || 0);
       for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
         drawTile(ctx, x0 + c * cell + cell / 2, y0 + r * cell + cell / 2, cell, mod.board.tiles[r][c]);
       }
@@ -497,6 +586,9 @@ export function drawMatch3(ctx, mod, host) {
   ctx.beginPath(); ctx.roundRect(q.x, q.y, q.w, q.h, 6); ctx.fill(); ctx.stroke();
   ctx.restore();
   text(ctx, '✕', q.x + q.w / 2, q.y + q.h / 2 + 1, 18, PAL.hudText, 'center', 'middle', true);
+
+  // First-time special guide (non-blocking banner; on top of the board/HUD).
+  drawSpecialGuide(ctx, mod, host);
 
   // phase overlays (manual — chrome.overlay is a fixed 2-line banner)
   if (mod.phase === 'intro' && lv) {
