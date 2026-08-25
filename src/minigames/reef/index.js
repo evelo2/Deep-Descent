@@ -1454,6 +1454,10 @@ export class Reef {
     for (const ex of this.explosions) { ex.t += dt; ex.r += (ex.maxR - ex.r) * Math.min(1, dt * 12); }
     this.explosions = this.explosions.filter((e) => e.t < 0.4);
     for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
+    if (this.chestGuardian) {
+      this.chestGuardian.update(dt, this.t, this.diver, this.specialChest);
+      if (!this.chestGuardian.dead && this.chestGuardian.hp > 0 && this.diver.invuln <= 0 && this.chestGuardian.hits(this.diver)) this._hit();
+    }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
     for (const cr of this.crates) { cr.update(dt, this.t); if (this.zone === 'reef' && cr.reached(this.diver)) { cr.taken = true; this._openCrate(); } }
     // Relic objective — pick it up, carry it back to the boat to bank it.
@@ -1561,6 +1565,7 @@ export class Reef {
     this.charges = this.charges.filter((c) => !c.dead);
     this.bigBubbles = this.bigBubbles.filter((b) => !b.dead);
     this.krakens = this.krakens.filter((k) => !k.dead);
+    if (this.chestGuardian && this.chestGuardian.dead) this.chestGuardian = null;
     this.powerups = this.powerups.filter((p) => !p.taken);
     this.crates = this.crates.filter((c) => !c.taken);
 
@@ -1663,6 +1668,14 @@ export class Reef {
           break;
         }
       }
+      // Harpoon vs the chest guardian — chip it; killing it opens the chest.
+      const g = this.chestGuardian;
+      if (!h.dead && g && g.hp > 0 && g.harpoonHit(h)) {
+        h.dead = true; g.takeDamage(1);
+        this.score += KRAKEN.hitPoints;
+        const tip = h.tip(); this.particles.sparkle(tip.x, tip.y, PAL.krakenEye, 16); this.audio.kill();
+        if (g.hp === 0) this._openSpecialChest(g);
+      }
     }
     // Nets snare the first creature they touch (crowd control, not a kill).
     for (const n of this.nets) {
@@ -1710,6 +1723,21 @@ export class Reef {
         if (k.hp === 0) { this.score += KRAKEN.killBonus; this.particles.sparkle(k.x, k.y, PAL.gold, 40); this.audio.bank(); this.bossesFelled = (this.bossesFelled || 0) + 1; for (let n = 0; n < 6; n++) this.treasures.push(new Treasure(k.x + (Math.random() - 0.5) * 120, k.y + (Math.random() - 0.5) * 120, 'gem')); }
       }
     }
+    const eg = this.chestGuardian;
+    if (eg && eg.hp > 0 && Math.hypot(eg.x - ch.x, eg.y - ch.y) < R + eg.radius) {
+      eg.takeDamage(2); this.score += KRAKEN.hitPoints * 2;
+      if (eg.hp === 0) this._openSpecialChest(eg);
+    }
+  }
+
+  // The guardian just died — reward the kill and unseal the chest.
+  _openSpecialChest(g) {
+    this.score += GUARDIAN.killBonus;
+    this.shake = 16; this.flash = 0.6;
+    this.particles.sparkle(g.x, g.y, PAL.gold, 40); this.audio.bank();
+    this.runGuardiansFelled++;
+    if (this.specialChest) this.specialChest.opened = true;
+    this._enqueueToast('🗝 THE CHEST OPENS!', PAL.gold || PAL.key, 2.4);
   }
 
   _hit() {
