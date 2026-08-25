@@ -1518,6 +1518,15 @@ export class Reef {
       if (this.reentryT <= 0 && this.whirlEntrance && Math.hypot(d.x - this.whirlEntrance.x, d.y - this.whirlEntrance.y) < this.whirlEntrance.r + d.radius) {
         this._whirl.enter(/** @type {any} */ (this.whirlEntrance)); this.input.endFrame(); return;
       }
+      if (this.reentryT <= 0 && this.specialChest && this.specialChest.opened &&
+          Math.hypot(d.x - this.specialChest.x, d.y - this.specialChest.y) < this.specialChest.r + d.radius) {
+        this.runChestsOpened++;
+        this.specialChest = null;             // consume — no re-enter on return
+        this.chestGuardian = null;            // (already dead; belt-and-braces)
+        this.reentryT = 1.5;                  // grace after match-3 closes
+        this.host.open('match3', { source: 'chest' });
+        this.input.endFrame(); return;
+      }
     } else if (this.zone === 'belly' && this.whaleExit) {
       const e = this.whaleExit;
       if (Math.hypot(d.x - e.x, d.y - e.y) < e.r + d.radius) { this._exitWhale(); this.input.endFrame(); return; }
