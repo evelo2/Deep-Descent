@@ -123,6 +123,12 @@ export function makeMatch3({ host }) {
 
     update(dt) {
       const input = host.input;
+      // Poll the gamepad HERE: while match-3 is the active minigame the reef is
+      // paused and never runs its own input.poll(), so without this the pad is
+      // never read — A/confirm and the D-pad were dead on handhelds (ROG Ally),
+      // even though keyboard/touch (event-driven) worked. Must run before any
+      // pressed()/consumeStart() below.
+      input.poll && input.poll();
       this.clock += dt;   // free-running; drives the ambient side critters every phase
       // Advance the resolution animation (a time-based replay; the renderer
       // reads anim.t / anim.dur). Settle the board once it completes.
