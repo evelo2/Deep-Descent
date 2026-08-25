@@ -6,6 +6,7 @@
 // module drops into a nested reef special-level later. See docs/superpowers/specs.
 
 import { makeBoard, applySwap, legalSwap } from './board.js';
+import { buildTimeline } from './anim.js';
 import { getLevel, leftoverBonus } from './levels.js';
 import { drawMatch3 } from '../../render/match3.js';
 
@@ -54,11 +55,13 @@ export function makeMatch3({ host }) {
       return this.board.tiles.map((row) => row.map((t) => (t ? { type: t.type, special: t.special, axis: t.axis } : null)));
     },
 
-    // Attempt a swap; on success capture a short resolution animation, spend a
-    // move, and fold cleared target-tiles into progress. Returns true if it
-    // matched. The engine settles this.board immediately; `anim` drives a
-    // time-based replay (tiles slide together, then the matched run pops) and
-    // gates input until it finishes.
+    // Attempt a swap; on success build a full resolution timeline, spend a move,
+    // and fold cleared target-tiles into progress. Returns true if it matched.
+    // The engine settles this.board immediately; `anim` drives a time-based
+    // replay of EVERY cascade pass (swap → clear/burst → fall → refill) plus
+    // collect-flyers that arc into the HUD counter, and gates input until it
+    // finishes. `progressStart` lets the renderer count the objective up as the
+    // flyers land rather than snapping the moment the swap resolves.
     trySwap(r1, c1, r2, c2) {
       if (this.phase !== 'play' || this.anim) return false;
       if (!legalSwap(this.board, r1, c1, r2, c2)) { host.audio.select && host.audio.select(); return false; }
@@ -67,11 +70,11 @@ export function makeMatch3({ host }) {
       if (!res.ok) return false;
       this.movesLeft -= 1;
       this.score += res.score;
+      const progressStart = this.progress;
       this.progress += res.cleared[this.level.targetTile] || 0;
-      // Pop the direct match (first clear pass); later cascades settle when the
-      // animation ends (kept out of scope so the effect stays snappy).
-      const firstClear = (res.steps.find((s) => s.kind === 'clear') || { cells: [] }).cells;
-      this.anim = { pre, a: [r1, c1], b: [r2, c2], clears: firstClear, t: 0, dur: 0.34 };
+      const tl = buildTimeline(pre, res.steps, this.level.targetTile, this.board.tiles);
+      // Hold the animation until both the cascade beats AND the flyers finish.
+      this.anim = { ...tl, t: 0, progressStart, dur: Math.max(tl.totalDur, tl.flyersEndT) };
       host.audio.select && host.audio.select();
       return true;
     },
