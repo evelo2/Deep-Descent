@@ -2067,6 +2067,7 @@ export class Reef {
       if (this.cave) this.cave.draw(ctx, cx, cy);   // rock occludes actors inside walls
       for (const w of this.whales) w.draw(ctx, cx, cy, this.t);
       for (const k of this.krakens) k.draw(ctx, cx, cy, this.t);
+      this._drawSpecialChest(ctx, cx, cy);
       for (const b of this.bells) b.draw(ctx, cx, cy, this.t);
       for (const v of this.vents) v.draw(ctx, cx, cy, this.t);
       if (this.whaleExit) { ctx.save(); ctx.translate(this.whaleExit.x - cx, this.whaleExit.y - cy); drawThroat(ctx, this.t, this.whaleExit.r); ctx.restore(); }
@@ -2467,6 +2468,13 @@ export class Reef {
       ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(bx2, by2, bw2, 10, 5); ctx.fill();
       ctx.fillStyle = PAL.danger; ctx.beginPath(); ctx.roundRect(bx2, by2, Math.max(2, bw2 * (boss.hp / boss.maxHp)), 10, 5); ctx.fill();
     }
+    const gg = this.chestGuardian;
+    if (gg && gg.hp > 0 && gg.x > this.camX - 140 && gg.x < this.camX + W + 140 && gg.y > this.camY - 140 && gg.y < this.camY + H + 140) {
+      const bw3 = 300, bx3 = W / 2 - bw3 / 2, by3 = boss ? 76 : 56;   // sit below the kraken bar if both show
+      this._text('⚔ GUARDIAN', W / 2, by3 - 4, 12, PAL.gold || PAL.key, 'center', 'bottom', true);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(bx3, by3, bw3, 10, 5); ctx.fill();
+      ctx.fillStyle = PAL.gold || '#d9a441'; ctx.beginPath(); ctx.roundRect(bx3, by3, Math.max(2, bw3 * (gg.hp / gg.maxHp)), 10, 5); ctx.fill();
+    }
 
     this._minimap();
     if (this._shell._touchBtns) for (const b of this._shell._touchBtns) this._shell._touchBtn(b);
@@ -2502,6 +2510,40 @@ export class Reef {
     ctx.globalAlpha = alpha;
     this._text(WEAPON_INFO[this.weapon].name, cx, cy + chipH * 0.74, 13, PAL.air, 'center', 'middle', true);
     ctx.restore();
+  }
+
+  // Sealed → open ornate chest, with its guardian above it. cx/cy are camera offsets.
+  _drawSpecialChest(ctx, cx, cy) {
+    const ch = this.specialChest;
+    if (ch) {
+      const x = ch.x - cx, y = ch.y - cy, gold = PAL.gold || '#d9a441';
+      ctx.save();
+      // body
+      ctx.fillStyle = '#6b4a2b';   // dark wood
+      ctx.beginPath(); ctx.roundRect(x - 26, y - 12, 52, 30, 4); ctx.fill();
+      // gilt bands
+      ctx.strokeStyle = gold; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(x - 26, y - 12, 52, 30, 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y - 12); ctx.lineTo(x, y + 18); ctx.stroke();
+      if (ch.opened) {
+        // open lid + glow
+        const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 40);
+        glow.addColorStop(0, 'rgba(255,220,120,0.9)'); glow.addColorStop(1, 'rgba(255,220,120,0)');
+        ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y - 6, 40, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#6b4a2b'; ctx.beginPath(); ctx.roundRect(x - 26, y - 30, 52, 14, 4); ctx.fill();
+        ctx.strokeStyle = gold; ctx.beginPath(); ctx.roundRect(x - 26, y - 30, 52, 14, 4); ctx.stroke();
+        // ENTER prompt when the diver is near
+        const d = this.diver;
+        if (Math.hypot(d.x - ch.x, d.y - ch.y) < 90) this._text('⤓ ENTER', ch.x - cx, ch.y - 46 - cy, 14, gold, 'center', 'bottom', true);
+      } else {
+        // sealed lid + lock
+        ctx.fillStyle = '#5a3f24'; ctx.beginPath(); ctx.roundRect(x - 26, y - 24, 52, 14, 4); ctx.fill();
+        ctx.strokeStyle = gold; ctx.beginPath(); ctx.roundRect(x - 26, y - 24, 52, 14, 4); ctx.stroke();
+        ctx.fillStyle = gold; ctx.beginPath(); ctx.arc(x, y - 2, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (this.chestGuardian) this.chestGuardian.draw(ctx, cx, cy, this.t);
   }
 
   _puFlourish() {
