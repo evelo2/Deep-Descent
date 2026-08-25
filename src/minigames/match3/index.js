@@ -131,7 +131,11 @@ export function makeMatch3({ host }) {
       // Read the confirm edge ONCE this frame — input.pressed() consumes the
       // edge, so a second read would return false. Every phase (including the
       // play-phase swap in _handlePlayInput) uses this single value.
-      const confirm = input.pressed('confirm') || input.consumeButton('confirm');
+      // consumeStart() = the gamepad A/Start edge (handhelds: ROG Ally, Steam
+      // Deck). Without it, A did nothing here — no select, no swap, no advancing
+      // the win/lose screens. Start also raises the 'pause' edge, so `back` below
+      // still exits on Start; A (no pause edge) confirms.
+      const confirm = input.pressed('confirm') || input.consumeButton('confirm') || input.consumeStart();
       const back = input.pressed('back') || input.consumeButton('back') || input.pressed('pause');
       if (back) { host.close(this.exit()); input.endFrame && input.endFrame(); return; }
       // The launch key (N) also begins the intro, but must NOT count as a swap.
