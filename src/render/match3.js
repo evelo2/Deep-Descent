@@ -504,9 +504,9 @@ function boardPanel(ctx, x, y, w, h) {
 // First-time-per-player explanation for each special. Shown once when a player
 // first creates that special (persisted in the module); ids match board.js.
 const SPECIAL_GUIDE = {
-  line:  { name: 'LINE BLAST',     desc: 'Clears its whole row or column.' },
-  bomb:  { name: 'SEA MINE',       desc: 'Detonates a 3×3 area.' },
-  chest: { name: 'TREASURE CHEST', desc: 'Blows a 5×5 hole — bonus salvage!' },
+  line:  { name: 'LINE BLAST',     desc: 'Swap it anywhere to clear a full row or column.' },
+  bomb:  { name: 'SEA MINE',       desc: 'Swap it anywhere to blast a 3×3 area.' },
+  chest: { name: 'TREASURE CHEST', desc: 'Swap it anywhere to blow a 5×5 hole — bonus salvage!' },
 };
 
 // A non-blocking banner that flashes up the first time a player makes a special:
