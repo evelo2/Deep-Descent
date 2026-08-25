@@ -40,16 +40,18 @@ const { Input } = await import('../../src/input.js');
   padButtons = new Array(16).fill(0).map(() => ({ pressed: false }));
 }
 
-// 2) The match-3 module must treat a gamepad confirm (consumeStart) as confirm.
+// 2) The match-3 module must poll the gamepad itself (the reef is paused while
+//    match-3 is active) AND treat the gamepad confirm (consumeStart) as confirm.
+//    Modelled faithfully: the A-button edge only becomes readable AFTER poll()
+//    runs, so a module that forgets to poll can never see the confirm.
 {
   const { makeMatch3 } = await import('../../src/minigames/match3/index.js');
-  // Stub input: no keyboard/buttons; consumeStart() fires once (gamepad A).
-  let startEdge = false;
+  let polled = false, aHeld = true, padStart = false;
   const input = {
-    _p: new Set(),
+    poll() { polled = true; if (aHeld) padStart = true; },   // reef-style gamepad poll
     pressed() { return false; },
     consumeButton() { return false; },
-    consumeStart() { const s = startEdge; startEdge = false; return s; },
+    consumeStart() { const s = padStart; padStart = false; return s; },
     endFrame() {},
   };
   let seed = 1;
@@ -65,9 +67,9 @@ const { Input } = await import('../../src/input.js');
   mod.phase = 'play';                 // skip the intro
   mod.cursor = { r: 2, c: 3 };
   check(mod.sel === null, 'no cell selected before any confirm');
-  startEdge = true;                   // gamepad A pressed this frame
   mod.update(1 / 60);
-  check(mod.sel && mod.sel.r === 2 && mod.sel.c === 3, 'gamepad A (consumeStart) selects the cursor cell');
+  check(polled === true, 'match-3 polls the gamepad itself (reef is paused while it is active)');
+  check(mod.sel && mod.sel.r === 2 && mod.sel.c === 3, 'gamepad A (poll → consumeStart) selects the cursor cell');
 }
 
 console.log(`ok match3-gamepad.test.mjs (${pass} checks)`);
