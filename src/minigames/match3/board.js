@@ -67,14 +67,21 @@ export function wouldMatch(board, r1, c1, r2, c2) {
 }
 
 export function legalSwap(board, r1, c1, r2, c2) {
-  return adjacent(r1, c1, r2, c2) && wouldMatch(board, r1, c1, r2, c2);
+  if (!adjacent(r1, c1, r2, c2)) return false;
+  if (wouldMatch(board, r1, c1, r2, c2)) return true;
+  // Swap-to-activate: a special can be swapped with ANY adjacent tile to
+  // detonate it on demand, even when the swap makes no run.
+  const a = at(board, r1, c1), b = at(board, r2, c2);
+  return !!(a && a.special) || !!(b && b.special);
 }
 
-/** Any adjacent pair whose swap makes a match. */
+/** Any adjacent pair whose swap makes a match — OR any special on the board,
+ *  since a special can always be detonated by swapping it. */
 export function hasAnyMove(board) {
-  const { rows, cols } = board;
+  const { rows, cols, tiles } = board;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (tiles[r][c] && tiles[r][c].special) return true;
       if (c + 1 < cols && wouldMatch(board, r, c, r, c + 1)) return true;
       if (r + 1 < rows && wouldMatch(board, r, c, r + 1, c)) return true;
     }
@@ -178,6 +185,50 @@ function localRng(seed) {
   };
 }
 
+// --- swap-to-activate seeding ----------------------------------------------
+// Add every in-bounds cell within `rad` of (cr,cc) to `set` (a square blast).
+function blastRect(board, set, cr, cc, rad) {
+  for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++) {
+    const r = cr + dr, c = cc + dc;
+    if (r >= 0 && c >= 0 && r < board.rows && c < board.cols) set.add(r * board.cols + c);
+  }
+}
+// Add a cross of full rows/cols within `w` of (cr,cc) — w=0 is a thin cross,
+// w=1 a 3-wide "fat" cross.
+function blastCross(board, set, cr, cc, w) {
+  for (let d = -w; d <= w; d++) {
+    const rr = cr + d, cc2 = cc + d;
+    if (rr >= 0 && rr < board.rows) for (let c = 0; c < board.cols; c++) set.add(rr * board.cols + c);
+    if (cc2 >= 0 && cc2 < board.cols) for (let r = 0; r < board.rows; r++) set.add(r * board.cols + cc2);
+  }
+}
+/** Cells to force-clear on the first resolution pass when a special was just
+ *  swapped (reads the two cells POST-swap). A single special seeds its own cell
+ *  (the cascade's activation block expands it: line→row/col, bomb→3x3,
+ *  chest→5x5). Two specials swapped together seed an enhanced COMBO region,
+ *  centred on the landing cell (r2,c2): chest→7x7 giant, bomb+bomb→5x5,
+ *  line+bomb→fat cross, line+line→full cross. Their individual activations also
+ *  fire (union), so chest/bomb detonations stay counted. */
+function seedSwapActivation(board, r1, c1, r2, c2) {
+  const set = new Set();
+  const key = (r, c) => r * board.cols + c;
+  const a = board.tiles[r1][c1], b = board.tiles[r2][c2];
+  const aSp = a && a.special, bSp = b && b.special;
+  if (!aSp && !bSp) return set;
+  if (aSp && bSp) {
+    const kinds = new Set([a.special, b.special]);
+    if (kinds.has('chest')) blastRect(board, set, r2, c2, 3);                       // giant 7x7
+    else if (a.special === 'bomb' && b.special === 'bomb') blastRect(board, set, r2, c2, 2);   // 5x5
+    else if (kinds.has('bomb') && kinds.has('line')) blastCross(board, set, r2, c2, 1);        // fat cross
+    else { blastCross(board, set, r1, c1, 0); blastCross(board, set, r2, c2, 0); }             // line+line → full cross
+    set.add(key(r1, c1)); set.add(key(r2, c2));
+  } else {
+    if (aSp) set.add(key(r1, c1));
+    if (bSp) set.add(key(r2, c2));
+  }
+  return set;
+}
+
 /** Swap two adjacent tiles and resolve to a stable board, returning ordered
  * animation steps, per-type cleared counts, and a score. No-op (ok:false) when
  * the swap makes no match. A run of len>=4 spawns a `line` special, len>=5
@@ -198,9 +249,13 @@ export function applySwap(board, r1, c1, r2, c2) {
   steps.push({ kind: 'swap', a: [r1, c1], b: [r2, c2] });
   let depth = 0;
   const swapCellsSet = new Set([r1 * board.cols + c1, r2 * board.cols + c2]);
+  // Swap-to-activate: cells the swapped special(s) detonate on the first pass,
+  // even when the swap made no run. Consumed once (pass 1), then null.
+  let pending = seedSwapActivation(board, r1, c1, r2, c2);
   while (true) {
     const runs = findRuns(board);
-    if (!runs.length) break;
+    const inject = pending; pending = null;
+    if (!runs.length && !(inject && inject.size)) break;
     if (depth >= MAX_CASCADE) {
       // Degenerate/adversarial rng kept recreating a run every pass. The
       // injected rng itself is the pathology, so reshuffling with that same
@@ -225,6 +280,7 @@ export function applySwap(board, r1, c1, r2, c2) {
     depth++;
     const key = (r, c) => r * board.cols + c;
     const set = new Set();
+    if (inject) for (const k of inject) set.add(k);
     for (const run of runs) for (const [r, c] of run.cells) set.add(key(r, c));
 
     // activate specials caught in the cleared set (one level of expansion)
