@@ -12,6 +12,8 @@ const KEY = 'deepdescent.stats.v1';
 export const STAT_KEYS = [
   'sharkKills', 'metersDived', 'diveSeconds', 'subLoot', 'netted', 'dives',
   'salvageEarned', 'pearlsBanked', 'bossesFelled', 'careerScore',
+  // Guardian-chest + Treasure Chest Madness accumulators.
+  'm3Pearls', 'm3Gems', 'm3Coins', 'm3Explosions', 'chestsOpened', 'guardiansFelled',
 ];
 
 export function defaultStats() {
