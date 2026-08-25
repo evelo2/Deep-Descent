@@ -6,7 +6,15 @@ unordered within each group.
 
 ## Planned next (committed direction)
 
-1. **Secure online scoring service.** A server-backed high-score / leaderboard.
+1. **Minigame platform contract (P11, "app store").** Formalise the harness↔minigame
+   boundary so minigames become catalogue content: a pure-data `manifest.js` per
+   folder declaring identity, entry points, controls, instructions and goals; a
+   discovery→library→menu-access ladder gated by goals and Salvage; and Core
+   ownership of pause/quit, input routing, help and result summaries. Phased,
+   with the reef's menu ownership moving last. Design draft (unapproved):
+   `docs/superpowers/specs/2026-08-25-minigame-platform-contract-design.md`.
+
+2. **Secure online scoring service.** A server-backed high-score / leaderboard.
    Design goals: submissions must be **verifiable and tamper-resistant** (don't
    trust the client's posted score) — e.g. sign runs, replay/validate a compact
    input log server-side, rate-limit, and authenticate. Needs a small backend
