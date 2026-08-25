@@ -33,13 +33,14 @@ import { AirVent } from '../../entities/airvent.js';
 import { Wreck } from '../../entities/wreck.js';
 import { Whale } from '../../entities/whale.js';
 import { Kraken } from '../../entities/kraken.js';
+import { Guardian } from '../../entities/guardian.js';
 import { Current } from '../../entities/current.js';
 import { PowerUp } from '../../entities/powerup.js';
 import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -285,6 +286,7 @@ export class Reef {
     this.depthReached = 0; this.fireCd = 0;
     // Per-run Salvage milestone counters (Salvage Log payout at run end).
     this.bossesFelled = 0; this.relicsBanked = 0; this.blackPearlsBanked = 0;
+    this.runChestsOpened = 0; this.runGuardiansFelled = 0;
     // Per-run badge stats (see _runStats / awardBadges at game-over).
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
@@ -347,6 +349,7 @@ export class Reef {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
     this.whales = []; this.ribs = []; this.whaleExit = null; this.currents = []; this.krakens = [];
+    this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null;   // reef portal (reef-owned); whirl gameplay state lives in the whirlpool MiniGame
@@ -521,6 +524,18 @@ export class Reef {
       }
     }
 
+    // Rare guarded chest → Treasure Chest Madness. Deep third only, at most one
+    // per dive; Siren's Lure boosts the odds. See specialChestChance().
+    if (Math.random() < specialChestChance(this.reef, this._hasChestRelic())) {
+      const cands = C.floors().filter((f) => f.y > WH * SPECIAL_CHEST.minDepthFrac);
+      if (cands.length) {
+        const f = pickOne(cands);
+        this.specialChest = { x: f.x, y: f.y - 20, r: 26, opened: false };
+        this.chestGuardian = new Guardian(f.x, f.y - 60);
+        this._enqueueToast('✨ SOMETHING SPECIAL LURKS BELOW…', PAL.key, 2.4);
+      }
+    }
+
     // A power-up or two floating in the reef.
     this._makePowerups(1 + (Math.random() < 0.5 ? 1 : 0));
 
@@ -571,6 +586,9 @@ export class Reef {
   }
 
   _enqueueToast(name, col, dur = 2.2) { this.toastQueue.push({ name, col, dur }); }
+
+  // Siren's Lure (Dry Dock relic) boosts the guarded-chest spawn chance.
+  _hasChestRelic() { return (this.meta.loadout || []).includes('siren'); }
 
   _orientShells() {
     const C = this.cave; if (!C) return;
@@ -863,6 +881,7 @@ export class Reef {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
+    this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
     const value = (y) => 400 + Math.round((y / WH) * 500);
@@ -910,6 +929,7 @@ export class Reef {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
+    this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.door = null; this.key = null;
     const value = (y) => 450 + Math.round((y / WH) * 650);   // richer than the reef — the abyss's whole point
@@ -984,6 +1004,7 @@ export class Reef {
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
     this.skeletons = []; this.whales = []; this.ribs = []; this.currents = []; this.krakens = [];
+    this.specialChest = null; this.chestGuardian = null;
     this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
     const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
