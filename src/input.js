@@ -161,8 +161,10 @@ export class Input {
       if (edge(1)) this._padEdges.add('shop');                             // B → open shop (at a station)
       if (edge(6)) this._padEdges.add('flare');                            // LT → light a flare
       if (edge(11)) this._padEdges.add('torch');                           // R3 → toggle torch (provisional; #38 finalizes pad map)
-      if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop nav)
-      if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop nav)
+      if (edge(12)) this._padEdges.add('up');                              // D-pad ↑ (menu/shop/grid nav)
+      if (edge(13)) this._padEdges.add('down');                            // D-pad ↓ (menu/shop/grid nav)
+      if (edge(14)) this._padEdges.add('left');                            // D-pad ← (menu/grid nav; match-3 cursor)
+      if (edge(15)) this._padEdges.add('right');                           // D-pad → (menu/grid nav; match-3 cursor)
       if (edge(0) || edge(9)) this._padStart = true;                       // A/Start → confirm on menus
       this._padPrev = {};
       for (let i = 0; i < gp.buttons.length; i++) this._padPrev[i] = gp.buttons[i].pressed;
