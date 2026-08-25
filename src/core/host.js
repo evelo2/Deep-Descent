@@ -28,7 +28,7 @@ export function makeHost({
     audio, input, particles, viewport, rng, economy, progression, achievements,
     // Mode switching: minigames request open/close through the Host, never the
     // Core directly (facade discipline). `core` is wired in after Core is built.
-    open: (id) => core && core.open(id),
+    open: (id, ctx) => core && core.open(id, ctx),
     close: (result) => core && core.close(result),
   };
   if (world !== undefined) host.world = world;

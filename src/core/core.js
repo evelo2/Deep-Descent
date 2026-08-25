@@ -28,7 +28,7 @@ export class Core {
     this.registry = new Map();
     /** @type {import('./contract.js').MiniGame[]} the mode stack; base = home */
     this._stack = [];
-    /** @type {{op:'open',id:string}|{op:'close',result?:any}|null} */
+    /** @type {{op:'open',id:string,ctx?:any}|{op:'close',result?:any}|null} */
     this._pending = null;
   }
 
@@ -81,8 +81,9 @@ export class Core {
     return mg;
   }
 
-  /** Queue pushing minigame `id` onto the stack (applied next frame). */
-  open(id) { this._pending = { op: 'open', id }; }
+  /** Queue pushing minigame `id` onto the stack (applied next frame). An
+   *  optional `ctx` is forwarded to the mode's enter(host, ctx). */
+  open(id, ctx) { this._pending = { op: 'open', id, ctx }; }
 
   /** Queue popping the top minigame, crediting `result` (applied next frame). */
   close(result) { this._pending = { op: 'close', result }; }
@@ -96,7 +97,7 @@ export class Core {
       const mg = this.registry.get(p.id);
       if (!mg) throw new Error(`Core.open: no minigame registered as '${p.id}'`);
       this._stack.push(mg);
-      mg.enter(this.host);
+      mg.enter(this.host, p.ctx);
     } else if (p.op === 'close') {
       if (this._stack.length <= 1) return;          // never pop the base
       const mg = this._stack.pop();
