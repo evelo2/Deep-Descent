@@ -642,3 +642,20 @@ export const KEYMAP = {
   back: ['Escape', 'Backspace'],
   match3: ['KeyN'],
 };
+
+// A rare, guardian-protected ornate chest in the reef's deep third. Spawn odds
+// ramp with reef and a Dry Dock relic ("Siren's Lure") adds a flat boost.
+// specialChestChance(reef, boosted) is shared by the reef spawn roll + tests.
+export const SPECIAL_CHEST = {
+  base: 0.05, perReef: 0.025, cap: 0.25,   // 5% at reef 1 → 25% cap ~reef 9
+  dryDockBoost: 0.20, boostedCap: 0.45,     // Siren's Lure: +20pp, 45% cap
+  minDepthFrac: 2 / 3,                       // only spawns below this depth fraction
+};
+export function specialChestChance(reef, boosted) {
+  const base = Math.min(SPECIAL_CHEST.cap, SPECIAL_CHEST.base + SPECIAL_CHEST.perReef * Math.max(0, reef - 1));
+  return boosted ? Math.min(SPECIAL_CHEST.boostedCap, base + SPECIAL_CHEST.dryDockBoost) : base;
+}
+
+// The chest's guardian — a distinct boss, tougher than a kraken (hp 14 vs 8) so
+// opening the chest is a real gate. See src/entities/guardian.js.
+export const GUARDIAN = { hp: 14, radius: 60, killBonus: 4000, range: 340 };
