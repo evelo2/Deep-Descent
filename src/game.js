@@ -500,7 +500,13 @@ export class Game {
     } else if (b.id === 'sail') {
       this._text('⛵ SAIL ON', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'weapon') {
-      this._text(WEAPON_INFO[this.weapon].glyph, cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
+      // The dive run-state (incl. the current weapon) lives on the reef MiniGame,
+      // not the shell — same reason _syncTouchButtons reads r.weapons off
+      // this._reef. Reading this.weapon here (undefined on the shell) crashed the
+      // render loop on touch devices with ≥2 weapons (ROG). Source it from the
+      // reef, with a harpoon-glyph fallback so a bad key can never throw again.
+      const wInfo = WEAPON_INFO[this._reef && this._reef.weapon];
+      this._text(wInfo ? wInfo.glyph : '➤', cx, cy - 4, 17, PAL.harpoonTip, 'center', 'middle');
       this._text('SWAP', cx, cy + 12, 8, 'rgba(180,215,240,0.8)', 'center', 'middle', true);
     } else if (b.id === 'shop') {
       this._text('⚙ SHOP', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
