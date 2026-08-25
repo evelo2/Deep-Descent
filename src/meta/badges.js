@@ -30,6 +30,11 @@ export const BADGES = [
   { id: 'waterlogged',     name: 'Waterlogged',        glyph: '💀', desc: 'Run out of air.',                                test: (s) => !s.won && s.cause === 'air' },
   { id: 'oneanddone',      name: 'One and Done',       glyph: '🪦', desc: 'Die on Reef 1.',                                  test: (s) => !s.won && s.reef === 1 },
   { id: 'emptyhanded',     name: 'Empty-Handed',       glyph: '🫙', desc: 'End a run with a score of nothing.',             test: (s) => s.score === 0 },
+  // --- Treasure Chest Madness / Guardian chest ---
+  { id: 'firsttreasure', name: 'First Treasure', glyph: '🧰', desc: 'Open a guarded reef chest.',            test: (s) => s.chestsOpened >= 1 },
+  { id: 'guardiandown',  name: 'Guardian Down',  glyph: '🐉', desc: 'Fell a chest guardian.',                test: (s) => s.guardiansFelled >= 1 },
+  { id: 'comboartist',   name: 'Combo Artist',   glyph: '🎇', desc: 'Detonate a special-on-special combo.',  test: (s) => s.m3Combo >= 1 },
+  { id: 'hoardcleared',  name: 'Hoard Cleared',  glyph: '🏆', desc: 'Clear every level of a chest run.',      test: (s) => !!s.hoardCleared },
 ];
 
 export const BADGE_BY_ID = Object.fromEntries(BADGES.map((b) => [b.id, b]));
