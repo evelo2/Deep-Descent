@@ -5,6 +5,8 @@ export class Audio {
     this.muted = false;
     this.master = null;
     this.ambientGain = null;
+    this._theme = false;        // Treasure Chest Madness looping theme (on while the minigame is open)
+    this._themeTimer = null;
   }
 
   // Must be created after a user gesture (browser autoplay policy).
@@ -82,4 +84,51 @@ export class Audio {
   gem()     { [784,1046,1318,1568].forEach((f,i)=>setTimeout(()=>this._tone({type:'sine',f0:f,f1:f*1.2,t:0.18,gain:0.28}), i*55)); }
   blackpearl() { this._tone({ type: 'sine', f0: 420, f1: 980, t: 0.4, gain: 0.32 });
                  this._tone({ type: 'sine', f0: 630, f1: 1460, t: 0.3, gain: 0.16 }); }
+
+  // --- Treasure Chest Madness (match-3) audio -------------------------------
+  // A short bouncy looping theme (I–vi–IV–V in C) under the SFX. Web-Audio
+  // procedural, no assets. Started on minigame open, stopped on close. Timing
+  // is setTimeout-driven — fine for a casual jingle; gains sit low so match
+  // SFX read over the top. Mute is honoured by _tone(), so a muted theme
+  // schedules silent tones (cheap) and resumes instantly on unmute.
+  startMatchTheme() {
+    if (!this.ctx || this._theme) return;
+    this._theme = true;
+    // one entry per eighth-note step (0 = rest). 16 steps ≈ 2.4s per loop.
+    const bass = [130.81,0,196.0,0, 110.0,0,164.81,0, 87.31,0,130.81,0, 98.0,0,146.83,0]; // C A F G roots + fifths
+    const lead = [783.99,659.25,523.25,659.25, 880.0,783.99,659.25,587.33,
+                  698.46,659.25,587.33,523.25, 587.33,659.25,783.99,0];
+    const stepDur = 0.15;
+    let step = 0;
+    const tick = () => {
+      if (!this._theme || !this.ctx) return;
+      const b = bass[step % bass.length];
+      if (b) this._tone({ type: 'triangle', f0: b, f1: b, t: stepDur * 1.6, gain: 0.10 });
+      const l = lead[step % lead.length];
+      if (l) this._tone({ type: 'square', f0: l, f1: l, t: stepDur * 0.85, gain: 0.045 });
+      step++;
+      this._themeTimer = setTimeout(tick, stepDur * 1000);
+    };
+    tick();
+  }
+  stopMatchTheme() {
+    this._theme = false;
+    if (this._themeTimer) { clearTimeout(this._themeTimer); this._themeTimer = null; }
+  }
+
+  specialSpawn() {   // a special tile was just created — bright rising chime
+    this._tone({ type: 'triangle', f0: 880, f1: 1320, t: 0.12, gain: 0.24 });
+    this._tone({ type: 'sine', f0: 1760, f1: 2200, t: 0.10, gain: 0.10 });
+  }
+  detonate() {       // bomb / chest blast — a low thud with a bright crack
+    this._tone({ type: 'sawtooth', f0: 220, f1: 40, t: 0.30, gain: 0.34 });
+    this._tone({ type: 'square', f0: 140, f1: 60, t: 0.12, gain: 0.20 });
+  }
+  chestJingle() {    // a chest popped — sparkly ascending arpeggio
+    [659.25,880,1046.5,1318.5,1760].forEach((f,i)=>setTimeout(()=>this._tone({ type:'sine', f0:f, f1:f*1.15, t:0.16, gain:0.26 }), i*55));
+  }
+  levelClear() {     // triumphant fanfare on LEVEL CLEARED
+    [[523.25,0],[659.25,90],[783.99,180],[1046.5,300],[1318.5,300]].forEach(([f,d])=>
+      setTimeout(()=>this._tone({ type:'triangle', f0:f, f1:f, t:0.34, gain:0.30 }), d));
+  }
 }

@@ -137,4 +137,59 @@ const specialRng = () => cyclic([0.1, 0.99, 0.6, 0.35, 0.99, 0.1]);
   );
 }
 
+// Treasure Chest special (Treasure Chest Madness): an INTERSECTION match — a
+// cell shared by a horizontal run and a vertical run (a T / L / + shape) —
+// spawns a `chest` at the shared cell, distinct from the straight-line length
+// tiers (line ≥4, bomb ≥5). Board below is run-free; swapping (0,1)<->(1,1)
+// drops a 0 into the pivot (1,1), simultaneously completing row1 = [0,0,0]
+// (horizontal) and column1 rows1-3 = [0,0,0] (vertical). Their shared cell
+// (1,1) is the intersection → a chest spawns there.
+{
+  const b = grid([
+    [7, 0, 7, 8],
+    [0, 9, 0, 8],   // (1,0)=0, (1,1)=9 (pivot, wrong), (1,2)=0
+    [8, 0, 7, 6],   // (2,1)=0
+    [6, 0, 8, 6],   // (3,1)=0
+  ], specialRng());
+  check(findRuns(b).length === 0, 'chest test board starts run-free');
+  const res = applySwap(b, 0, 1, 1, 1);   // brings the 0 down into the pivot
+  check(res.ok, 'intersection swap ok');
+  const clear = res.steps.find((s) => s.kind === 'clear');
+  const chest = clear.spawns.find((s) => s.special === 'chest');
+  check(!!chest, 'intersection (T/+) match spawns a chest');
+  check(chest.at[0] === 1 && chest.at[1] === 1, 'chest spawns at the intersection cell');
+  check(!clear.spawns.some((s) => s.special === 'line' || s.special === 'bomb'),
+    'no straight-line special spawned for a pure 3+3 intersection');
+}
+
+// Treasure Chest activation: a cleared chest detonates a 5x5 neighborhood
+// (bigger than bomb's 3x3) and is counted in res.chests (drives the bonus
+// salvage + jingle in the module). Board is 6x6, run-free, with a chest
+// pre-placed at (2,2). Swapping (2,3)<->(3,3) brings a 0 into (2,3),
+// completing row2 = (2,1),(2,2),(2,3) = [0,0,0] — a 3-run that includes the
+// chest cell, so it activates and clears everything within 2 cells of (2,2).
+{
+  const b = grid([
+    [0, 1, 2, 3, 4, 5],
+    [1, 2, 3, 4, 5, 0],
+    [3, 0, 0, 9, 4, 5],   // (2,1)=0, (2,2)=chest(type0), (2,3)=9
+    [2, 4, 1, 0, 3, 1],   // (3,3)=0 (swapped up into (2,3))
+    [4, 5, 2, 3, 1, 2],
+    [5, 0, 4, 1, 2, 3],
+  ], specialRng());
+  b.tiles[2][2].special = 'chest';
+  check(findRuns(b).length === 0, 'chest-activation board starts run-free');
+  const res = applySwap(b, 2, 3, 3, 3);
+  check(res.ok, 'chest-activation swap ok');
+  check(res.chests === 1, 'a detonated chest is counted in res.chests');
+  const clear = res.steps.find((s) => s.kind === 'clear');
+  const cleared = new Set(clear.cells.map(([r, c]) => `${r},${c}`));
+  // within 2 of (2,2) → cleared (5x5 block rows0-4, cols0-4)
+  for (const [r, c] of [[0, 0], [4, 4], [0, 4], [4, 0], [2, 2]])
+    check(cleared.has(`${r},${c}`), `chest clears (${r},${c}) inside its 5x5`);
+  // outside the 5x5 → untouched
+  for (const [r, c] of [[5, 5], [5, 2], [2, 5], [5, 0]])
+    check(!cleared.has(`${r},${c}`), `chest does NOT clear (${r},${c}) outside its 5x5`);
+}
+
 console.log(`ok specials.test.mjs (${pass} checks)`);

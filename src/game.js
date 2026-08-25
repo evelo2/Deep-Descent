@@ -602,7 +602,7 @@ export class Game {
     this._text('❔ HELP (H)', xs[0] + w / 2, y + h / 2, 12, PAL.hudText, 'center', 'middle', true);
     this._text('🛠 DRY DOCK (R)', xs[1] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
     this._text('🎖 BADGES (B)', xs[2] + w / 2, y + h / 2, 11, PAL.glow, 'center', 'middle', true);
-    this._text('⚓ MATCH (N)', xs[3] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
+    this._text('💰 CHEST (N)', xs[3] + w / 2, y + h / 2, 11, PAL.gold, 'center', 'middle', true);
   }
 
   _gameOverScreen() {
