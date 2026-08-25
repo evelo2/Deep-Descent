@@ -13,9 +13,9 @@
  * @property {string} id                 Stable unique key used by Core.boot(id).
  * @property {string} [name]             Player-facing display name (About screen).
  * @property {string} [version]          Semver, bumped per-minigame (About screen).
- * @property {(host: Host) => void} enter Called once when the Core activates it;
+ * @property {(host: Host, ctx?: any) => void} enter Called once when the Core activates it;
  *                                        receives the Host facade (its only door
- *                                        to shared services).
+ *                                        to shared services) and an optional context.
  * @property {(dt: number) => void} update Advance one frame (seconds).
  * @property {(ctx: CanvasRenderingContext2D) => void} render Draw one frame.
  * @property {() => (MiniGameResult|void)} [exit] Called when the mode ends; may
@@ -37,7 +37,7 @@
  * @property {*} progression   Badges/ranks/stats (real in Phase 2).
  * @property {*} achievements  Achievement/Steam bridge (real in Phase 2).
  * @property {*} [world]       DiverWorld engine — present only when opted in.
- * @property {(id: string) => void} open   Push+activate a registered MiniGame by id.
+ * @property {(id: string, ctx?: any) => void} open   Push+activate a registered MiniGame by id, with optional context.
  * @property {(result?: MiniGameResult) => void} close  Exit+pop the active MiniGame, resume the one beneath.
  */
 
