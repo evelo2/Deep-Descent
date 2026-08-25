@@ -25,6 +25,8 @@ export const RELICS = [
     apply: g => { g._relicChart = true; } },
   { id: 'magnet', name: 'Magnet Core', desc: 'A permanent, gentle treasure magnet.', cost: 230,
     apply: g => { g._relicMagnet = true; } },
+  { id: 'siren', name: "Siren's Lure", desc: '+20% chance a guarded chest appears in the deep.', cost: 260,
+    apply: g => { g._relicSirenLure = true; } },
 ];
 
 export function getRelic(id) {
@@ -78,6 +80,7 @@ export function resetRelicFlags(game) {
   game._relicEye = false;
   game._relicChart = false;
   game._relicMagnet = false;
+  game._relicSirenLure = false;
 }
 
 export function applyLoadout(game, loadoutIds = []) {
