@@ -9,6 +9,7 @@ import { makeBoard, applySwap, legalSwap } from './board.js';
 import { buildTimeline } from './anim.js';
 import { getLevel, leftoverBonus } from './levels.js';
 import { drawMatch3 } from '../../render/match3.js';
+import { newMatchAccum, foldMatchStats, matchRunResult } from './accum.js';
 
 /**
  * @param {{ host: import('../../core/contract.js').Host }} deps
@@ -37,9 +38,15 @@ export function makeMatch3({ host }) {
     guide: null,               // active first-time special-guide toast { special, t, dur }
     guideQueue: [],            // pending guides (if several new specials land at once)
     seenSpecials: null,        // Set of special ids the player has already been taught
+    accum: /** @type {any} */ (null),   // lifetime-stat accumulator for this session
+    source: 'menu',            // 'menu' | 'chest' — how the mode was entered
+    hoardCleared: false,       // set when a chest run clears its final level
 
-    enter() {
+    enter(_host, ctx) {
       this.levelIndex = 0;
+      this.source = (ctx && ctx.source) || 'menu';
+      this.hoardCleared = false;
+      this.accum = newMatchAccum();
       this.seenSpecials = this._loadSeenSpecials();
       this.guide = null; this.guideQueue = [];
       this._loadLevel(0);
@@ -102,6 +109,10 @@ export function makeMatch3({ host }) {
       this.movesLeft -= 1;
       this.score += res.score;
       this.chestSalvage += (res.chests || 0) * 3;   // each chest banks a little bonus salvage
+      // A "combo" is swapping two specials together — a module-side check off
+      // the PRE-swap grid (no engine change). `pre` holds tiles before the swap.
+      const wasCombo = !!(pre[r1][c1] && pre[r1][c1].special && pre[r2][c2] && pre[r2][c2].special);
+      foldMatchStats(this.accum, res, wasCombo);
       const progressStart = this.progress;
       this.progress += res.cleared[this.level.targetTile] || 0;
       const tl = buildTimeline(pre, res.steps, this.level.targetTile, this.board.tiles);
@@ -125,6 +136,7 @@ export function makeMatch3({ host }) {
       if (this.phase !== 'play') return;
       if (this.progress >= this.level.targetCount) {
         this.phase = 'won'; this.resultT = 0;
+        if (this.source === 'chest' && !getLevel(this.levelIndex + 1)) this.hoardCleared = true;
         const bonus = leftoverBonus(this.movesLeft);
         this.lastPayout = this.level.reward + bonus + this.chestSalvage;
         host.economy.earn({ salvage: this.lastPayout });   // per-level credit (banks on quit)
@@ -205,6 +217,16 @@ export function makeMatch3({ host }) {
 
     exit() {
       host.audio.stopMatchTheme && host.audio.stopMatchTheme();   // silence the looping theme on close
+      // Fold this session's accumulators into lifetime progression + mirror any
+      // freshly-earned badges/tiers to Steam. Salvage was already credited
+      // per-level during play, so we keep `credited: true` (Core skips re-credit).
+      if (this.accum && host.progression && host.progression.recordRun) {
+        const { runDelta, runStats } = matchRunResult(this.accum, { hoardCleared: this.hoardCleared });
+        const { newBadges, freshTiers } = host.progression.recordRun({ runStats, runDelta });
+        if (host.achievements && host.achievements.unlock) {
+          for (const id of [...(newBadges || []), ...(freshTiers || [])]) host.achievements.unlock(id);
+        }
+      }
       return { outcome: this.phase === 'won' ? 'won' : 'bailed', credited: true };
     },
   };
