@@ -15,7 +15,7 @@
 // latest deploy, the browser is serving cached scripts. VERSION is the
 // player-facing release number.
 export const VERSION = '1.0.0';
-export const BUILD = 'p9.4-2026-08-24';
+export const BUILD = 'p9.5-2026-08-24';
 export const KNOWN_GOOD_BASELINE = 'baseline/v1.0-pre-platform';
 
 // ENGINE_VERSION is the Core/platform (shell + shared economy + minigame stack)
