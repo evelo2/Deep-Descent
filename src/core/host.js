@@ -35,3 +35,29 @@ export function makeHost({
   host._bindCore = (c) => { core = c; };
   return host;
 }
+
+/**
+ * Build a narrowed view of a Host exposing only the capabilities a minigame
+ * declared. The ungated services below are the shell itself — every minigame
+ * gets them. Everything in GATED_CAPABILITIES is opt-in, so an undeclared
+ * service is simply absent rather than quietly available (spec §3.1).
+ *
+ * Services are copied by REFERENCE, never wrapped: a minigame holding
+ * `host.economy` still holds the Core's real economy. `open`/`close`/
+ * `_bindCore` are copied by reference too, and all close over the SAME
+ * `core` variable inside makeHost, so binding the core via any one of these
+ * host objects (typically the original, unrestricted one) makes open/close
+ * work on every restricted copy as well — order of construction vs. binding
+ * doesn't matter.
+ *
+ * @param {*} host          The full Host from makeHost.
+ * @param {string[]} [capabilities]  Declared capability names.
+ * @returns {import('./contract.js').Host}
+ */
+export function restrictHost(host, capabilities = []) {
+  const UNGATED = ['audio', 'input', 'particles', 'viewport', 'rng', 'open', 'close', '_bindCore'];
+  const out = /** @type {*} */ ({});
+  for (const k of UNGATED) if (host[k] !== undefined) out[k] = host[k];
+  for (const c of capabilities) if (host[c] !== undefined) out[c] = host[c];
+  return out;
+}
