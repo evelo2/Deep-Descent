@@ -7,13 +7,15 @@ import { Particles } from './systems/particles.js';
 import { Background } from './render/background.js';
 import { setViewport } from './game.js';
 import { Core } from './core/core.js';
-import { makeHost } from './core/host.js';
+import { makeHost, restrictHost } from './core/host.js';
 import { makeEconomy } from './core/economy.js';
 import { makeProgression } from './core/progression.js';
 import { makeAchievements } from './core/achievements.js';
 import { makeDiverWorld } from './core/world/index.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { makeMatch3 } from './minigames/match3/index.js';
+import legacyManifest from './minigames/legacy/manifest.js';
+import match3Manifest from './minigames/match3/manifest.js';
 import { boardHitTest, backHitTest } from './render/match3.js';
 import { VERSION, BUILD, ENGINE_VERSION } from './version.js';
 
@@ -51,14 +53,25 @@ const host = makeHost({
   economy, progression, achievements, world,
 });
 const core = new Core({ host });
-const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world, host });
-core.register(legacy);
+// Phase 11.1: each minigame is constructed with its OWN capability-restricted
+// Host, built from its manifest — not the raw `host` above. Enforcement has to
+// happen HERE, at construction, not merely inside Core.register/_hostFor: both
+// minigames close over the host they're built with and ignore whatever enter()
+// hands them later (legacy hands it straight to `new Game(...)`; match3 closes
+// over `host` in makeMatch3's params and its enter(_host, ctx) discards the
+// argument). `open`/`close`/`_bindCore` are copied by reference by
+// restrictHost, so binding the core via the original `host` below still wires
+// them on these restricted copies too (see host.js restrictHost doc).
+const legacyHost = restrictHost(host, legacyManifest.capabilities);
+const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world, host: legacyHost });
+core.register(legacy, legacyManifest);
 // Phase 9: resolve the Core↔Host chain so minigames can host.open/close, then
 // register the first NEW minigame (Salvage Match). It's menu-launched over the
 // reef and credits the ONE shared economy per level cleared.
 host._bindCore(core);
-const match3 = makeMatch3({ host });
-core.register(match3);
+const match3Host = restrictHost(host, match3Manifest.capabilities);
+const match3 = makeMatch3({ host: match3Host });
+core.register(match3, match3Manifest);
 core.boot('legacy');
 
 // The live Game instance, for the input-event wiring below (input plumbing is
