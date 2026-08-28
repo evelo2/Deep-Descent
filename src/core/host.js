@@ -5,6 +5,8 @@
 // holds the Core's real economy. The DiverWorld engine (`world`) is opt-in and
 // included ONLY when provided, keeping bring-your-own-engine modes free of it.
 
+import { GATED_CAPABILITIES } from './manifest.js';
+
 /**
  * @param {Object} services
  * @param {*} services.audio
@@ -38,9 +40,15 @@ export function makeHost({
 
 /**
  * Build a narrowed view of a Host exposing only the capabilities a minigame
- * declared. The ungated services below are the shell itself — every minigame
- * gets them. Everything in GATED_CAPABILITIES is opt-in, so an undeclared
- * service is simply absent rather than quietly available (spec §3.1).
+ * declared. Everything in GATED_CAPABILITIES is opt-in, so an undeclared
+ * gated service is simply absent rather than quietly available (spec §3.1).
+ * Every OTHER own key of `host` — audio/input/particles/viewport/rng/open/
+ * close/_bindCore today — is ungated shell infrastructure and always passes
+ * through. This loop is inverted on purpose: it copies every key EXCEPT the
+ * undeclared gated ones, rather than maintaining a second hardcoded allowlist
+ * that has to be kept in sync with makeHost by hand. A new ungated service
+ * added to makeHost later is therefore included automatically, instead of
+ * being silently dropped because someone forgot to add it to a list here.
  *
  * Services are copied by REFERENCE, never wrapped: a minigame holding
  * `host.economy` still holds the Core's real economy. `open`/`close`/
@@ -55,9 +63,11 @@ export function makeHost({
  * @returns {import('./contract.js').Host}
  */
 export function restrictHost(host, capabilities = []) {
-  const UNGATED = ['audio', 'input', 'particles', 'viewport', 'rng', 'open', 'close', '_bindCore'];
+  const declared = new Set(capabilities);
   const out = /** @type {*} */ ({});
-  for (const k of UNGATED) if (host[k] !== undefined) out[k] = host[k];
-  for (const c of capabilities) if (host[c] !== undefined) out[c] = host[c];
+  for (const k of Object.keys(host)) {
+    if (GATED_CAPABILITIES.includes(k) && !declared.has(k)) continue;   // undeclared gated capability: omit
+    out[k] = host[k];
+  }
   return out;
 }
