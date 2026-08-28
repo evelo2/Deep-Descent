@@ -98,12 +98,20 @@ export class Core {
     return h === undefined ? this.host : h;
   }
 
-  /** Registered minigames' identity for the About screen: id, display name,
-   *  and version (falling back to the id / '—' when a minigame omits them). */
+  /** Registered minigames' identity for the About screen. The manifest is the
+   *  source of truth when one was registered; otherwise fall back to the
+   *  runtime module's fields, then to the id / '—'. */
   versions() {
-    return [...this.registry.values()].map((m) => ({
-      id: m.id, name: m.name || m.id, version: m.version || '—',
-    }));
+    return [...this.registry.values()].map((m) => {
+      const man = this.manifests.get(m.id);
+      return {
+        id: m.id,
+        name: (man && man.name) || m.name || m.id,
+        version: (man && man.version) || m.version || '—',
+        icon: man && man.icon,
+        blurb: man && man.blurb,
+      };
+    });
   }
 
   /** Activate a registered mode by id and hand it the Host via enter(). */

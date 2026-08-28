@@ -653,7 +653,7 @@ export class Game {
 
     this._text('MINIGAMES', cx, y, 13, '#7fb0d0', 'center', 'middle', true); y += 28;
     for (const gm of info.games) {
-      this._text(gm.name, cx - 12, y, 15, PAL.gold, 'right', 'middle', true);
+      this._text((gm.icon ? gm.icon + ' ' : '') + gm.name, cx - 12, y, 15, PAL.gold, 'right', 'middle', true);
       this._text(`v${gm.version}`, cx + 12, y, 15, PAL.hudText, 'left', 'middle');
       y += 26;
     }
