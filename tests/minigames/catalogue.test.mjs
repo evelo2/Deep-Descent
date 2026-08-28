@@ -98,4 +98,33 @@ const mixedErrs = validateCatalogue([fixtureMixed]);
 check(!mixedErrs.some((e) => /dives/.test(e)),
   'a stat key and track id sharing a string within one manifest is not reported as a conflict');
 
+// --- single source of truth: main.js must source its manifests THROUGH the
+// catalogue (manifestById), not by importing manifest.js files directly —
+// otherwise a third minigame could be registered in one place and forgotten
+// in the other. main.js can't be imported under Node (it touches the DOM),
+// so this is a source-grep, same precedent as
+// tests/core/capabilities.test.mjs's main.js checks.
+const mainSrc = await (await import('node:fs/promises')).readFile(
+  new URL('../../src/main.js', import.meta.url), 'utf8');
+check(!/from '\.\/minigames\/[a-z0-9]+\/manifest\.js'/.test(mainSrc),
+  'main.js does not import a minigame manifest.js directly — manifests come from the catalogue');
+check(/from '\.\/minigames\/catalogue\.js'/.test(mainSrc) && /\bmanifestById\b/.test(mainSrc),
+  'main.js sources manifests via catalogue.manifestById');
+
+// --- registration parity: every manifest in CATALOGUE is registered by
+// main.js (core.register(...)), and every minigame main.js registers is in
+// CATALOGUE. Catches a later phase adding a third minigame in only one of the
+// two places.
+const registerCalls = [...mainSrc.matchAll(/core\.register\(([^)]*)\)/g)].map((m) => m[1]);
+check(registerCalls.length === CATALOGUE.length,
+  `main.js has one core.register(...) call per catalogue entry (found ${registerCalls.length}, want ${CATALOGUE.length})`);
+for (const m of CATALOGUE) {
+  check(registerCalls.some((args) => args.includes(m.id)),
+    `main.js registers catalogue entry '${m.id}' via core.register(...)`);
+}
+for (const args of registerCalls) {
+  check(CATALOGUE.some((m) => args.includes(m.id)),
+    `main.js's core.register(${args}) call corresponds to a catalogue entry`);
+}
+
 console.log(`ok catalogue.test.mjs (${pass} checks)`);
