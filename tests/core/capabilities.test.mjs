@@ -30,6 +30,24 @@ for (const k of ['audio', 'input', 'particles', 'viewport', 'rng']) {
 check(typeof narrow.open === 'function' && typeof narrow.close === 'function',
   'open/close survive restriction');
 
+// --- restrictHost must derive its ungated set from GATED_CAPABILITIES, not a
+// second hardcoded list — a manifest declaring every gated capability should
+// get back something bit-for-bit lossless against the full host, and a brand
+// new ungated service added to makeHost later must survive automatically
+// (this is what would have silently broken under the old UNGATED literal).
+const allCaps = restrictHost(full, ['economy', 'progression', 'achievements', 'world']);
+check(Object.keys(allCaps).length === Object.keys(full).length,
+  'declaring every gated capability yields the same key count as the full host');
+for (const k of Object.keys(full)) {
+  check(allCaps[k] === full[k], `restrictHost is lossless for key '${k}' when every capability is declared`);
+}
+
+const hostWithNewService = makeHost(services);
+hostWithNewService.newThing = { ok: true };   // simulates a future ungated service added to makeHost
+const restrictedWithNewService = restrictHost(hostWithNewService, []);
+check(restrictedWithNewService.newThing === hostWithNewService.newThing,
+  'a new ungated service added to the host survives restriction without touching restrictHost');
+
 // --- Core hands each minigame its own restricted host ---
 const seen = {};
 const stub = (id) => ({ id, enter(host) { seen[id] = host; }, update() {}, render() {} });
@@ -79,8 +97,9 @@ check(seen.bare === full, 'an unmanifested minigame receives the unrestricted ho
 const mainSrc = await (await import('node:fs/promises')).readFile(
   new URL('../../src/main.js', import.meta.url), 'utf8');
 check(/restrictHost\(/.test(mainSrc), 'main.js calls restrictHost to build per-minigame hosts');
-check(!/makeMatch3\(\{\s*host\s*\}\)/.test(mainSrc),
-  'match3 is no longer constructed with the raw, unrestricted host');
+check(!/makeMatch3\(\{\s*host\s*\}\)/.test(mainSrc)
+  && !/makeMatch3\(\{\s*host:\s*host\b/.test(mainSrc),
+  'match3 is no longer constructed with the raw, unrestricted host (shorthand or `host: host`)');
 check(!/createLegacyMiniGame\(\{[^}]*\bhost\s*,/.test(mainSrc)
   && !/createLegacyMiniGame\(\{[^}]*\bhost:\s*host\b/.test(mainSrc),
   'legacy is no longer constructed with the raw, unrestricted host');
