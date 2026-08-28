@@ -61,4 +61,38 @@
  *                               nothing is double-counted.
  */
 
+/**
+ * The declarative half of the contract — a minigame's `manifest.js`. PURE DATA:
+ * no imports, and `module` is the only function, so it stays serialisable (see
+ * core/manifest.js for the validation rules).
+ *
+ * @typedef {Object} MiniGameManifest
+ * @property {string} id            Matches the runtime MiniGame's id.
+ * @property {number} contract      ABI version; must equal CONTRACT_VERSION.
+ * @property {string} name          Player-facing display name.
+ * @property {string} version       Semver.
+ * @property {string} icon          Single-glyph tile icon.
+ * @property {string} blurb         One-line description for tiles and briefings.
+ * @property {string[]} capabilities Gated Host services this minigame opts into.
+ * @property {MiniGameEntry[]} entries  Ways in (world events and menu tiles).
+ * @property {{pointer?: boolean, actions: Array<Object>}} controls Control legend source.
+ * @property {Array<{title: string, lines: string[]}>} help  How-to-play pages.
+ * @property {{stats?: Array<Object>, badges?: Array<Object>, tracks?: Array<Object>}} goals
+ *           Declared goals — DESCRIPTIONS only; predicates live in the runtime
+ *           module (spec §3.4).
+ * @property {() => Promise<*>} module  Lazy loader for the runtime module.
+ */
+
+/**
+ * @typedef {Object} MiniGameEntry
+ * @property {string} id            Unique within the manifest.
+ * @property {'world'|'menu'} kind  In-world trigger, or a Library tile.
+ * @property {string} label         Player-facing label.
+ * @property {*} [ctx]              Context forwarded to enter(host, ctx).
+ * @property {boolean} [discovers]  First play flips the discovery ledger.
+ * @property {boolean} [alwaysAvailable] Never gated (the base game's front door).
+ * @property {*} [requires]         Unlock requirements (evaluated in P11.3).
+ * @property {*} [cost]             Salvage price for menu access (P11.3).
+ */
+
 export {};

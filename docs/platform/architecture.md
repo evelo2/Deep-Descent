@@ -215,3 +215,108 @@ clean seam, then reset context before the next one.
 short "Context Recovery — read first" preamble (what to read, how to find the
 resume point, how to confirm green) so a fresh session can continue with only the
 plan + this doc + git. `migration-plan.md` is the worked exemplar of this shape.
+
+## 9. The manifest layer (P11.1)
+
+The MiniGame contract in §3.1 types the *runtime* half of the seam — `enter`,
+`update`, `render`, `exit`. P11.1 adds the **declarative half**: each minigame's
+`manifest.js`, a plain object of pure data (identity, capabilities, entry
+points, control legend, help pages, declared goals) plus one function — a
+`module` thunk that lazily imports the runtime. The shape is typed as
+`MiniGameManifest` / `MiniGameEntry` in `src/core/contract.js`; the rules a
+manifest must satisfy are enforced by `validateManifest`/`assertManifest` in
+`src/core/manifest.js` (contract version, slug id, semver, known capabilities,
+non-empty unique entries, the `module` thunk, purity — no function anywhere
+else in the object — and the namespacing rule below). `Core.register(minigame,
+manifest)` calls `assertManifest` at registration, so a broken manifest fails
+loudly at boot rather than at some later frame. Registering *without* a
+manifest is still supported and yields the full, unrestricted Host — the
+manifest layer is additive, not a hard requirement of the contract.
+
+**The catalogue.** `src/minigames/catalogue.js` statically imports every
+minigame's manifest into `CATALOGUE` — nothing else. Because a manifest is
+pure data, the shell gets a boot-time view of every minigame (for menus, help
+screens, the Trophy Wall, unlock gating) **without loading a single engine**;
+each manifest's `module` thunk keeps the actual code behind a lazy `import()`
+that nothing calls yet (see below). `manifestById(id)` looks one up;
+`validateCatalogue(list)` runs `validateManifest` over the whole list plus the
+cross-manifest checks no single manifest can make: unique minigame ids, and no
+goal id claimed twice. That last check keeps three separate maps — one each
+for badge ids, stat keys, and track ids — rather than one collapsed id space,
+because badges/stats/tracks are separate id spaces in `meta/`: the `legacy`
+manifest legitimately declares both a stat key `dives` and a track id `dives`
+for the same thing, and collapsing them into one space would flag that as a
+false-positive collision.
+
+Two real manifests exist today: `src/minigames/legacy/manifest.js` (id
+`legacy`, the reef dive and every zone inside it — including `reef`, which is
+an *internal* zone of `legacy`, not a minigame in its own right) and
+`src/minigames/match3/manifest.js` (id `match3`, Treasure Chest Madness). The
+`legacy` → `home` + `reef` split, which would give the reef its own manifest,
+is out of scope until P11.5.
+
+**Grandfathered ids.** Contract v1's namespacing rule requires every declared
+goal id to read `<minigameId>:<key>`, so two minigames can never collide on a
+badge/stat/track id by accident. Ids that shipped *before* P11.1 are exempt:
+`src/core/grandfathered-ids.js` exports `GRANDFATHERED`, a frozen allow-list of
+the exact 50 ids that predate the manifest layer — 18 badges, 16 stat keys, 16
+tracks, pinned against the live tables in `meta/badges.js`,
+`meta/progressive.js` and `meta/stats.js` by
+`tests/core/grandfathered-ids.test.mjs`. The exemption is by *frozen id list*,
+not by which manifest declares them — `legacy` and `match3` **both** ship bare
+ids today (`hoardcleared`, `comboartist`, `m3Pearls`, …), so an early design
+that only exempted the `legacy` manifest would have been wrong. The reason
+these particular ids can never be renamed or namespaced is that they are live
+data: they're the literal keys under `deepdescent.badges.v1` and
+`deepdescent.stats.v1` in every player's `localStorage`, and the badge/track-tier
+ids are also registered Steam achievement ids on the partner site. Renaming or
+namespacing any of them would orphan real player progress. Nothing may be
+added to `GRANDFATHERED` — every goal declared from P11.1 onward, including
+new match-3 goals, must be namespaced.
+
+**Capability enforcement.** A manifest's `capabilities` array declares which
+gated Host services (`economy`, `progression`, `achievements`, `world` —
+`GATED_CAPABILITIES` in `manifest.js`) a minigame actually uses; everything
+else on the Host (`audio`, `input`, `particles`, `viewport`, `rng`,
+`open`/`close`) is ungated shell infrastructure, always present. Enforcement
+lives in `restrictHost(host, capabilities)` (`src/core/host.js`). It is
+written as an **inverted** loop: it copies every own key of the full Host
+*except* gated capabilities the manifest didn't declare, rather than building
+the restricted host from a hardcoded allow-list. This is deliberate — an
+allow-list is a second source of truth that has to be kept in sync with
+`makeHost` by hand, and a service added to `makeHost` later but forgotten in
+the allow-list would be silently *dropped* for every manifested minigame
+instead of silently *granted*. Inverting it means new ungated services are
+included automatically, and only the four named capabilities are ever gated.
+`Core.register` precomputes each minigame's restricted host and
+`Core._hostFor(id)` serves it on `boot`/`open`; `Core.manifestFor(id)` and
+`Core.versions()` (which now prefers manifest identity — `name`/`version`, and
+surfaces `icon`/`blurb` — falling back to the runtime module's fields) round
+out the manifest-aware surface.
+
+Enforcement can't stop at `Core._hostFor`, though. `src/main.js` builds each
+minigame's restricted host at **construction** time — `restrictHost(host,
+legacyManifest.capabilities)` and `restrictHost(host,
+match3Manifest.capabilities)`, passed into `createLegacyMiniGame`/`makeMatch3`
+before `core.register` ever runs — and hands the *restricted* host into each
+minigame's constructor. This matters because both minigames close over the
+host they were built with rather than trusting the one `enter()` hands them
+later: the legacy game hands its constructor host straight to `new Game(...)`,
+and match3 closes over the host in `makeMatch3`'s params, so its
+`enter(_host, ctx)` ignores the host argument outright. Restricting only the
+argument to `enter` would therefore be cosmetic — the minigame would still be
+holding the unrestricted host it was constructed with. Restricting at
+construction is what makes the capability gate real.
+
+**Not yet wired: the `module` thunk.** Every manifest declares `module: () =>
+import('./index.js')`, and P11.1 unit-tests that the thunk *resolves* to the
+right runtime module — but nothing calls it as the launch path yet.
+Registration is still eager: `main.js` constructs both `legacy` and `match3`
+directly (`createLegacyMiniGame`, `makeMatch3`) and hands the built instances
+to `core.register`, exactly as before this phase. Lazy-loading a minigame's
+engine from its manifest's `module` thunk — so an engine's code doesn't even
+download until a player opens it — is P11.3. Declaring the goal shape here
+(`goals.stats`/`goals.badges`/`goals.tracks`) is similarly forward-looking:
+P11.1 only describes goals for menus/Trophy Wall rendering later; the live
+`meta/*` tables remain the runtime source of truth for scoring until P11.4
+wires `progression.registerGoals` and namespaced stat plumbing through.
