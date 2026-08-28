@@ -142,7 +142,10 @@ export class Game {
             // P9: the reef launches sibling minigames (host.open('match3')) via
             // the Core stack. open/close come from the real Host, Core-bound in
             // main.js; undefined-safe no-ops under bare/stub construction.
-            open: (id) => host && host.open && host.open(id),
+            // ctx MUST be forwarded: match-3 reads `source: 'chest'` off it to
+            // arm the hoardcleared achievement (dropping it made that Steam
+            // achievement unobtainable). See tests/game/open-ctx-chain.test.mjs.
+            open: (id, ctx) => host && host.open && host.open(id, ctx),
             close: (result) => host && host.close && host.close(result),
           },
           shell: this._reefShell(), ctx: this.ctx, bg: this.bg,
