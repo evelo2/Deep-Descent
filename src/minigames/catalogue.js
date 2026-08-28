@@ -23,17 +23,22 @@ export function manifestById(id) {
 /**
  * Validate the whole catalogue: every manifest against contract v1, plus the
  * cross-manifest rules no single manifest can check (unique minigame ids, and
- * no goal id claimed twice).
+ * no goal id claimed twice by the same kind).
+ * @param {*} [list] The list of manifests to validate; defaults to CATALOGUE.
  * @returns {string[]} problems; empty means valid.
  */
-export function validateCatalogue() {
+export function validateCatalogue(list = CATALOGUE) {
   /** @type {string[]} */
   const errs = [];
   const seenGame = new Set();
-  /** @type {Map<string, string>} goal id -> owning minigame id */
-  const seenGoal = new Map();
+  /** @type {Map<string, string>} badge id -> owning minigame id */
+  const seenBadges = new Map();
+  /** @type {Map<string, string>} stat key -> owning minigame id */
+  const seenStats = new Map();
+  /** @type {Map<string, string>} track id -> owning minigame id */
+  const seenTracks = new Map();
 
-  for (const m of CATALOGUE) {
+  for (const m of list) {
     for (const e of validateManifest(m, { grandfathered: GRANDFATHERED })) {
       errs.push(`[${m && m.id}] ${e}`);
     }
@@ -42,18 +47,43 @@ export function validateCatalogue() {
 
     /** @type {{ badges?: Array<{id: string}>, stats?: Array<{key: string}>, tracks?: Array<{id: string}> }} */
     const goals = m.goals || {};
-    const owned = [
-      ...(goals.badges || []).map((b) => b.id),
-      ...(goals.stats || []).map((s) => s.key),
-      ...(goals.tracks || []).map((t) => t.id),
-    ];
-    for (const id of owned) {
-      const prior = seenGoal.get(id);
-      if (prior && prior !== m.id) {
-        errs.push(`goal id '${id}' is claimed by both '${prior}' and '${m.id}'`);
+
+    // Check badges
+    for (const b of goals.badges || []) {
+      const id = b && b.id;
+      if (id) {
+        const prior = seenBadges.get(id);
+        if (prior) {
+          errs.push(`badge id '${id}' is claimed by both '${prior}' and '${m.id}'`);
+        } else {
+          seenBadges.set(id, m.id);
+        }
       }
-      if (!seenGoal.has(id)) {
-        seenGoal.set(id, m.id);
+    }
+
+    // Check stats
+    for (const s of goals.stats || []) {
+      const key = s && s.key;
+      if (key) {
+        const prior = seenStats.get(key);
+        if (prior) {
+          errs.push(`stat key '${key}' is claimed by both '${prior}' and '${m.id}'`);
+        } else {
+          seenStats.set(key, m.id);
+        }
+      }
+    }
+
+    // Check tracks
+    for (const t of goals.tracks || []) {
+      const id = t && t.id;
+      if (id) {
+        const prior = seenTracks.get(id);
+        if (prior) {
+          errs.push(`track id '${id}' is claimed by both '${prior}' and '${m.id}'`);
+        } else {
+          seenTracks.set(id, m.id);
+        }
       }
     }
   }
