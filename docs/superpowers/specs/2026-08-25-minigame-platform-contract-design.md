@@ -36,7 +36,7 @@ questions on 2026-08-28. **Do not re-litigate any of these.**
 | 5 | Shell-owned chrome | **All four**: pause/quit/suspend, input routing + control legend, instructions/how-to-play screen, result summary + reward toasts. An author gets these free and cannot diverge. |
 | 6 | Packaging | **Approach A** — pure-data `manifest.js` + lazy `index.js` per folder, statically-imported `catalogue.js`. See below. |
 | 7 | Badge predicates | **Split the file.** `manifest.js` stays pure data and *describes* each badge; the predicate functions live in the runtime module and load with the engine. See §3.4. |
-| 8 | Namespacing | **Grandfather legacy, namespace new.** The `legacy` manifest declares its existing ids verbatim so live saves and the 44 Steam ids keep working; every new minigame namespaces. See §3.4. |
+| 8 | Namespacing | **Grandfather what shipped, namespace what's new.** Ids that shipped before P11.1 stay bare so live saves and the registered Steam ids keep working; everything declared from P11.1 onward namespaces. See §3.4. |
 | 9 | Unlock currency | **Permanent Salvage purchase.** No second currency. Competes with Dry Dock rentals by design; needs the parked balance pass. See §4. |
 | 10 | Phase order | **Chrome before Library.** P11.2 is the shell chrome; the Library screen moves to P11.3. See §5. |
 
@@ -187,13 +187,25 @@ preserving the full expressiveness of today's predicates — conditions like
 a declarative DSL that could express them would be a language with its own bugs.
 
 **Namespacing (decision #8).** All ids are namespaced `<minigameId>:<key>` so two
-minigames can both have a `levels` counter — with one grandfathered exception.
-The `legacy` manifest declares its **existing ids verbatim and bare**
-(`firstblood`, `kills`, `score`, …). Live saves under `deepdescent.badges.v1` /
-`deepdescent.stats.v1` and the 44 Steam achievement ids already registered on the
-partner site therefore keep working with **zero migration**. Core enforces this:
-only the `legacy` manifest may declare bare ids; a bare or colliding id from any
-other manifest is a validation error at registration.
+minigames can both have a `levels` counter — with one grandfathered exception,
+frozen by **id**, not by owning manifest.
+
+Everything that shipped before P11.1 stays bare: the 18 badges in
+`meta/badges.js`, the 16 `STAT_KEYS` in `meta/stats.js`, and the 16 `TRACKS` in
+`meta/progressive.js`. Live saves under `deepdescent.badges.v1` /
+`deepdescent.stats.v1` and the Steam achievement ids already registered on the
+partner site therefore keep working with **zero migration**.
+
+The exemption cannot be scoped to the `legacy` manifest alone, as the 2026-08-25
+draft assumed: **match-3 already ships bare ids too** (`hoardcleared`,
+`comboartist`, `m3Pearls`, `m3Gems`, `m3Coins`, `m3Explosions`, and the
+`m3pearls`/`m3gems`/`m3coins`/`m3boom` tracks). Renaming those would break
+exactly the saves this decision exists to protect.
+
+So the rule is: an id must be namespaced **unless it appears in the frozen
+pre-P11.1 allow-list** (`src/core/grandfathered-ids.js`). Nothing may ever be
+added to that list. Core enforces the rule at registration; a bare id absent from
+the list, or one namespaced to a different minigame, is a validation error.
 
 `progression.registerGoals(manifest)` at boot merges declarations into the owned
 tables. The Trophy Wall gains a per-game section.
@@ -280,10 +292,18 @@ data makes them trivially unit-testable (a `validateManifest` test per contract
 rule, including the bare-id rule from §3.4), and the Library/unlocks service is
 storage-injectable like every other meta module.
 
-The save-compatibility guarantee in decision #8 deserves an explicit regression
-test: a `legacy` manifest whose declared ids are asserted, item by item, against
-the live `badges.js` / `stats.js` tables, so any future rename that would orphan
-a save or a Steam id fails the suite instead of a player's Trophy Wall.
+The save-compatibility guarantee in decision #8 gets three explicit regression
+tests, so a rename that would orphan a save or a Steam id fails the suite rather
+than a player's Trophy Wall:
+
+1. The frozen allow-list is pinned against the live `badges.js` / `stats.js` /
+   `progressive.js` tables — same ids, same count, no stale entries.
+2. Every grandfathered goal a manifest describes must match the live table
+   field for field (`name`, `glyph`, `desc`, `stat`, `tiers`). While `meta/`
+   remains the runtime source through P11.3, this is what makes hand-copying the
+   descriptions into manifests safe.
+3. Every live goal must be claimed by exactly one manifest — so nothing silently
+   drops out of the Trophy Wall when P11.4 switches the source of truth over.
 
 ## 7. Next step
 
