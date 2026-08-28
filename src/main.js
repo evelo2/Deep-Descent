@@ -14,8 +14,7 @@ import { makeAchievements } from './core/achievements.js';
 import { makeDiverWorld } from './core/world/index.js';
 import { createLegacyMiniGame } from './minigames/legacy/index.js';
 import { makeMatch3 } from './minigames/match3/index.js';
-import legacyManifest from './minigames/legacy/manifest.js';
-import match3Manifest from './minigames/match3/manifest.js';
+import { manifestById } from './minigames/catalogue.js';
 import { boardHitTest, backHitTest } from './render/match3.js';
 import { VERSION, BUILD, ENGINE_VERSION } from './version.js';
 
@@ -59,9 +58,20 @@ const core = new Core({ host });
 // minigames close over the host they're built with and ignore whatever enter()
 // hands them later (legacy hands it straight to `new Game(...)`; match3 closes
 // over `host` in makeMatch3's params and its enter(_host, ctx) discards the
-// argument). `open`/`close`/`_bindCore` are copied by reference by
-// restrictHost, so binding the core via the original `host` below still wires
-// them on these restricted copies too (see host.js restrictHost doc).
+// argument). `open`/`close` are copied by reference by restrictHost, so
+// binding the core via the original `host` below still wires them on these
+// restricted copies too (see host.js restrictHost doc). `_bindCore` itself is
+// NOT copied onto restricted hosts — only the original, unrestricted `host`
+// below gets to rebind Core; a minigame holding a restricted host must not be
+// able to reach it (see host.js restrictHost doc for why).
+//
+// Manifests are sourced THROUGH the catalogue (manifestById), not imported
+// directly — the catalogue is the single source of truth for "which
+// minigames exist"; main.js registering something the catalogue doesn't
+// list (or vice versa) would desync the Library/Trophy Wall from the shell
+// (see tests/minigames/catalogue.test.mjs's registration-parity check).
+const legacyManifest = manifestById('legacy');
+const match3Manifest = manifestById('match3');
 const legacyHost = restrictHost(host, legacyManifest.capabilities);
 const legacy = createLegacyMiniGame({ ctx, input, audio, particles, background, economy, progression, achievements, world, host: legacyHost });
 core.register(legacy, legacyManifest);

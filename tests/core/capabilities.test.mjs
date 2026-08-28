@@ -30,17 +30,56 @@ for (const k of ['audio', 'input', 'particles', 'viewport', 'rng']) {
 check(typeof narrow.open === 'function' && typeof narrow.close === 'function',
   'open/close survive restriction');
 
+// A restricted host must NOT expose _bindCore: every restricted copy closes
+// over the SAME `core` variable inside makeHost (see host.js), so a minigame
+// holding one could call host._bindCore(fakeCore) and hijack open/close for
+// every OTHER minigame too. _bindCore is rebinding infrastructure for main.js
+// to wire up the Core once, on the ORIGINAL host — not something any minigame,
+// restricted or not, should be able to reach.
+check(narrow._bindCore === undefined, 'a restricted host does not expose _bindCore');
+check(typeof full._bindCore === 'function', 'sanity: the full host does expose _bindCore');
+
+// Dropping _bindCore from restricted copies must not break open/close: they
+// close over the SAME `core` variable inside makeHost as the original host,
+// so binding via the original (main.js's only call site) still wires every
+// restricted copy — including ones built BEFORE the bind, as main.js does for
+// `legacy` (restrictHost'd, then `host._bindCore(core)` runs after).
+{
+  const bindServices = { ...services };
+  const bindHost = makeHost(bindServices);
+  const bindNarrow = restrictHost(bindHost, []);   // built BEFORE _bindCore, like legacy in main.js
+  const bindCore = new Core({ host: bindHost });
+  const bindStub = (id) => ({ id, enter() {}, update() {}, render() {} });
+  bindCore.register(bindStub('legacy'));
+  bindCore.register(bindStub('match3'));
+  bindHost._bindCore(bindCore);                    // only the ORIGINAL host can do this
+  bindCore.boot('legacy');
+  bindNarrow.open('match3');
+  bindCore.update(0.016);
+  check(bindCore.activeId() === 'match3',
+    'open() on a restricted host (without _bindCore) still reaches Core, once bound via the original host');
+  bindNarrow.close();
+  bindCore.update(0.016);
+  check(bindCore.activeId() === 'legacy',
+    'close() on a restricted host (without _bindCore) still reaches Core');
+}
+
 // --- restrictHost must derive its ungated set from GATED_CAPABILITIES, not a
 // second hardcoded list — a manifest declaring every gated capability should
-// get back something bit-for-bit lossless against the full host, and a brand
-// new ungated service added to makeHost later must survive automatically
-// (this is what would have silently broken under the old UNGATED literal).
+// get back something bit-for-bit lossless against the full host FOR EVERY
+// PUBLIC (non-`_`-prefixed) key, and a brand new ungated service added to
+// makeHost later must survive automatically (this is what would have
+// silently broken under the old UNGATED literal). Internal keys (currently
+// just `_bindCore`) are excluded on purpose — see the _bindCore check above.
 const allCaps = restrictHost(full, ['economy', 'progression', 'achievements', 'world']);
-check(Object.keys(allCaps).length === Object.keys(full).length,
-  'declaring every gated capability yields the same key count as the full host');
-for (const k of Object.keys(full)) {
+const publicKeysOfFull = Object.keys(full).filter((k) => !k.startsWith('_'));
+check(Object.keys(allCaps).length === publicKeysOfFull.length,
+  'declaring every gated capability yields the same public-key count as the full host');
+for (const k of publicKeysOfFull) {
   check(allCaps[k] === full[k], `restrictHost is lossless for key '${k}' when every capability is declared`);
 }
+check(allCaps._bindCore === undefined,
+  'restrictHost drops _bindCore even when every gated capability is declared');
 
 const hostWithNewService = makeHost(services);
 hostWithNewService.newThing = { ok: true };   // simulates a future ungated service added to makeHost
