@@ -12,6 +12,10 @@
 // exit() yet), so its result is flagged `credited` and this path skips it — no
 // double-count.
 
+import { assertManifest } from './manifest.js';
+import { GRANDFATHERED } from './grandfathered-ids.js';
+import { restrictHost } from './host.js';
+
 export class Core {
   /**
    * @param {Object} [opts]
@@ -26,6 +30,10 @@ export class Core {
     if (creditResult) this.creditResult = creditResult;
     /** @type {Map<string, import('./contract.js').MiniGame>} */
     this.registry = new Map();
+    /** @type {Map<string, *>} id -> manifest, for minigames that declared one */
+    this.manifests = new Map();
+    /** @type {Map<string, *>} id -> the capability-restricted host it receives */
+    this._hosts = new Map();
     /** @type {import('./contract.js').MiniGame[]} the mode stack; base = home */
     this._stack = [];
     /** @type {{op:'open',id:string,ctx?:any}|{op:'close',result?:any}|null} */
@@ -58,18 +66,52 @@ export class Core {
     }
   }
 
-  /** Add a MiniGame to the roster (keyed by its `id`). */
-  register(minigame) {
+  /**
+   * Add a MiniGame to the roster (keyed by its `id`). An optional contract-v1
+   * manifest is validated here and refused loudly on mismatch, so a broken
+   * manifest fails at boot rather than at some later frame. Registering without
+   * a manifest stays supported (and yields the unrestricted Host).
+   * @param {import('./contract.js').MiniGame} minigame
+   * @param {*} [manifest]
+   */
+  register(minigame, manifest) {
+    if (manifest) {
+      assertManifest(manifest, { grandfathered: GRANDFATHERED });
+      if (manifest.id !== minigame.id) {
+        throw new Error(
+          `Core.register: manifest id '${manifest.id}' does not match minigame id '${minigame.id}'`);
+      }
+      this.manifests.set(minigame.id, manifest);
+      this._hosts.set(minigame.id, restrictHost(this.host, manifest.capabilities));
+    }
     this.registry.set(minigame.id, minigame);
     return this;
   }
 
-  /** Registered minigames' identity for the About screen: id, display name,
-   *  and version (falling back to the id / '—' when a minigame omits them). */
+  /** The registered manifest for `id`, or undefined if it registered without one. */
+  manifestFor(id) { return this.manifests.get(id); }
+
+  /** The Host a minigame receives: capability-restricted when it declared a
+   *  manifest, the full Host otherwise. */
+  _hostFor(id) {
+    const h = this._hosts.get(id);
+    return h === undefined ? this.host : h;
+  }
+
+  /** Registered minigames' identity for the About screen. The manifest is the
+   *  source of truth when one was registered; otherwise fall back to the
+   *  runtime module's fields, then to the id / '—'. */
   versions() {
-    return [...this.registry.values()].map((m) => ({
-      id: m.id, name: m.name || m.id, version: m.version || '—',
-    }));
+    return [...this.registry.values()].map((m) => {
+      const man = this.manifests.get(m.id);
+      return {
+        id: m.id,
+        name: (man && man.name) || m.name || m.id,
+        version: (man && man.version) || m.version || '—',
+        icon: man && man.icon,
+        blurb: man && man.blurb,
+      };
+    });
   }
 
   /** Activate a registered mode by id and hand it the Host via enter(). */
@@ -77,7 +119,7 @@ export class Core {
     const mg = this.registry.get(id);
     if (!mg) throw new Error(`Core.boot: no minigame registered as '${id}'`);
     this._stack = [mg];
-    mg.enter(this.host);
+    mg.enter(this._hostFor(mg.id));
     return mg;
   }
 
@@ -97,7 +139,7 @@ export class Core {
       const mg = this.registry.get(p.id);
       if (!mg) throw new Error(`Core.open: no minigame registered as '${p.id}'`);
       this._stack.push(mg);
-      mg.enter(this.host, p.ctx);
+      mg.enter(this._hostFor(mg.id), p.ctx);
     } else if (p.op === 'close') {
       if (this._stack.length <= 1) return;          // never pop the base
       const mg = this._stack.pop();
