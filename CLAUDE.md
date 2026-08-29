@@ -1,5 +1,11 @@
 # Deep Descent — working conventions
 
+## Resuming after /clear
+On `continue` (or any resume-style opener) at the start of a session, first read
+`.claude/next-up.md` if it exists and resume from its "next step". That file is
+a handoff written by clear-prep before the last clear; it's the bridge across
+the context reset.
+
 A JS/Canvas browser game (homage to Durell's *Scuba Dive*, 1983), shipped to the
 web and wrapped for Steam via Electron in `desktop/`. Architecture lives in
 `docs/platform/architecture.md`; this file is only the things that are easy to
