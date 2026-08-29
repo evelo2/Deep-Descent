@@ -21,21 +21,23 @@ node tests/core/core.test.mjs                                   # one file
 for f in $(find tests -name "*.test.mjs"); do node "$f" || echo "FAIL $f"; done   # all
 ```
 
-**⚠️ Two incompatible `check()` signatures exist. Copy the one already in the
-file you are editing.**
+**⚠️ Three incompatible assertion styles exist. Copy the one already in the
+file you are editing — never import a habit from another file.**
 
-| Style | Signature | Files |
-|---|---|---|
-| name-first (majority) | `check(name, cond)` | ~50 |
-| cond-first | `check(cond, msg)` | ~23 |
+| Style | Signature | Files | Where |
+|---|---|---|---|
+| name-first (majority) | `check(name, cond)` | 52 | everywhere |
+| cond-first | `check(cond, msg)` | 23 | mostly `tests/core/` |
+| name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | all of `tests/stage/` + `tests/creatures/` |
 
-Mixing them **silently always-passes** — calling `check(1 === 2, 'msg')` in a
-name-first file evaluates `cond = 'msg'`, which is truthy, so a false assertion
-reports success. Verified 2026-08-28. When adding a test, read the top of the
-target file first.
+The two `check` styles are the dangerous pair: mixing them **silently
+always-passes** — calling `check(1 === 2, 'msg')` in a name-first file evaluates
+`cond = 'msg'`, which is truthy, so a false assertion reports success. The
+`assert` files also print per-check `ok`/`FAIL` lines as they go and exit
+non-zero from `done()`. Census verified 2026-08-29 against all 91 test files.
 
-Every test ends by printing its own summary line, e.g.
-`` console.log(`ok foo.test.mjs (${pass} checks)`) ``.
+Every test ends by printing its own summary line — `` console.log(`ok foo.test.mjs (${pass} checks)`) ``
+in the `check` files, `done()` in the `assert` ones.
 
 ## Types
 
@@ -81,6 +83,12 @@ memory.**
 - **Core minigames must OR `consumeStart()` into their confirm/A-button check**,
   and d-pad left/right arrive as `pressed('left')` / `pressed('right')`. Missed
   twice; verify on the ROG Ally.
+- **Any wrapper between a minigame and the Core must forward `ctx`.** The shell's
+  host wrapper in `game.js` dropped `open`'s second argument for a year, so
+  `host.open('match3', { source: 'chest' })` arrived as a menu launch and the
+  `hoardcleared` Steam achievement was unobtainable (fixed 2026-08-28, `e1e33c5`).
+  `tests/game/open-ctx-chain.test.mjs` drives the whole real chain and is the
+  guard — extend it rather than writing a fresh isolated test.
 - **Registered minigame ids are `legacy` and `match3`.** `reef`, `stage` and
   `whirlpool` are internal zones of `legacy`, not registered minigames, despite
   having their own folders under `src/minigames/`.
