@@ -429,6 +429,7 @@ export class Game {
       if (this.state === 'playing' || this.state === 'paused') {
         gameplay.push({ id: 'pause', x: 300, y: 8, w: 46, h: 34 });
         gameplay.push({ id: 'mute', x: 352, y: 8, w: 46, h: 34 });
+        gameplay.push({ id: 'music', x: 404, y: 8, w: 46, h: 34 });
       }
       if (this.state === 'playing' && r.zone === 'reef' &&
           r.boat.contains(this.diver) && r.canSail && r.carried === 0) {
@@ -502,7 +503,9 @@ export class Game {
     // text — no button chrome, just a hit region.
     if (b.id === 'schemeNext' || b.id === 'controls' || b.id === 'skipNext') return;
     const ctx = this.ctx;
-    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted) || b.id === 'sail' || (b.id === 'aim' && this.input._aimBtnActive) || (b.id === 'torch' && this.torchOn);
+    const active = (b.id === 'pause' && this.state === 'paused') || (b.id === 'mute' && this.muted)
+      || (b.id === 'music' && this._reef && this._reef.musicMuted) || b.id === 'sail'
+      || (b.id === 'aim' && this.input._aimBtnActive) || (b.id === 'torch' && this.torchOn);
     ctx.save();
     ctx.fillStyle = active ? 'rgba(18,58,88,0.85)' : 'rgba(6,22,38,0.72)';
     ctx.strokeStyle = 'rgba(120,200,255,0.35)'; ctx.lineWidth = 1.5;
@@ -515,6 +518,18 @@ export class Game {
       else { ctx.fillRect(cx - 6, cy - 7, 4, 14); ctx.fillRect(cx + 2, cy - 7, 4, 14); }
     } else if (b.id === 'mute') {
       this._text(this.muted ? '🔇' : '🔊', cx, cy + 1, 16, PAL.hudText, 'center', 'middle');
+    } else if (b.id === 'music') {
+      // Music mute is its own toggle, so it needs its own off-state signal —
+      // a struck-through note, the same two-state idea as 🔊/🔇 next door. The
+      // flag lives on the reef, not the shell (see the 'weapon' note below).
+      const off = !!(this._reef && this._reef.musicMuted);
+      this._text('🎵', cx, cy + 1, 16, PAL.hudText, 'center', 'middle');
+      if (off) {
+        ctx.save();
+        ctx.strokeStyle = '#ff9a6b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx - 10, cy + 8); ctx.lineTo(cx + 10, cy - 8); ctx.stroke();
+        ctx.restore();
+      }
     } else if (b.id === 'sail') {
       this._text('⛵ SAIL ON', cx, cy + 1, 15, PAL.gold, 'center', 'middle', true);
     } else if (b.id === 'weapon') {

@@ -326,6 +326,7 @@ export class Reef {
     this.armedCharge = null; this.explosions = [];
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
+    this.musicMuted = false;   // the score mutes independently of the SFX
     this.hasValve = false;   // Depth Valve: holds pressure below its line (shop item)
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
@@ -1262,6 +1263,7 @@ export class Reef {
 
     if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this._shell.state === 'shop') this._closeShop(); else if (this._shell.state === 'drydock') this._shell._closeDryDock(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
+    if (this.input.pressed('music') || this.input.consumeButton('music')) { this.audio.ensure(); this.musicMuted = this.audio.toggleMusicMuted(); }
 
     // Shop: a frozen overlay while docked — navigate, buy, then close.
     if (this._shell.state === 'shop') {
