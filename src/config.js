@@ -196,6 +196,16 @@ export const TORCH = {
   litRadius: 250,   // dark-cave visible radius while lit (unlit 52 < this < flare 300)
   drain: 8,         // battery drained per second while lit (~12.5s on a full battery)
 };
+
+// Depth Valve: a one-off shop unlock (like the Torch) that HOLDS PRESSURE below
+// its line — deeper than holdDepthM the depth term of the air drain stops
+// growing, so the world floor costs the same air as the line. It never touches
+// the baseline breath or any drain multiplier. See pressureDepth() in the reef.
+export const VALVE = {
+  cost: 400,        // shop price (a commitment, like the Torch)
+  minReef: 3,       // shop-gate: appears from reef 3
+  holdDepthM: 240,  // metres: below this the pressure penalty stops growing
+};
 export const FLARE = {
   startCount: 2,
   duration: 16,         // seconds a flare burns (long, to offset the darker caves)

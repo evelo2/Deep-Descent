@@ -241,6 +241,10 @@ notches and home indicators via safe-area insets.
 - 🕯️ **Dark caves & flares** — pitch-black chambers hide rich loot; light a
   **flare** (G) to see. Buy flares at the shop or find them in the world.
 - 🔔 **Dive bells** — deep checkpoints that bank loot and refill air without surfacing.
+- ⚲ **Depth gauge & Depth Valve** — a gauge down the right edge shows your live
+  depth against the whole water column, with a pip at the dive's deepest point.
+  Buy the **Depth Valve** at the shop (reef 3+) and it holds pressure below
+  240 m, so the deep stops charging you extra air — its line is marked on the gauge.
 - 💰 **Gold economy & shop** — banked loot pays out **points + gold**; spend gold
   at the boat or a bell to unlock/upgrade weapons, buy ammo, flares, air tanks
   and capacity (reef-gated; **upgrade prices double each level**). **Supply
