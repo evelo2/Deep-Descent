@@ -635,6 +635,7 @@ export const KEYMAP = {
   right: ['ArrowRight', 'KeyD'],
   pause: ['KeyP', 'Escape'],
   mute:  ['KeyM'],
+  music: ['KeyJ'],   // mute MUSIC only (M is mute-everything, N launches match-3)
   weaponNext: ['KeyE', 'BracketRight'],
   weaponPrev: ['KeyQ', 'BracketLeft'],
   shop: ['KeyB'],
