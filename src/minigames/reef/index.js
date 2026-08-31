@@ -62,13 +62,14 @@ let { W, H } = WORLD;
 const { WW, WH, OPEN_BAND, CELL } = WORLD;
 
 // Reef flavour: each reef gets a wacky procedural name + a light theme.
-const REEF_THEMES = [
-  { key: 'kelp',     tag: '🌿', tint: [60, 175, 120], adjs: ['Overgrown', 'Mossy', 'Tangled', 'Verdant'], nouns: ['Kelp Forest', 'Seagrass Meadow', 'Weed Bank'] },
-  { key: 'volcanic', tag: '🌋', tint: [220, 95, 55],  adjs: ['Smoldering', 'Molten', 'Blistered', 'Scalding'], nouns: ['Caldera', 'Ember Trench', 'Lava Vent'] },
-  { key: 'frozen',   tag: '❄',  tint: [120, 185, 235], adjs: ['Frostbitten', 'Glacial', 'Shivering', 'Icebound'], nouns: ['Ice Shelf', 'Frost Grotto', 'Glacier Drop'] },
-  { key: 'haunted',  tag: '👻', tint: [155, 115, 205], adjs: ['Haunted', 'Ghostly', 'Whispering', 'Cursed'], nouns: ['Wreckyard', 'Bone Reef', 'Spirit Hollow'] },
-  { key: 'neon',     tag: '✨', tint: [90, 220, 215],  adjs: ['Glowing', 'Bioluminescent', 'Electric', 'Radiant'], nouns: ['Glow Gardens', 'Neon Shoals', 'Lantern Deep'] },
-  { key: 'junk',     tag: '⚓', tint: [195, 155, 95],  adjs: ['Rusty', 'Crusty', 'Barnacled', 'Salvaged'], nouns: ['Scrapyard', 'Anchor Graveyard', 'Rust Basin'] },
+// `music` names a palette in src/music/palettes.js — the score the reef plays.
+export const REEF_THEMES = [
+  { key: 'kelp',     tag: '🌿', tint: [60, 175, 120], music: 'beauty', adjs: ['Overgrown', 'Mossy', 'Tangled', 'Verdant'], nouns: ['Kelp Forest', 'Seagrass Meadow', 'Weed Bank'] },
+  { key: 'volcanic', tag: '🌋', tint: [220, 95, 55],  music: 'dread', adjs: ['Smoldering', 'Molten', 'Blistered', 'Scalding'], nouns: ['Caldera', 'Ember Trench', 'Lava Vent'] },
+  { key: 'frozen',   tag: '❄',  tint: [120, 185, 235], music: 'dread', adjs: ['Frostbitten', 'Glacial', 'Shivering', 'Icebound'], nouns: ['Ice Shelf', 'Frost Grotto', 'Glacier Drop'] },
+  { key: 'haunted',  tag: '👻', tint: [155, 115, 205], music: 'horror', adjs: ['Haunted', 'Ghostly', 'Whispering', 'Cursed'], nouns: ['Wreckyard', 'Bone Reef', 'Spirit Hollow'] },
+  { key: 'neon',     tag: '✨', tint: [90, 220, 215],  music: 'beauty', adjs: ['Glowing', 'Bioluminescent', 'Electric', 'Radiant'], nouns: ['Glow Gardens', 'Neon Shoals', 'Lantern Deep'] },
+  { key: 'junk',     tag: '⚓', tint: [195, 155, 95],  music: 'horror', adjs: ['Rusty', 'Crusty', 'Barnacled', 'Salvaged'], nouns: ['Scrapyard', 'Anchor Graveyard', 'Rust Basin'] },
 ];
 const WACKY_ADJ = ['Soggy', 'Bubbly', 'Grumpy', 'Wobbly', 'Sneaky', 'Salty', 'Squishy', 'Giggling', 'Suspicious', 'Sleepy', 'Cranky', 'Slippery', 'Peculiar', 'Ludicrous', 'Damp'];
 const WACKY_PLACE = ['Trench', 'Grotto', 'Cove', 'Lagoon', 'Abyss', 'Hollow', 'Gully', 'Chasm', 'Sinkhole', 'Gorge', 'Nook', 'Reef'];
