@@ -320,3 +320,32 @@ download until a player opens it — is P11.3. Declaring the goal shape here
 P11.1 only describes goals for menus/Trophy Wall rendering later; the live
 `meta/*` tables remain the runtime source of truth for scoring until P11.4
 wires `progression.registerGoals` and namespaced stat plumbing through.
+
+## 10. The score (`src/music/`)
+
+`src/music/` owns the dive's music and nothing else owns any of it.
+
+- **`palettes.js`** is pure data plus pure maths — the five palettes
+  (`beauty`, `dread`, `horror`, `sacral`, `organic`), `paletteFor(zone, musicId)`,
+  `noteFreq` and `chordFreqs`. It imports nothing and touches no Web Audio, so
+  it is fully testable under plain Node. **`paletteFor` is the only place the
+  zone/theme → palette mapping lives**; a zone with its own score (abyss,
+  temple, belly) wins, otherwise the reef theme's `music` field decides, and
+  anything unrecognised falls back rather than throwing.
+- **`index.js`** holds `class Music`: one fixed graph (voices → dry + a send
+  into a convolver whose impulse response is *generated*, both summing into a
+  `bus`), the pad/sub/motif voices, and a lookahead scheduler that places events
+  against `ctx.currentTime`. It never chains `setTimeout`, and it never fetches
+  an asset — `assets/` stays empty.
+
+`Audio` (`src/audio.js`) owns the single `Music` instance, built in `ensure()`
+once the master gain exists, and exposes `startMusic`/`stopMusic`/`setPalette`/
+`toggleMusicMuted` plus a `setDepth` that forwards to both the ambient bed and
+the score. Because the score sums into its own `bus`, muting music leaves SFX
+untouched — that is the whole reason the bus exists.
+
+The reef calls `_applyMusic()` and only `_applyMusic()`: on dive start, at the
+end of `_newReefName()`, and immediately after every `this.zone = '…'`
+assignment. Adding a zone means adding one call there; adding a reef theme means
+giving it a `music` field, which `tests/audio/palettes.test.mjs` enforces by
+iterating the real `REEF_THEMES`.

@@ -240,8 +240,15 @@ notches and home indicators via safe-area insets.
   then fire when lined up. Upgrade the **Targeting System** for faster aim & fire.
 - 🕯️ **Dark caves & flares** — pitch-black chambers hide rich loot; light a
   **flare** (G) to see. Buy flares at the shop or find them in the world.
+- 🎼 **A living underwater score** — five procedural palettes (*beauty, dread,
+  horror, sacral, organic*) built live in the browser from detuned pad stacks, a
+  sub drone and sparse bell motifs through a generated convolution reverb. Each
+  reef theme picks its own palette and the score crossfades when it changes; the
+  abyss, the temple and the whale's belly override it with their own. Descending
+  darkens the pads and floods the reverb. Mute the music alone with **J** (L3 on
+  a pad, or the 🎵 button on touch) — **M** still mutes everything.
 - 🔔 **Dive bells** — deep checkpoints that bank loot and refill air without surfacing.
-- ⚲ **Depth gauge & Depth Valve** — a gauge down the right edge shows your live
+- ⚲ **Depth gauge & Depth Valve** — a gauge down the left edge shows your live
   depth against the whole water column, with a pip at the dive's deepest point.
   Buy the **Depth Valve** at the shop (reef 3+) and it holds pressure below
   240 m, so the deep stops charging you extra air — its line is marked on the gauge.
