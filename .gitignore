@@ -2,3 +2,7 @@
 node_modules/
 *.log
 /tmp/
+
+# Personal Claude Code settings (permissions etc.) — not repo config;
+# .claude/settings.json IS committed and holds the shared hooks.
+.claude/settings.local.json
