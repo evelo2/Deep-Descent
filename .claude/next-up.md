@@ -1,36 +1,40 @@
 # Next up — Deep Descent
 
 ## Where we are
-P11 ("app store" phase) of the minigame-platform arc. **P11.1 shipped** (contract
-v1, manifests, catalogue, capability-enforced Hosts — merged via PR #2, `f46fcc6`).
-A year-old live bug was then fixed: the shell's host wrapper in `game.js` dropped
-`open`'s `ctx`, so the `hoardcleared` Steam achievement was unobtainable (`e1e33c5`).
-`main` is clean, pushed, **91/91 tests green, `npm run typecheck` exits 0**.
+`main` is clean, pushed, **93/93 tests green, `npm run typecheck` exits 0**.
+
+Shipped and live this session: the **depth gauge + Depth Valve** (PR #3, merge
+`47ba98c`, deployed, live BUILD `depth-gauge-2026-08-31`). The gauge is on the
+LEFT edge — the right has no clear full-height lane (minimap + touch controls),
+which only showed up by running it in a browser.
+
+Specced and planned but **not started**: the **underwater music**.
 
 ## Next step
-Implement **P11.2 — shell chrome**, starting at **Task 1** of
-`docs/superpowers/plans/2026-08-28-p11-2-shell-chrome.md`.
+Pick one — ask the user which if it isn't obvious from their opener:
 
-The plan has 7 TDD tasks, each with real test code and exact file paths. Task 1 is
-`input.confirmEdge()` + moving the control-scheme storage and legend builder into
-`src/controls.js`. Work the tasks in order; each ends in its own commit.
-
-Read the plan's **"Locked decisions"** section first — the seven P11.2 design
-answers were approved in chat on 2026-08-28 and that section is their ONLY durable
-record. The spec (`docs/superpowers/specs/2026-08-25-minigame-platform-contract-design.md`
-§5) was deliberately not amended, so it describes P11.2 only in outline.
+1. **Underwater music** — implement
+   `docs/superpowers/plans/2026-08-31-underwater-music.md`, Task 1 of 7.
+   Spec: `docs/superpowers/specs/2026-08-31-underwater-music-design.md`.
+   Task 1 is the palette data + the pure `paletteFor` rule; no Web Audio yet.
+2. **P11.2 shell chrome** — resume
+   `docs/superpowers/plans/2026-08-28-p11-2-shell-chrome.md` at **Task 2**.
+   Task 1 is committed on branch `feat/p11-2-shell-chrome` (`031647f`), local
+   and unpushed. Read that plan's **"Locked decisions"** first — it is the ONLY
+   record of the seven design answers approved 2026-08-28.
 
 ## Watch-outs
-- **Two manual, browser-only items are still owed** and no automated check in this
-  repo can reach them:
-  1. **Deploy** — the `hoardcleared` fix is on `main` but not in front of players.
-     BUILD is `fix-hoardcleared-2026-08-28`; confirm the About screen shows it.
-  2. **P11.1 browser pass** — menu → About → dive → Guardian Chest → match-3 → back.
-- **Three incompatible assertion styles** live in `tests/` (see CLAUDE.md). Mixing
-  the two `check()` ones silently always-passes. Read the top of any test file
-  before editing it, and copy what is already there.
-- P11.2 touches the **touch** path (the ✕ becomes the only quit route on touch) and
-  the shell/reef seam that has frozen touch devices twice. Task 7 keeps a manual
-  touch-emulated pass as a required, non-skippable step.
-- Chrome in P11.2 wraps **stack-pushed minigames only**. The base `legacy` mode
-  keeps its own pause/help/game-over until P11.5 — do not start that surgery early.
+- **Two manual, browser-only debts, both still unpaid:**
+  1. **Nobody has bought a Depth Valve mid-dive** (needs reef 3 + 400g). The
+     shop logic is unit-tested against the real `_shopItems`/`_shopBuy`, but the
+     in-game path is unproven. `VALVE.holdDepthM` = 240 is a guess, not balance.
+  2. **The P11.1 browser pass** — menu → About → dive → Guardian Chest →
+     match-3 → back. Owed since before this session.
+- **Run visual/audio work in a real browser before believing it.** The gauge's
+  first cut was drawn underneath the minimap and every test passed.
+- **Three incompatible assertion styles** live in `tests/` (see CLAUDE.md).
+  Mixing the two `check()` ones silently always-passes.
+- The music plan's Task 7 keeps a **listening pass** as a required step — the
+  palettes are data so tuning is cheap, and the first build will need it.
+- P11.2 touches the **touch** path and the shell/reef seam that has frozen touch
+  devices twice.
