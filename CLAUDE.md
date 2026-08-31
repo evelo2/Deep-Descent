@@ -65,6 +65,21 @@ New files under `src/core/` and `src/minigames/` should opt in.
 | `ENGINE_VERSION` | The Core/platform version. Bump when the Core contract or shared systems change. |
 | `VERSION` | Player-facing release number. Leave it alone unless shipping a release. |
 
+## Deploying
+
+**Every push to `main` deploys automatically** — `.github/workflows/pages.yml`
+builds the repo as-is to GitHub Pages in ~20s. There is no manual deploy step and
+nothing to run. Confirm a deploy landed by checking the live build stamp:
+
+```bash
+curl -s https://evelo2.github.io/Deep-Descent/src/version.js | grep BUILD
+```
+
+It must match `src/version.js`. A stale value means the browser (or the deploy)
+is serving old scripts. Pushing a feature BRANCH deploys nothing — only `main`.
+(README's "Deploy from a branch" instructions are stale; the workflow replaced
+that path after the branch builder wedged.)
+
 ## Persistence — do not rename these keys
 
 `deepdescent.badges.v1`, `deepdescent.stats.v1`, `deepdescent.salvage.v2`,
