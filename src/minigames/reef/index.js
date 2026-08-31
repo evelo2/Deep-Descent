@@ -40,13 +40,14 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
 import { makeWhirlpool } from '../whirlpool/index.js';
 import { makeStage } from '../stage/index.js';
 import { makeHost } from '../../core/host.js';
+import { drawDepthGauge, metresDown } from '../../render/depthgauge.js';
 import { STAGE } from '../../config.js';
 import { saveSalvage, runPayout, bankReefRelic, consumeReefRelic, skipStartGold } from '../../meta/salvage.js';
 import { awardBadges, saveBadges, rankFor } from '../../meta/badges.js';
@@ -92,6 +93,15 @@ export function oxygenMultiplier(reef, zone, inSub = false) {
   let m = 1 + GAME.oxygenPenaltyPerReef * Math.min(reef - 1, GAME.oxygenPenaltyCap);
   if (zone === 'abyss' && !inSub) m *= ABYSS.airMult;
   return m;
+}
+
+// Pure: the depth the air drain's PRESSURE TERM is charged at. The Depth Valve
+// (shop item) holds pressure below its line, so anything deeper than
+// VALVE.holdDepthM costs the same air as the line itself. The baseline breath
+// and every drain multiplier are untouched. Shared by update() + unit tests.
+export function pressureDepth(diverY, hasValve = false) {
+  const holdY = WORLD.SURFACE + VALVE.holdDepthM * 10;
+  return hasValve ? Math.min(diverY, holdY) : diverY;
 }
 
 // Pure: the chance a reef offers a bonus-zone portal (temple/stage/abyss/whirl),
@@ -314,6 +324,7 @@ export class Reef {
     this.armedCharge = null; this.explosions = [];
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
+    this.hasValve = false;   // Depth Valve: holds pressure below its line (shop item)
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
@@ -734,6 +745,8 @@ export class Reef {
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     if (!this.hasTorch && this.reef >= TORCH.minReef)
       items.push({ kind: 'torch', id: 'torch', label: `🔦 Torch — battery light for dark caves (T)`, cost: TORCH.cost });
+    if (!this.hasValve && this.reef >= VALVE.minReef)
+      items.push({ kind: 'valve', id: 'valve', label: `⚲ Depth Valve — holds pressure below ${VALVE.holdDepthM} m`, cost: VALVE.cost });
     // Timed consumable buffs — gameplay-tied, run-long or until death. Buying one
     // while it's active refreshes its timer (label shows the live remaining).
     for (const c of CONSUMABLE) {
@@ -792,6 +805,9 @@ export class Reef {
     } else if (it.kind === 'torch') {
       this.hasTorch = true;
       this.puName = 'TORCH!'; this.puCol = PAL.gateGlow; this.puT = 1.6;
+    } else if (it.kind === 'valve') {
+      this.hasValve = true;
+      this.puName = 'DEPTH VALVE!'; this.puCol = PAL.air; this.puT = 1.6;
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
       this.puName = `HARPOON CAP ${this.harpoonMax}`; this.puCol = PAL.harpoon; this.puT = 1.6;
@@ -1423,7 +1439,7 @@ export class Reef {
       // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
       const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
       const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
-      this.air -= (AIR.drainPerSec + this.diver.y * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
+      this.air -= (AIR.drainPerSec + pressureDepth(this.diver.y, this.hasValve) * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
@@ -2337,25 +2353,31 @@ export class Reef {
         this._text(this.torchOn ? '🔦 ON' : '🔦', bxb + bwb + 8, byb + bhb / 2, 12, this.torchOn ? PAL.air : 'rgba(160,195,225,0.7)', 'left', 'middle', true);
     }
 
+    drawDepthGauge(ctx, {
+      W, H,
+      depth: metresDown(this.diver.y),
+      deepest: metresDown(WORLD.SURFACE + this.depthReached),
+      valveDepth: this.hasValve ? VALVE.holdDepthM : null,
+    });
+
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
     const cp = this.bankPulse > 0 ? PAL.gold : PAL.hudText;
     const pearlSuffix = this.carriedPearls > 0 ? `   ◦ ${this.carriedPearls}` : '';
     this._text(`CARRYING ${this.carried}${pearlSuffix}`, W - 20, 46, 14, cp, 'right', 'top');
-    this._text(`DEPTH ${Math.round(this.depthReached / 10)} m`, W - 20, 66, 13, '#bfe6ff', 'right', 'top');
     const t3 = this.reefTheme.tint;
     const zoneTag = this.zone === 'belly' ? '🐋 THE BELLY' : this.zone === 'temple' ? '🏛 THE TEMPLE' : `${this.reefTheme.tag} ${this.reefName}`;
     const zoneCol = this.zone === 'belly' ? PAL.membrane : this.zone === 'temple' ? PAL.templeRim : `rgb(${t3[0]},${t3[1]},${t3[2]})`;
-    this._text(zoneTag, W - 20, 84, 12, zoneCol, 'right', 'top');
-    if (this.zone === 'temple' && this.hasKey) this._text('🔑 KEY', W - 20, 102, 12, PAL.key, 'right', 'top');
+    this._text(zoneTag, W - 20, 66, 12, zoneCol, 'right', 'top');
+    if (this.zone === 'temple' && this.hasKey) this._text('🔑 KEY', W - 20, 84, 12, PAL.key, 'right', 'top');
     if (this.zone === 'reef') {
       const rel = this.relicBanked ? '⚓ RELIC ✓' : this.carryingRelic ? '⚓ RELIC — bank it!' : `⚓ ${this.reefBanked}/${this.reefGoal}`;
-      this._text(this.canSail ? '⚓ SAIL READY' : rel, W - 20, 102, 12, this.canSail ? PAL.air : PAL.key, 'right', 'top');
+      this._text(this.canSail ? '⚓ SAIL READY' : rel, W - 20, 84, 12, this.canSail ? PAL.air : PAL.key, 'right', 'top');
     } else if (this.zone === 'abyss') {
       if (this.inSub) {
         const breached = this.subArmor <= 0;
-        this._text(`🛥 HULL ${'▮'.repeat(this.subArmor)}${'▯'.repeat(Math.max(0, SUB.armor - this.subArmor))}`, W - 20, 102, 12, breached ? PAL.danger : PAL.air, 'right', 'top');
+        this._text(`🛥 HULL ${'▮'.repeat(this.subArmor)}${'▯'.repeat(Math.max(0, SUB.armor - this.subArmor))}`, W - 20, 84, 12, breached ? PAL.danger : PAL.air, 'right', 'top');
       } else {
-        this._text('⚠ 150% AIR', W - 20, 102, 12, PAL.danger, 'right', 'top');
+        this._text('⚠ 150% AIR', W - 20, 84, 12, PAL.danger, 'right', 'top');
       }
     }
     this._text(`HI ${this._shell.hi}`, W / 2, 22, 14, '#bfe6ff', 'center', 'top');
