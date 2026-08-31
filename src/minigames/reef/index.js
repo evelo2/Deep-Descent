@@ -56,6 +56,7 @@ import { awardProgress, saveProgress, trackProgress, tierNameById } from '../../
 import { unlockAchievement } from '../../platform/steam.js';
 import { applyLoadout, getRelic, tickEquippedRentals } from '../../meta/relics.js';
 import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
+import { paletteFor } from '../../music/palettes.js';
 
 // Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
 let { W, H } = WORLD;
@@ -338,6 +339,7 @@ export class Reef {
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = startReef;
+    this.audio.startMusic(); this._applyMusic();   // engine up before the palette is chosen
     // Consume the cashed reef relic (a reef-(N−1) token unlocks a start at reef N)
     // and persist; flash the head-start so the skip is legible.
     if (startReef > 1 && consumeReefRelic(this.meta, startReef - 1)) {
@@ -636,6 +638,13 @@ export class Reef {
       !portals.some((p) => Math.hypot(cr.x - p.x, cr.y - p.y) < p.r + clear + (cr.radius || 14)));
   }
 
+  // The ONE place the dive decides what to play: the zone wins if it has its own
+  // score, otherwise the reef's theme does. Called on dive start, on every reef
+  // roll, and on every zone change.
+  _applyMusic() {
+    this.audio.setPalette(paletteFor(this.zone, this.reefTheme && this.reefTheme.music));
+  }
+
   _newReefName() {
     const pick = (a) => a[(Math.random() * a.length) | 0];
     const theme = pick(REEF_THEMES);
@@ -645,6 +654,7 @@ export class Reef {
     else if (p === 1) this.reefName = `${pick(WACKY_ADJ)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
     else if (p === 2) this.reefName = `${pick(WACKY_NAMES)}’s ${pick([...theme.nouns, ...WACKY_PLACE])}`;
     else this.reefName = `The ${pick(theme.adjs)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
+    this._applyMusic();   // a new reef may roll a new palette
   }
 
   _makePowerups(count) {
@@ -1813,6 +1823,7 @@ export class Reef {
     // second death (e.g. air runs out AND a creature touches you) must not award
     // the Salvage payout twice — the payout is a non-idempotent side effect.
     this._shell.state = 'gameover';
+    this.audio.stopMusic();   // the menu keeps the ambient bed alone
     this.audio.gasp();
     if (this.score > this._shell.hi) {
       this._shell.hi = this.score; this._shell.hiReef = this.reef; this.newHi = true;
@@ -1911,6 +1922,7 @@ export class Reef {
     const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance', 'whirlEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
+    this._applyMusic();
     this.whaleExit = null; this.templeExit = null; this.abyssExits = []; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     // (whirl* gameplay state is owned + reset by the whirlpool MiniGame's exit(), not here)
     this._placeDiver(s.returnX, s.returnY, 0);
@@ -1927,6 +1939,7 @@ export class Reef {
     this._enteredWhale = whale;
     this._snapshotReef(m.x + whale.facing * 34, m.y);
     this.zone = 'belly';
+    this._applyMusic();
     this._generateBelly();
     // Spawn at the throat exit (top of the main shaft), like the temple/abyss:
     // full air with the exit right there, then descend into the belly for loot
@@ -1947,6 +1960,7 @@ export class Reef {
   _enterTemple(gate) {
     this._snapshotReef(gate.x, gate.y + 50);
     this.zone = 'temple';
+    this._applyMusic();
     this._generateTemple();
     // Drop in at the top of the temple's central shaft, just inside the entrance
     // gate — the exit is then right above you, so you descend to loot and climb
@@ -1961,6 +1975,7 @@ export class Reef {
   _enterAbyss(entrance) {
     this._snapshotReef(entrance.x, entrance.y + 50);
     this.zone = 'abyss';
+    this._applyMusic();
     this._generateAbyss();
     // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
     // trench by headlight to find one of the exit hatches. inSub is always on

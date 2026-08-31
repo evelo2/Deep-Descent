@@ -64,5 +64,42 @@ check('a fifth is about 1.4983x', Math.abs(noteFreq(100, 7) / 100 - 1.498307) < 
     chordFreqs(p, p.chords.length).length === chordFreqs(p, 0).length);
 }
 
+// --- The reef picks its palette through the one shared rule ------------------
+// _applyMusic is the only place the reef decides what to play; drive it against
+// a stub so the wiring is proved without an AudioContext.
+{
+  const { Reef } = await import('../../src/minigames/reef/index.js');
+  const calls = [];
+  const stub = {
+    zone: 'reef',
+    reefTheme: REEF_THEMES.find((t) => t.key === 'haunted'),
+    audio: { setPalette: (id) => calls.push(id) },
+  };
+  Reef.prototype._applyMusic.call(stub);
+  check('a haunted reef plays its theme palette \u2014 horror, not its own key',
+    calls[calls.length - 1] === 'horror');
+
+  stub.zone = 'abyss';
+  Reef.prototype._applyMusic.call(stub);
+  check('dropping into the abyss switches to horror', calls[calls.length - 1] === 'horror');
+
+  stub.zone = 'temple';
+  Reef.prototype._applyMusic.call(stub);
+  check('the temple switches to sacral', calls[calls.length - 1] === 'sacral');
+
+  stub.zone = 'belly';
+  Reef.prototype._applyMusic.call(stub);
+  check('the belly switches to organic', calls[calls.length - 1] === 'organic');
+
+  stub.zone = 'reef';
+  stub.reefTheme = REEF_THEMES.find((t) => t.key === 'kelp');
+  Reef.prototype._applyMusic.call(stub);
+  check('surfacing back to a kelp reef returns to beauty', calls[calls.length - 1] === 'beauty');
+
+  stub.reefTheme = undefined;
+  Reef.prototype._applyMusic.call(stub);
+  check('a missing reef theme does not throw', !!calls[calls.length - 1]);
+}
+
 if (failed) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
 console.log(`ok palettes.test.mjs (${passed} checks)`);

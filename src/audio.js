@@ -1,4 +1,8 @@
 // Procedural Web Audio: ambient underwater bed + one-shot SFX. No asset files.
+// The procedural score lives in src/music/ and hangs off this facade as `music`,
+// summed into its own bus so it can be muted without silencing the SFX.
+import { Music } from './music/index.js';
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -7,6 +11,8 @@ export class Audio {
     this.ambientGain = null;
     this._theme = false;        // Treasure Chest Madness looping theme (on while the minigame is open)
     this._themeTimer = null;
+    this.music = null;
+    this.musicMuted = false;
   }
 
   // Must be created after a user gesture (browser autoplay policy).
@@ -18,6 +24,8 @@ export class Audio {
     this.master.gain.value = this.muted ? 0 : 0.9;
     this.master.connect(this.ctx.destination);
     this._startAmbient();
+    this.music = new Music(this.ctx, this.master);
+    this.music.setMuted(this.musicMuted);
   }
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
@@ -43,10 +51,21 @@ export class Audio {
     src.start();
   }
 
-  // Ambient darkens/deepens with depth (0..1).
+  // Ambient darkens/deepens with depth (0..1). The score follows the same signal.
   setDepth(t) {
     if (!this.ctx) return;
     this.ambientGain.gain.setTargetAtTime(0.10 + t * 0.14, this.ctx.currentTime, 0.4);
+    if (this.music) this.music.setDepth(t);
+  }
+
+  // The score. Muting music is deliberately independent of the SFX mute.
+  startMusic(paletteId) { if (this.music) this.music.start(paletteId); }
+  stopMusic() { if (this.music) this.music.stop(); }
+  setPalette(id) { if (this.music) this.music.setPalette(id); }
+  toggleMusicMuted() {
+    this.musicMuted = !this.musicMuted;
+    if (this.music) this.music.setMuted(this.musicMuted);
+    return this.musicMuted;
   }
 
   _tone({ type = 'sine', f0, f1 = f0, t = 0.15, gain = 0.3, curve = 'exp' }) {
