@@ -4,7 +4,7 @@ import { WORLD, AIR, PAL, RENTAL } from './config.js';
 import { VERSION } from './version.js';
 import { Harpoon } from './entities/harpoon.js';
 import { Net } from './entities/weapons.js';
-import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
+import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip, loadScheme, saveScheme, CONTROLS_KEY } from './controls.js';
 import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE } from './config.js';
 import { makeReef } from './minigames/reef/index.js';
 import { text, panel, overlay, keycap, mmss } from './render/chrome.js';
@@ -16,7 +16,6 @@ import { RELICS, getRelic, rentRelic } from './meta/relics.js';
 
 const HI_KEY = 'deepdescent.hi';
 const HI_REEF_KEY = 'deepdescent.hireef';
-const CONTROLS_KEY = 'deepdescent.controls';
 // W/H are the VISIBLE logical viewport and flex to fill the device screen
 // (main.js sizes them on resize): the 900x600 core is always on screen and the
 // long axis is extended out to the edges. They're module-level `let` so all
@@ -120,9 +119,8 @@ export class Game {
     // On-screen control legend: Keyboard / Steam Deck / ROG Ally. A saved choice
     // wins; otherwise we start on Keyboard and auto-switch to pad prompts once a
     // gamepad shows up (until the player picks manually).
-    const savedScheme = localStorage.getItem(CONTROLS_KEY);
-    this.controlScheme = SCHEMES.includes(savedScheme) ? savedScheme : 'keyboard';
-    this._schemeManual = !!savedScheme;
+    this.controlScheme = loadScheme();
+    this._schemeManual = this.controlScheme !== 'keyboard' || !!(typeof localStorage !== 'undefined' && localStorage.getItem(CONTROLS_KEY));
     this._applyHintStrip();
     this.pendingStartReef = 1;   // menu 'START AT' selection (cash a reef relic)
 
@@ -556,7 +554,7 @@ export class Game {
   }
   _setScheme(s) {
     this.controlScheme = s; this._schemeManual = true;
-    try { localStorage.setItem(CONTROLS_KEY, s); } catch (e) { /* private mode */ }
+    saveScheme(s);
     this._applyHintStrip(); this.audio.select();
   }
   _cycleScheme() { this._setScheme(nextScheme(this.controlScheme)); }

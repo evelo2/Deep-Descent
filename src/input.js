@@ -207,6 +207,25 @@ export class Input {
   // True once per gamepad confirm/start press (used on menus).
   consumeStart() { const s = this._padStart; this._padStart = false; return s; }
 
+  // The ONE place the confirm edge is assembled. Every source is read (never
+  // short-circuited) so no stale edge is left armed for the next frame — and so
+  // a minigame author cannot forget consumeStart(), which has been missed twice.
+  confirmEdge() {
+    const key = this.pressed('confirm');
+    const btn = this.consumeButton('confirm');
+    const pad = this.consumeStart();
+    return key || btn || pad;
+  }
+
+  // The quit/pause edge. Owned by the Core for pushed minigames (P11.2): Esc,
+  // the on-screen back button, or Start on a handheld.
+  backEdge() {
+    const key = this.pressed('back');
+    const btn = this.consumeButton('back');
+    const pause = this.pressed('pause');
+    return key || btn || pause;
+  }
+
   // Clear one-shot edge buffers at end of frame.
   endFrame() { this._pressed.clear(); this._padEdges.clear(); this._btnHits.clear(); }
 }

@@ -58,3 +58,32 @@ export function stageHintStrip(scheme) {
   const g = (a) => prompt(scheme, a);
   return `${g('swim')} walk   ·   ${g('jump')} jump   ·   ${g('climb')} climb ladders   ·   reach the › exit`;
 }
+
+// The chosen scheme is persisted here (moved out of game.js in P11.2) so the
+// shell AND the Core chrome read one source. Storage is injectable for tests;
+// the browser default is localStorage, guarded for private mode.
+export const CONTROLS_KEY = 'deepdescent.controls';
+
+export function loadScheme(storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
+  try {
+    const s = storage && storage.getItem(CONTROLS_KEY);
+    return SCHEMES.includes(s) ? s : 'keyboard';
+  } catch (e) { return 'keyboard'; }
+}
+
+export function saveScheme(s, storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
+  try { if (storage && SCHEMES.includes(s)) storage.setItem(CONTROLS_KEY, s); } catch (e) { /* private mode */ }
+}
+
+// One legend line per declared action, labelled for the player's scheme:
+// touch devices get the `touch` phrasing, pad schemes the `pad` button, and
+// everything else the keyboard bindings. Source: a manifest's controls.actions.
+export function legendLines(scheme, actions, isTouch = false) {
+  if (!Array.isArray(actions)) return [];
+  return actions.map((a) => {
+    const keys = Array.isArray(a.keys) ? a.keys.join(' / ') : (a.keys || '');
+    const pad = isPadScheme(scheme) ? a.pad : keys;
+    const label = (isTouch && a.touch) || pad || keys;
+    return `${a.label} — ${label}`;
+  });
+}

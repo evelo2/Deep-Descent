@@ -110,7 +110,7 @@ New tests: `tests/core/legend.test.mjs`, `tests/core/failure-isolation.test.mjs`
     `loadScheme(): string`, `saveScheme(s: string): void`,
     `legendLines(scheme, actions, isTouch): string[]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/core/legend.test.mjs`:
 
@@ -153,12 +153,12 @@ if (failed) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
 console.log(`ok legend.test.mjs (${passed} checks)`);
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `node tests/core/legend.test.mjs`
 Expected: FAIL — `SyntaxError: The requested module '../../src/controls.js' does not provide an export named 'CONTROLS_KEY'`.
 
-- [ ] **Step 3: Add the exports to `src/controls.js`**
+- [x] **Step 3: Add the exports to `src/controls.js`**
 
 Append to `src/controls.js`:
 
@@ -193,7 +193,7 @@ export function legendLines(scheme, actions, isTouch = false) {
 }
 ```
 
-- [ ] **Step 4: Add the edge helpers to `src/input.js`**
+- [x] **Step 4: Add the edge helpers to `src/input.js`**
 
 Next to `consumeStart()` (~line 208):
 
@@ -218,7 +218,7 @@ Next to `consumeStart()` (~line 208):
   }
 ```
 
-- [ ] **Step 5: Point `game.js` at the shared scheme storage**
+- [x] **Step 5: Point `game.js` at the shared scheme storage**
 
 In `src/game.js`: delete the private `const CONTROLS_KEY = 'deepdescent.controls';`
 (line 19) and import instead:
@@ -245,12 +245,12 @@ with:
 
 and the line-559 save with `saveScheme(s);`.
 
-- [ ] **Step 6: Run the new test and the suites that touch controls**
+- [x] **Step 6: Run the new test and the suites that touch controls**
 
 Run: `node tests/core/legend.test.mjs && node tests/game/controls.test.mjs && node tests/minigames/reef-seam.test.mjs && npm run typecheck`
 Expected: all PASS, typecheck exits 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/input.js src/controls.js src/game.js tests/core/legend.test.mjs
