@@ -70,13 +70,13 @@ const weaponGet = Object.getOwnPropertyDescriptor(Reef.prototype, 'weapon').get;
   const s = {
     savedReef: { returnX: 0, returnY: 0, ...KEYS_UNDEF },
     air: 10, airMax: 100, zoneFade: 0, reentryT: 0,
-    _placeDiver() {}, audio: { bank() {} },
+    _placeDiver() {}, audio: { bank() {} }, _applyMusic() {},
   };
   Reef.prototype._restoreReef.call(s);
   check('exiting refills air by exitAirRefillFrac of the tank', Math.abs(s.air - (10 + 100 * GAME.exitAirRefillFrac)) < 1e-9);
 
   // Never overfills past the tank.
-  const full = { savedReef: { returnX: 0, returnY: 0 }, air: 80, airMax: 100, zoneFade: 0, reentryT: 0, _placeDiver() {}, audio: { bank() {} } };
+  const full = { savedReef: { returnX: 0, returnY: 0 }, air: 80, airMax: 100, zoneFade: 0, reentryT: 0, _placeDiver() {}, audio: { bank() {} }, _applyMusic() {} };
   Reef.prototype._restoreReef.call(full);
   check('the air top-up is capped at airMax', full.air === 100);
 }
