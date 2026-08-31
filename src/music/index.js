@@ -13,6 +13,7 @@ import { PALETTES, chordFreqs } from './palettes.js';
 const BUS_GAIN = 0.5;
 const LOOKAHEAD = 0.5;     // seconds of audio scheduled ahead of the clock
 const TICK_MS = 200;       // how often the scheduler wakes
+const CROSSFADE = 2;       // seconds the outgoing palette takes to fade out
 
 // The event times inside [from, to) that follow `prev` at `interval` spacing.
 // Pure, and the reason scheduling never drifts: callers advance a window against
@@ -32,6 +33,8 @@ export class Music {
     this.depth = 0;
     this.palette = null;
     this._voices = [];      // every node we started, for stop()
+    this._fading = [];      // voices from the previous palette, on their way out
+    this.paletteId = null;
     this._timer = null;
 
     this.bus = ctx.createGain();
@@ -73,8 +76,9 @@ export class Music {
     if (m) this.bus.gain.value = 0; else this.bus.gain.value = BUS_GAIN;
   }
 
-  start(paletteId) {
+  start(paletteId = this.paletteId) {
     if (this.playing) return;
+    this.paletteId = paletteId;
     this.palette = PALETTES[paletteId] || PALETTES.dread;
     this.playing = true;
     this.chordIndex = 0;
@@ -149,6 +153,37 @@ export class Music {
     this._voices.push({ osc, g });
   }
 
+  // Crossfade to a different palette. Fading rather than cutting is what makes a
+  // zone change feel like the water changing rather than a track switch.
+  setPalette(paletteId) {
+    if (paletteId === this.paletteId) return;
+    this.paletteId = paletteId;
+    const next = PALETTES[paletteId] || PALETTES.dread;
+    if (!this.playing) { this.palette = next; return; }
+
+    const now = this.ctx.currentTime;
+    for (const v of this._voices) {
+      v.g.gain.linearRampToValueAtTime(0.0001, now + CROSSFADE);
+      this._fading.push(v);
+    }
+    this._voices = [];
+    this.palette = next;
+    this.chordIndex = 0;
+    this._nextChordTime = now;
+    this._lastMotifTime = now;
+    this._startSub();
+    this._tick();
+  }
+
+  // 0 at the surface, 1 at the world floor. Descending darkens the pads and
+  // pushes more of the signal into the reverb.
+  setDepth(t) {
+    this.depth = Math.max(0, Math.min(1, t));
+    if (!this.playing) return;
+    const p = this.palette;
+    this.send.gain.setTargetAtTime(p.sendLevel * (0.7 + 0.5 * this.depth), this.ctx.currentTime, 0.5);
+  }
+
   _cutoff() {
     const p = this.palette;
     // Depth darkens the pad: at the floor the cutoff sits at the palette's base.
@@ -190,10 +225,11 @@ export class Music {
   stop() {
     this.playing = false;
     if (this._timer) { clearInterval(this._timer); this._timer = null; }
-    for (const v of this._voices) {
+    for (const v of this._voices.concat(this._fading)) {
       try { v.osc.stop(); } catch (e) { /* already stopped */ }
       try { v.osc.disconnect(); } catch (e) { /* already gone */ }
     }
     this._voices = [];
+    this._fading = [];
   }
 }
