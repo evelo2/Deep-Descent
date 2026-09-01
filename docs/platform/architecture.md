@@ -320,3 +320,87 @@ download until a player opens it — is P11.3. Declaring the goal shape here
 P11.1 only describes goals for menus/Trophy Wall rendering later; the live
 `meta/*` tables remain the runtime source of truth for scoring until P11.4
 wires `progression.registerGoals` and namespaced stat plumbing through.
+
+## 10. The score (`src/music/`)
+
+`src/music/` owns the dive's music and nothing else owns any of it.
+
+- **`palettes.js`** is pure data plus pure maths — the five palettes
+  (`beauty`, `dread`, `horror`, `sacral`, `organic`), `paletteFor(zone, musicId)`,
+  `noteFreq` and `chordFreqs`. It imports nothing and touches no Web Audio, so
+  it is fully testable under plain Node. **`paletteFor` is the only place the
+  zone/theme → palette mapping lives**; a zone with its own score (abyss,
+  temple, belly) wins, otherwise the reef theme's `music` field decides, and
+  anything unrecognised falls back rather than throwing.
+- **`index.js`** holds `class Music`: one fixed graph (voices → dry + a send
+  into a convolver whose impulse response is *generated*, both summing into a
+  `bus`), the pad/sub/motif voices, and a lookahead scheduler that places events
+  against `ctx.currentTime`. It never chains `setTimeout`, and it never fetches
+  an asset — `assets/` stays empty.
+- **`timing.js`** is `eventTimes()`, the lookahead window maths, in its own
+  module so `tension.js` can share it without an import cycle. `index.js`
+  re-exports it, so existing importers are unaffected.
+- **`impulse.js`** is `makeImpulse()`, shared by the score and the sea-life bed.
+- **`threat.js`** is `tensionLevel(creatures, krakens, guardian)` — pure, no Web
+  Audio, testable with plain objects.
+- **`tension.js`** is the threat layer (below).
+
+### 10.1 The tension axis
+
+Situation is an axis **orthogonal to the palette**, not a competitor to it.
+`paletteFor` keeps its precedence untouched and stays the single home of the
+zone/theme mapping; tension rides on top. Three per-frame signals join
+`setDepth`, all idempotent: `setTension` (how hard you are being hunted),
+`setShade` (0 in open water, 1 in an unlit dark room) and `setZone`.
+
+**Threat is derived, not stored.** There is no shared "locked on" state — each
+pursuer sets its own `pursuing` flag inside its own `update()`, where the chase
+decision already gets made, so the Barracuda's windup→dash counts and a Grouper
+you merely stand near does not. **`pursuing` is written only by the creature and
+read only by audio; nothing in gameplay may branch on it.** `tensionLevel()`
+collapses the flags by pursuer *count* rather than proximity — a distance-graded
+level jitters as a creature oscillates around its radius — and all smoothing
+lives in `Tension` (rise 0.35 s, fall 2.5 s).
+
+**`Tension` owns its own nodes and note list, deliberately outside
+`Music._voices`,** because `setPalette()` fades that array out and a chase has to
+survive a zone change. It takes the palette as a *parameter at schedule time*
+rather than holding one, so a chase carries through the crossfade and re-keys
+underneath itself — the temple keeps its sacral identity while being hunted.
+It hangs off `dry`/`send`, so it reaches the `bus` and the existing music mute
+covers it with no new plumbing.
+
+**Shade darkens what is already sounding.** Chord notes keep their `filter`
+reference so `setShade`/`setDepth` can ramp live pads; before that the cutoff was
+read only when a chord was *built*, which in the temple made a change land up to
+twenty seconds late. Depth deliberately gets no second knob — past `0.6` its
+existing curve simply steepens.
+
+### 10.2 Sea life (`src/sealife.js`)
+
+Off-screen atmosphere: whale song, dolphin clicks, distant groans, shrimp
+crackle. It connects to **`audio.master`, not the music bus** — that routing is
+the whole design: the world mute (**M**) silences it, the music toggle (**J**)
+does not, and `stopMusic()` in the menu leaves it running, like the pressure hum
+it sits beside. Its scheduler is `unref()`'d, as `Music`'s is.
+
+It carries **no information**, enforced structurally rather than by discipline:
+selection is a weighted `(zone, depthBand)` table on a randomised interval,
+panned at random, and `SeaLife` is never handed the diver or the creature list —
+so no sound can correlate with a threat and become readable as a warning. There
+are no whales or dolphins in the fauna roster (the whale is a *zone*), so these
+must never be wired to an entity.
+
+`Audio` (`src/audio.js`) owns the single `Music` instance, built in `ensure()`
+once the master gain exists, and exposes `startMusic`/`stopMusic`/`setPalette`/
+`toggleMusicMuted`, `setTension`, `setShade` and `setZone`, plus a `setDepth`
+that forwards to the ambient bed, the score and the sea-life bed. Because the score sums into its own `bus`, muting music leaves SFX
+untouched — that is the whole reason the bus exists.
+
+The reef calls `_applyMusic()` and only `_applyMusic()`: on dive start, at the
+end of `_newReefName()`, and immediately after every `this.zone = '…'`
+assignment — and it now forwards the zone to the sea-life bed from the same
+place. Adding a zone means adding one call there; adding a reef theme means
+giving it a `music` field, which `tests/audio/palettes.test.mjs` enforces by
+iterating the real `REEF_THEMES`. Tension and shade are the exception: they are
+per-frame, so the reef reports them from `update()` beside `setDepth`.
