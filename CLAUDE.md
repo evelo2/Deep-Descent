@@ -32,7 +32,7 @@ file you are editing — never import a habit from another file.**
 
 | Style | Signature | Files | Where |
 |---|---|---|---|
-| name-first (majority) | `check(name, cond)` | 52 | everywhere |
+| name-first (majority) | `check(name, cond)` | 62 | everywhere |
 | cond-first | `check(cond, msg)` | 23 | mostly `tests/core/` |
 | name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | all of `tests/stage/` + `tests/creatures/` |
 
@@ -40,7 +40,8 @@ The two `check` styles are the dangerous pair: mixing them **silently
 always-passes** — calling `check(1 === 2, 'msg')` in a name-first file evaluates
 `cond = 'msg'`, which is truthy, so a false assertion reports success. The
 `assert` files also print per-check `ok`/`FAIL` lines as they go and exit
-non-zero from `done()`. Census verified 2026-08-29 against all 91 test files.
+non-zero from `done()`. Census verified 2026-09-01 against all 101 test files
+(62 + 23 + 16 = 101).
 
 Every test ends by printing its own summary line — `` console.log(`ok foo.test.mjs (${pass} checks)`) ``
 in the `check` files, `done()` in the `assert` ones.
@@ -110,6 +111,16 @@ memory.**
   `hoardcleared` Steam achievement was unobtainable (fixed 2026-08-28, `e1e33c5`).
   `tests/game/open-ctx-chain.test.mjs` drives the whole real chain and is the
   guard — extend it rather than writing a fresh isolated test.
+- **Web Audio cannot be verified by the Node stub alone.** `tests/audio/`'s stub
+  passes tests that prove nothing: a real `AudioParam.value` does NOT reflect
+  scheduled automation (it reads the node default — 350 Hz for a biquad), while
+  the stub's param updates `.value` immediately. Total RMS also hides filter
+  changes, because the unfiltered sub drone dominates it. For any audio change,
+  serve the branch and measure a real `OfflineAudioContext` render — peak, and
+  high-frequency energy for filter work. Also: per-frame setters must return
+  early when the value is unchanged, or re-issuing `setTargetAtTime` restarts
+  the ramp every frame and it never lands (cost us a chase that reached 0.58
+  instead of 1.0, fixed 2026-09-01).
 - **Registered minigame ids are `legacy` and `match3`.** `reef`, `stage` and
   `whirlpool` are internal zones of `legacy`, not registered minigames, despite
   having their own folders under `src/minigames/`.
