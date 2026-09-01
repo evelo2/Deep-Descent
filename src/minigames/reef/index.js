@@ -647,6 +647,14 @@ export class Reef {
     this.audio.setPalette(paletteFor(this.zone, this.reefTheme && this.reefTheme.music));
   }
 
+  // Inside an unlit dark room. The same test the dark-cave HUD hint uses — kept
+  // here so it has one home now that the score reads it too.
+  _inDark() {
+    if (this.zone !== 'reef' || !this.darkZones || !this.darkZones.length) return false;
+    if (this.flareT > 0 || (this.torchOn && this.shockBattery > 0)) return false;
+    return this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r);
+  }
+
   _newReefName() {
     const pick = (a) => a[(Math.random() * a.length) | 0];
     const theme = pick(REEF_THEMES);
@@ -1420,6 +1428,7 @@ export class Reef {
     this.audio.setDepth(Math.min(1, this.camY / WH));
     // The score's threat layer: what is actually hunting the diver right now.
     this.audio.setTension(tensionLevel(this.creatures, this.krakens, this.chestGuardian));
+    this.audio.setShade(this._inDark() ? 1 : 0);
 
     // Air economy: bank + refill at the boat or a dive bell (reef only); vents
     // in the deep. Bells are mid-depth safe havens — bank & refuel, but you
@@ -2477,8 +2486,7 @@ export class Reef {
 
     // Dark cave — remind the player how to light it (suppressed once the torch
     // is actually burning, and torch-aware when they own one).
-    const torchLit = this.torchOn && this.shockBattery > 0;
-    if (this.flareT <= 0 && !torchLit && this.darkZones && this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r) && this.zone === 'reef') {
+    if (this._inDark()) {
       let msg;
       if (this.hasTorch) msg = this.input.isTouch ? '🔦 DARK CAVE — tap 🔦 torch or 🔥 flare' : `🔦 DARK CAVE — ${this._key('torch')} for torch, ${this._key('flare')} for a flare`;
       else msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : `🔦 DARK CAVE — press ${this._key('flare')} to light a flare`) : '🔦 DARK CAVE — out of flares! Buy some at the shop';

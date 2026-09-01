@@ -117,5 +117,53 @@ const reaches = (from, target, seen = new Set()) => {
   check('stop clears the fade list', m._fading.length === 0);
 }
 
+// --- Shade and depth reach the pads that are ALREADY playing -----------------
+// The cutoff is read only when a chord is BUILT, so without the live ramp a
+// change would not reach the pad you are currently hearing — twenty seconds in
+// the temple.
+{
+  const ctx = stubCtx();
+  const m = new Music(ctx, ctx.destination);
+  m.start('beauty');
+  check('chord notes keep their filter reference',
+    m._voices.length > 0 && m._voices.some((v) => !!v.filter));
+  const voiced = m._voices.filter((v) => v.filter);
+  const before = voiced.map((v) => v.filter.frequency.value);
+  m.setShade(1);
+  const after = voiced.map((v) => v.filter.frequency.value);
+  check('shade ramps the filters that are already sounding',
+    after.every((v, i) => v < before[i]));
+  m.setShade(4);
+  check('shade is clamped above', m.shade === 1);
+  m.setShade(-4);
+  check('shade is clamped below', m.shade === 0);
+  m.stop();
+}
+
+// --- Depth past the threshold bites harder than depth before it --------------
+{
+  const ctx = stubCtx();
+  const m = new Music(ctx, ctx.destination);
+  m.start('beauty');
+  m.setShade(0);
+  m.setDepth(0.3); const shallow = m._cutoff();
+  m.setDepth(0.6); const mid = m._cutoff();
+  m.setDepth(0.9); const deep = m._cutoff();
+  check('deeper is always darker', shallow > mid && mid > deep);
+  check('past the threshold the curve steepens', (mid - deep) > (shallow - mid));
+  m.stop();
+}
+
+// --- Shade thins the bells ---------------------------------------------------
+{
+  const ctx = stubCtx();
+  const m = new Music(ctx, ctx.destination);
+  m.start('beauty');
+  const lit = m._motifInterval();
+  m.setShade(1);
+  check('a dark room makes the bells sparser', m._motifInterval() > lit);
+  m.stop();
+}
+
 if (failed) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
 console.log(`ok music-palette-switch.test.mjs (${passed} checks)`);

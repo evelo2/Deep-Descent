@@ -19,6 +19,8 @@ const BUS_GAIN = 0.5;
 const LOOKAHEAD = 0.5;     // seconds of audio scheduled ahead of the clock
 const TICK_MS = 200;       // how often the scheduler wakes
 const CROSSFADE = 2;       // seconds the outgoing palette takes to fade out
+const DEEP_THRESHOLD = 0.6;   // where the water starts closing in
+const DEEP_STEEPEN = 2.2;     // how much harder it closes past that point
 
 export class Music {
   constructor(ctx, destination) {
@@ -26,6 +28,7 @@ export class Music {
     this.playing = false;
     this.muted = false;
     this.depth = 0;
+    this.shade = 0;         // 0 in open water, 1 in an unlit dark room
     this.palette = null;
     this._voices = [];      // every node we started, for stop()
     this._fading = [];      // voices from the previous palette, on their way out
@@ -122,7 +125,7 @@ export class Music {
         osc.connect(filter);
         osc.start();
         osc.stop(ctx.currentTime + p.chordSeconds * 1.2);
-        const rec = { osc, g };
+        const rec = { osc, g, filter };
         this._voices.push(rec);
         made.push(rec);
       }
@@ -181,7 +184,39 @@ export class Music {
     this.depth = Math.max(0, Math.min(1, t));
     if (!this.playing) return;
     const p = this.palette;
-    this.send.gain.setTargetAtTime(p.sendLevel * (0.7 + 0.5 * this.depth), this.ctx.currentTime, 0.5);
+    this.send.gain.setTargetAtTime(p.sendLevel * (0.7 + 0.5 * this._deepCurve()), this.ctx.currentTime, 0.5);
+    this._rampFilters();
+  }
+
+  // 0 in open water, 1 in an unlit dark room.
+  setShade(s) {
+    this.shade = Math.max(0, Math.min(1, s));
+    if (!this.playing) return;
+    this._rampFilters();
+  }
+
+  // Depth's own response, steepened past the threshold so the deep audibly
+  // closes in. Deliberately NOT a second knob — depth already drives cutoff and
+  // reverb send, and a separate deep trigger would double-count the same signal.
+  _deepCurve() {
+    const t = this.depth;
+    return Math.min(1, t <= DEEP_THRESHOLD ? t : DEEP_THRESHOLD + (t - DEEP_THRESHOLD) * DEEP_STEEPEN);
+  }
+
+  // The cutoff is only read when a chord is BUILT, so without this a change of
+  // depth or shade would not reach the pad you are currently hearing — in the
+  // temple that is a twenty-second wait. Ramp the live filters instead.
+  _rampFilters() {
+    const f = this._cutoff();
+    for (const v of this._voices) {
+      if (v.filter) v.filter.frequency.setTargetAtTime(f, this.ctx.currentTime, 0.35);
+    }
+  }
+
+  // How long between bell motifs. Sparser in the dark.
+  _motifInterval() {
+    const p = this.palette;
+    return 60 / (p.motifPerMinute * Math.max(0.2, 1 - 0.5 * this.shade));
   }
 
   // Called every frame by the dive with the level from threat.js.
@@ -189,8 +224,8 @@ export class Music {
 
   _cutoff() {
     const p = this.palette;
-    // Depth darkens the pad: at the floor the cutoff sits at the palette's base.
-    return p.filterBase + p.filterDepth * (1 - this.depth);
+    // Depth darkens the pad; an unlit dark room darkens it further.
+    return p.filterBase + p.filterDepth * (1 - this._deepCurve()) * (1 - 0.6 * this.shade);
   }
 
   // Advance the lookahead window. Called every TICK_MS and directly by tests.
@@ -204,7 +239,7 @@ export class Music {
       this.chordIndex++;
       this._nextChordTime += p.chordSeconds;
     }
-    const interval = 60 / p.motifPerMinute;
+    const interval = this._motifInterval();
     for (const t of eventTimes(this._lastMotifTime, interval, now, horizon)) {
       this._motif(t);
       this._lastMotifTime = t;
