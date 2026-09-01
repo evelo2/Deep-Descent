@@ -1,61 +1,64 @@
 # Next up — Deep Descent
 
 ## Where we are
-The **five-palette procedural score is built and the user loves it.** Branch
-`feat/underwater-music`, **PR #4** — https://github.com/evelo2/Deep-Descent/pull/4
-— 7 commits, pushed, **98 tests green, `npm run typecheck` exits 0**, working
-tree clean. The plan's required listening pass passed on 2026-09-01; no tuning
-was asked for.
 
-`main` itself has NOT moved — PR #4 is still open and unmerged.
+**The underwater score is finished and LIVE.** PR #4 merged to `main` on
+2026-09-01 (merge commit `2903503`); the Pages deploy succeeded and the live
+build stamp is `music-tension-2026-09-01`, verified against `src/version.js`.
+That shipped both the five-palette score *and* its follow-up: a threat pulse
+that overlays the score during a chase, dark-zone shading of the pads, and a
+sparse bed of off-screen sea life.
 
-## Next step
-We were **mid-brainstorm** (architectural path) on the follow-up the user asked
-for: *"more tracks, similar theme, but some upbeat fast"* plus *"whale call,
-dolphin clicks and other 'sea' noises"*.
+`main` is clean, 0/0 with origin, 101 test files pass, `npm run typecheck`
+exits 0. **Nothing is in flight.** This is a fresh start, not a resumption.
 
-Clarifying questions are DONE — **four decisions are locked** (see below). The
-next step is the brainstorming skill's **"propose 2–3 approaches"** step for the
-overlay architecture, then design sections → spec in
-`docs/superpowers/specs/` → `superpowers:writing-plans`.
+Spec: `docs/superpowers/specs/2026-09-01-music-tension-and-ambience-design.md`
+Plan (incl. a "what the listening pass changed" section):
+`docs/superpowers/plans/2026-09-01-music-tension-and-ambience.md`
 
-### Locked decisions — the ONLY record of these
-1. **Upbeat is a SITUATIONAL layer, not new reef themes.** Triggers: a predator
-   locking on (octopus etc.), dark zones (ominous), and below a depth threshold.
-   Needs **several variants per state** so it doesn't repeat.
-2. **Threat OVERLAYS, never replaces.** The temple keeps its sacral pads and
-   identity; a chase adds a driving pulse on top and fades when the lock breaks.
-   Rejected a full crossfade: 2s lands after the scare is over. This also lets
-   dark/deep shade the base while threat rides above it.
-3. **Sea-life ambience is PURE ATMOSPHERE.** Off-screen, sparse, varies by depth
-   and zone, carries **no** information — it must never be readable as a warning.
-4. **Ambience follows the master mute (M), not the music toggle (J).** It is part
-   of the world, like the pressure hum.
+## Next step — ask the user which, don't assume
 
-Still undecided: how the pulse layer is actually built, how the overlay composes
-with `paletteFor`'s existing precedence, and how many variants per state.
+There is no single obvious next task. Four real candidates, roughly ordered by
+how much they're owed:
+
+1. **Finish P11.2 shell chrome.** Parked at **Task 1 of 7 done** on branch
+   `feat/p11-2-shell-chrome` (`031647f`, pushed 2026-09-01, no PR, unmerged —
+   it is unfinished, do not merge it as-is). Next is **Task 2: crash
+   containment in the Core**. **Read the plan's "Locked decisions" section
+   first — it is the ONLY record of those seven design answers**
+   (`docs/superpowers/plans/2026-08-28-p11-2-shell-chrome.md`).
+2. **The P11.1 browser pass**, still never done: menu → About → dive →
+   Guardian Chest → match-3 → back.
+3. **Tune the new music triggers by ear now that it's live.** The pursuit gates
+   for GiantSquid / Piranha / Parasite (600 / 400 / 400 px in
+   `src/entities/creatures.js`) are *reasoned, not tuned* — those three never
+   disengage, so an ungated flag would hold the chase layer open across a whole
+   reef. If the pulse nags on a quiet dive, that's the dial.
+4. **Older balance debts.** Nobody has ever bought a Depth Valve mid-dive
+   (needs reef 3 + 400g); `VALVE.holdDepthM = 240` is a guess. Also the
+   deferred 2026-08-23 balance backlog (reef-gate bonus-zone spawns, salvage
+   upgrades → dive-count/dive-minute rentals).
 
 ## Watch-outs
-- **The music engine has NO rhythm.** Chords hold 9–20s and motifs are random.
-  "Upbeat/fast" is unreachable by tuning `chordSeconds` — it needs a genuinely
-  new pulse/arpeggio capability. Do not plan it as a data-only change.
-- **There are no whales or dolphins in the fauna roster** (`src/entities/spawn.js`,
-  16 kinds). The whale is a *zone* you swim inside. Whale song is therefore
-  off-screen atmosphere by necessity — do not wire it to an entity.
-- **`paletteFor` is the single place the palette mapping lives** and the reef
-  calls `_applyMusic()` and nothing else. Keep any new rule there, not scattered.
-- **`Music.start()`'s interval is `unref()`'d** so it can't hold Node's event
-  loop open in tests. Any new scheduler needs the same treatment or the suite hangs.
-- **Three incompatible assertion styles** live in `tests/` (see CLAUDE.md).
-  Mixing the two `check()` ones silently always-passes.
-- **Run audio work in a real browser before believing it.** Note the Chrome
-  harness loses canvas keyboard focus easily — driving modules directly with
-  `javascript_tool` is far more reliable than synthetic keypresses.
 
-## Older debts, both still unpaid
-1. **Nobody has bought a Depth Valve mid-dive** (needs reef 3 + 400g).
-   `VALVE.holdDepthM` = 240 is a guess, not balance.
-2. **The P11.1 browser pass** — menu → About → dive → Guardian Chest → match-3 → back.
-3. **P11.2 shell chrome** is still parked at Task 2 on branch
-   `feat/p11-2-shell-chrome` (`031647f`, local, unpushed). Read that plan's
-   **"Locked decisions"** first — it is the only record of those seven answers.
+- **Every push to `main` deploys to the live site automatically** (~20s, no
+  manual step). There is no staging. Confirm with
+  `curl -s https://evelo2.github.io/Deep-Descent/src/version.js | grep BUILD`
+  and **bump `BUILD` in `src/version.js` every deploy**.
+- **Web Audio cannot be verified by the Node stub.** A real `AudioParam.value`
+  does not reflect scheduled automation (it reads the node default, 350 Hz for
+  a biquad) while the stub updates it immediately; total RMS hides filter
+  changes behind the sub drone. Measure a real `OfflineAudioContext` render.
+  Now written up in CLAUDE.md's Known gotchas.
+- **Per-frame audio setters must return early when unchanged**, or re-issuing
+  `setTargetAtTime` restarts the ramp 60x/second and it never lands.
+- **`pursuing` on creatures is write-by-creature, read-by-audio only.** Nothing
+  in gameplay may branch on it.
+- **Three incompatible assertion styles** in `tests/` — 62 name-first
+  `check(name, cond)`, 23 cond-first `check(cond, msg)`, 16 `assert` + `done()`
+  (recounted 2026-09-01 across all 101 files). Mixing the two `check` forms
+  **silently always-passes**. Copy the style of the file you are editing.
+- **The game object is NOT on `window`** — instrument `Audio.prototype` via
+  `import('/src/audio.js')` instead (ES modules are singletons per URL).
+- `feat/underwater-music` still exists locally and on origin; it is merged and
+  safe to delete whenever.
