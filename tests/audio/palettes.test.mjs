@@ -64,16 +64,21 @@ check('a fifth is about 1.4983x', Math.abs(noteFreq(100, 7) / 100 - 1.498307) < 
     chordFreqs(p, p.chords.length).length === chordFreqs(p, 0).length);
 }
 
+// Every _applyMusic call in the block below, in order — the sea-life bed must
+// see exactly the same zones the score does.
+const ZONES_SEEN = 'reef,abyss,temple,belly,reef,reef';
+
 // --- The reef picks its palette through the one shared rule ------------------
 // _applyMusic is the only place the reef decides what to play; drive it against
 // a stub so the wiring is proved without an AudioContext.
 {
   const { Reef } = await import('../../src/minigames/reef/index.js');
   const calls = [];
+  const zones = [];
   const stub = {
     zone: 'reef',
     reefTheme: REEF_THEMES.find((t) => t.key === 'haunted'),
-    audio: { setPalette: (id) => calls.push(id) },
+    audio: { setPalette: (id) => calls.push(id), setZone: (z) => zones.push(z) },
   };
   Reef.prototype._applyMusic.call(stub);
   check('a haunted reef plays its theme palette \u2014 horror, not its own key',
@@ -99,6 +104,10 @@ check('a fifth is about 1.4983x', Math.abs(noteFreq(100, 7) / 100 - 1.498307) < 
   stub.reefTheme = undefined;
   Reef.prototype._applyMusic.call(stub);
   check('a missing reef theme does not throw', !!calls[calls.length - 1]);
+  check('the zone is forwarded to the sea-life bed as well as the score',
+    zones[zones.length - 1] === 'reef' && zones.length === calls.length);
+  check('every zone the score saw, the sea-life bed saw too',
+    zones.join(',') === ZONES_SEEN);
 }
 
 if (failed) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
