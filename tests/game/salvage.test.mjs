@@ -112,7 +112,7 @@ const store = (init = null) => {
     score: 0,
     reef: 3, bossesFelled: 1, relicsBanked: 0, blackPearlsBanked: 0,
     meta: { salvage: 0, rentals: {}, slots: 2, loadout: [] },
-    lastPayout: null, newHi: false, audio: { gasp() {} },
+    lastPayout: null, newHi: false, audio: { gasp() {}, stopMusic() {} },
   };
   gameOver.call(stub);
   const after1 = stub.meta.salvage;

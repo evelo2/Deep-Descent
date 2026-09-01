@@ -10,6 +10,9 @@ class Creature {
     this.facing = 1; this.t0 = Math.random() * Math.PI * 2;
     this.radius = 18; this.scale = 1;
     this.snareT = 0;   // >0 while netted/stunned: frozen and harmless
+    // Read ONLY by the music layer, to decide whether a chase is happening.
+    // Never branch gameplay on this.
+    this.pursuing = false;
   }
   // Kill value. `_pointsOverride` lets a killing hit award a custom total (e.g.
   // a shoal folds its whole swarm's value onto the fish that clears it).
@@ -50,7 +53,9 @@ export class Octopus extends Creature {
   update(dt, t, diver) {
     const dx = diver.x - this.x, dy = diver.y - this.y;
     const dist = Math.hypot(dx, dy) || 1;
-    if (dist < 230) { this.x += (dx / dist) * this.speed * dt; this.y += (dy / dist) * this.speed * dt; this.baseY = this.y; }
+    const chasing = dist < 230;
+    this.pursuing = chasing;
+    if (chasing) { this.x += (dx / dist) * this.speed * dt; this.y += (dy / dist) * this.speed * dt; this.baseY = this.y; }
     else { this.x += Math.sin(t * 0.7 + this.t0) * 20 * dt; this.y = this.baseY + Math.sin(t * 0.9 + this.t0) * 18; }
     this.facing = dx >= 0 ? 1 : -1;
   }
@@ -85,7 +90,9 @@ export class Angler extends Creature {
   constructor(x, y) { super(x, y); this.radius = 20; this.speed = 38; }
   update(dt, t, diver) {
     const dx = diver.x - this.x, dy = diver.y - this.y, dist = Math.hypot(dx, dy) || 1;
-    if (dist < 260) { this.x += (dx / dist) * this.speed * dt; this.y += (dy / dist) * this.speed * dt; this.baseY = this.y; }
+    const chasing = dist < 260;
+    this.pursuing = chasing;
+    if (chasing) { this.x += (dx / dist) * this.speed * dt; this.y += (dy / dist) * this.speed * dt; this.baseY = this.y; }
     else { this.x += Math.sin(t * 0.6 + this.t0) * 16 * dt; this.y = this.baseY + Math.sin(t * 0.7 + this.t0) * 14; }
     this.facing = dx >= 0 ? 1 : -1;
   }
@@ -127,6 +134,7 @@ export class Piranha extends Creature {
   }
   update(dt, t, diver) {
     const P = CREATURES.piranha, dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.pursuing = d < 400;
     this.hurtT = Math.max(0, this.hurtT - dt);
     this.x += (dx / d) * P.speed * dt + Math.cos(t * 3 + this.t0) * P.jitter * dt;
     this.y += (dy / d) * P.speed * dt + Math.sin(t * 3.3 + this.t0) * P.jitter * dt;
@@ -160,7 +168,7 @@ export class Barracuda extends Creature {
   constructor(x, y) { super(x, y); this.radius = CREATURES.barracuda.radius; this.dir = Math.random() < 0.5 ? 1 : -1; this.state = 'patrol'; this.timer = 0; this.dashY = y; }
   update(dt, t, diver) {
     const P = CREATURES.barracuda;
-    if (this.snareT > 0) { this.state = 'patrol'; return; }   // stunned: no dash
+    if (this.snareT > 0) { this.state = 'patrol'; this.pursuing = false; return; }   // stunned: no dash
     this.timer -= dt;
     if (this.state === 'patrol') {
       this.x += P.patrolSpeed * this.dir * dt; this.y = this.baseY + Math.sin(t * 1.3 + this.t0) * 16; this.facing = this.dir; this._edgeBounce();
@@ -175,6 +183,7 @@ export class Barracuda extends Creature {
       this.facing = this.dir; this._edgeBounce();
       if (this.timer <= 0) { this.state = 'recover'; this.timer = P.recover; }
     } else { this.x += P.patrolSpeed * 0.5 * this.dir * dt; if (this.timer <= 0) this.state = 'patrol'; }
+    this.pursuing = this.state === 'windup' || this.state === 'dash';   // the tell and the strike, not the patrol
   }
   draw(ctx, camX, camY, t) { blit(ctx, this, camX, camY, drawBarracuda, t); }
 }
@@ -188,7 +197,7 @@ export class Moray extends Creature {
   constructor(x, y) { super(x, y); this.radius = CREATURES.moray.radius; this.ax = x; this.ay = y; this.state = 'hidden'; this.timer = 0; }
   update(dt, t, diver) {
     const P = CREATURES.moray;
-    if (this.snareT > 0) return;
+    if (this.snareT > 0) { this.pursuing = false; return; }
     const dx = diver.x - this.ax, dy = diver.y - this.ay, d = Math.hypot(dx, dy) || 1;
     this.facing = dx >= 0 ? 1 : -1; this.timer -= dt;
     if (this.state === 'hidden') {
@@ -199,6 +208,7 @@ export class Moray extends Creature {
       this.x = this.ax + this.dirx * P.reach * k; this.y = this.ay + this.diry * P.reach * k;
       if (this.timer <= 0) { this.state = 'hidden'; this.timer = P.cooldown; }
     }
+    this.pursuing = this.state !== 'hidden';   // only the lunge counts
   }
   // Only the extended head is a hazard — while hidden the moray is retracted into
   // its crevice and can't bite (its body sits at the anchor, not out in the open).
@@ -249,6 +259,7 @@ export class Grouper extends Creature {
   update(dt, t, diver) {
     const P = CREATURES.grouper;
     const inTerritory = Math.hypot(diver.x - this.ax, diver.y - this.ay) < P.territory;
+    this.pursuing = inTerritory;
     const tx = inTerritory ? diver.x : this.ax, ty = inTerritory ? diver.y : this.ay;
     const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
     const sp = inTerritory ? P.guardSpeed : P.guardSpeed * 0.7;
@@ -280,6 +291,7 @@ export class GiantSquid extends Creature {
   update(dt, t, diver) {
     const P = CREATURES.squid; this.hurtT = Math.max(0, this.hurtT - dt);
     const dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1; this.facing = dx >= 0 ? 1 : -1;
+    this.pursuing = d < 600;   // it never disengages, so gate on range or it holds the layer open all reef
     this.lungeT -= dt; this.rest = Math.max(0, this.rest - dt);
     if (d < P.lungeRange && this.rest <= 0 && this.lungeT <= 0) { this.lungeT = P.lungeTime; this.rest = P.restTime; }
     const sp = this.lungeT > 0 ? P.lunge : P.cruise;
@@ -295,6 +307,7 @@ export class Parasite extends Creature {
   constructor(x, y) { super(x, y); this.radius = CREATURES.parasite.radius; }
   update(dt, t, diver) {
     const P = CREATURES.parasite, dx = diver.x - this.x, dy = diver.y - this.y, d = Math.hypot(dx, dy) || 1;
+    this.pursuing = d < 400;
     this.x += (dx / d) * P.speed * dt + Math.cos(t * 3 + this.t0) * P.jitter * dt;
     this.y += (dy / d) * P.speed * dt + Math.sin(t * 3.3 + this.t0) * P.jitter * dt;
     this.facing = dx >= 0 ? 1 : -1;
@@ -314,6 +327,7 @@ export class Sentinel extends Creature {
     const P = CREATURES.sentinel;
     const inTerritory = Math.hypot(diver.x - this.ax, diver.y - this.ay) < P.territory;
     const guarding = this.awake || inTerritory;
+    this.pursuing = guarding;
     const tx = guarding ? diver.x : this.ax, ty = guarding ? diver.y : this.ay;
     const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
     const sp = guarding ? P.guardSpeed : P.guardSpeed * 0.7;

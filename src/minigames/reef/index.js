@@ -56,19 +56,22 @@ import { awardProgress, saveProgress, trackProgress, tierNameById } from '../../
 import { unlockAchievement } from '../../platform/steam.js';
 import { applyLoadout, getRelic, tickEquippedRentals } from '../../meta/relics.js';
 import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
+import { paletteFor } from '../../music/palettes.js';
+import { tensionLevel } from '../../music/threat.js';
 
 // Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
 let { W, H } = WORLD;
 const { WW, WH, OPEN_BAND, CELL } = WORLD;
 
 // Reef flavour: each reef gets a wacky procedural name + a light theme.
-const REEF_THEMES = [
-  { key: 'kelp',     tag: '🌿', tint: [60, 175, 120], adjs: ['Overgrown', 'Mossy', 'Tangled', 'Verdant'], nouns: ['Kelp Forest', 'Seagrass Meadow', 'Weed Bank'] },
-  { key: 'volcanic', tag: '🌋', tint: [220, 95, 55],  adjs: ['Smoldering', 'Molten', 'Blistered', 'Scalding'], nouns: ['Caldera', 'Ember Trench', 'Lava Vent'] },
-  { key: 'frozen',   tag: '❄',  tint: [120, 185, 235], adjs: ['Frostbitten', 'Glacial', 'Shivering', 'Icebound'], nouns: ['Ice Shelf', 'Frost Grotto', 'Glacier Drop'] },
-  { key: 'haunted',  tag: '👻', tint: [155, 115, 205], adjs: ['Haunted', 'Ghostly', 'Whispering', 'Cursed'], nouns: ['Wreckyard', 'Bone Reef', 'Spirit Hollow'] },
-  { key: 'neon',     tag: '✨', tint: [90, 220, 215],  adjs: ['Glowing', 'Bioluminescent', 'Electric', 'Radiant'], nouns: ['Glow Gardens', 'Neon Shoals', 'Lantern Deep'] },
-  { key: 'junk',     tag: '⚓', tint: [195, 155, 95],  adjs: ['Rusty', 'Crusty', 'Barnacled', 'Salvaged'], nouns: ['Scrapyard', 'Anchor Graveyard', 'Rust Basin'] },
+// `music` names a palette in src/music/palettes.js — the score the reef plays.
+export const REEF_THEMES = [
+  { key: 'kelp',     tag: '🌿', tint: [60, 175, 120], music: 'beauty', adjs: ['Overgrown', 'Mossy', 'Tangled', 'Verdant'], nouns: ['Kelp Forest', 'Seagrass Meadow', 'Weed Bank'] },
+  { key: 'volcanic', tag: '🌋', tint: [220, 95, 55],  music: 'dread', adjs: ['Smoldering', 'Molten', 'Blistered', 'Scalding'], nouns: ['Caldera', 'Ember Trench', 'Lava Vent'] },
+  { key: 'frozen',   tag: '❄',  tint: [120, 185, 235], music: 'dread', adjs: ['Frostbitten', 'Glacial', 'Shivering', 'Icebound'], nouns: ['Ice Shelf', 'Frost Grotto', 'Glacier Drop'] },
+  { key: 'haunted',  tag: '👻', tint: [155, 115, 205], music: 'horror', adjs: ['Haunted', 'Ghostly', 'Whispering', 'Cursed'], nouns: ['Wreckyard', 'Bone Reef', 'Spirit Hollow'] },
+  { key: 'neon',     tag: '✨', tint: [90, 220, 215],  music: 'beauty', adjs: ['Glowing', 'Bioluminescent', 'Electric', 'Radiant'], nouns: ['Glow Gardens', 'Neon Shoals', 'Lantern Deep'] },
+  { key: 'junk',     tag: '⚓', tint: [195, 155, 95],  music: 'horror', adjs: ['Rusty', 'Crusty', 'Barnacled', 'Salvaged'], nouns: ['Scrapyard', 'Anchor Graveyard', 'Rust Basin'] },
 ];
 const WACKY_ADJ = ['Soggy', 'Bubbly', 'Grumpy', 'Wobbly', 'Sneaky', 'Salty', 'Squishy', 'Giggling', 'Suspicious', 'Sleepy', 'Cranky', 'Slippery', 'Peculiar', 'Ludicrous', 'Damp'];
 const WACKY_PLACE = ['Trench', 'Grotto', 'Cove', 'Lagoon', 'Abyss', 'Hollow', 'Gully', 'Chasm', 'Sinkhole', 'Gorge', 'Nook', 'Reef'];
@@ -324,6 +327,7 @@ export class Reef {
     this.armedCharge = null; this.explosions = [];
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
+    this.musicMuted = false;   // the score mutes independently of the SFX
     this.hasValve = false;   // Depth Valve: holds pressure below its line (shop item)
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
@@ -337,6 +341,7 @@ export class Reef {
     this.puT = 0; this.puName = ''; this.reentryT = 0;
     this.won = false; this.newHi = false; this.deathCause = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = startReef;
+    this.audio.startMusic(); this._applyMusic();   // engine up before the palette is chosen
     // Consume the cashed reef relic (a reef-(N−1) token unlocks a start at reef N)
     // and persist; flash the head-start so the skip is legible.
     if (startReef > 1 && consumeReefRelic(this.meta, startReef - 1)) {
@@ -635,6 +640,22 @@ export class Reef {
       !portals.some((p) => Math.hypot(cr.x - p.x, cr.y - p.y) < p.r + clear + (cr.radius || 14)));
   }
 
+  // The ONE place the dive decides what to play: the zone wins if it has its own
+  // score, otherwise the reef's theme does. Called on dive start, on every reef
+  // roll, and on every zone change.
+  _applyMusic() {
+    this.audio.setPalette(paletteFor(this.zone, this.reefTheme && this.reefTheme.music));
+    this.audio.setZone(this.zone);   // the sea-life bed varies by zone too
+  }
+
+  // Inside an unlit dark room. The same test the dark-cave HUD hint uses — kept
+  // here so it has one home now that the score reads it too.
+  _inDark() {
+    if (this.zone !== 'reef' || !this.darkZones || !this.darkZones.length) return false;
+    if (this.flareT > 0 || (this.torchOn && this.shockBattery > 0)) return false;
+    return this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r);
+  }
+
   _newReefName() {
     const pick = (a) => a[(Math.random() * a.length) | 0];
     const theme = pick(REEF_THEMES);
@@ -644,6 +665,7 @@ export class Reef {
     else if (p === 1) this.reefName = `${pick(WACKY_ADJ)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
     else if (p === 2) this.reefName = `${pick(WACKY_NAMES)}’s ${pick([...theme.nouns, ...WACKY_PLACE])}`;
     else this.reefName = `The ${pick(theme.adjs)} ${pick(WACKY_CRITTER)} ${pick(WACKY_PLACE)}`;
+    this._applyMusic();   // a new reef may roll a new palette
   }
 
   _makePowerups(count) {
@@ -1251,6 +1273,7 @@ export class Reef {
 
     if (this.input.pressed('pause') || this.input.consumeButton('pause')) { if (this._shell.state === 'shop') this._closeShop(); else if (this._shell.state === 'drydock') this._shell._closeDryDock(); else this.onAction(); }
     if (this.input.pressed('mute') || this.input.consumeButton('mute')) { this.audio.ensure(); this.muted = this.audio.toggleMute(); }
+    if (this.input.pressed('music') || this.input.consumeButton('music')) { this.audio.ensure(); this.musicMuted = this.audio.toggleMusicMuted(); }
 
     // Shop: a frozen overlay while docked — navigate, buy, then close.
     if (this._shell.state === 'shop') {
@@ -1404,6 +1427,9 @@ export class Reef {
     this.camY += (ty - this.camY) * Math.min(1, dt * 6);
     this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
     this.audio.setDepth(Math.min(1, this.camY / WH));
+    // The score's threat layer: what is actually hunting the diver right now.
+    this.audio.setTension(tensionLevel(this.creatures, this.krakens, this.chestGuardian));
+    this.audio.setShade(this._inDark() ? 1 : 0);
 
     // Air economy: bank + refill at the boat or a dive bell (reef only); vents
     // in the deep. Bells are mid-depth safe havens — bank & refuel, but you
@@ -1812,6 +1838,7 @@ export class Reef {
     // second death (e.g. air runs out AND a creature touches you) must not award
     // the Salvage payout twice — the payout is a non-idempotent side effect.
     this._shell.state = 'gameover';
+    this.audio.stopMusic();   // the menu keeps the ambient bed alone
     this.audio.gasp();
     if (this.score > this._shell.hi) {
       this._shell.hi = this.score; this._shell.hiReef = this.reef; this.newHi = true;
@@ -1910,6 +1937,7 @@ export class Reef {
     const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance', 'whirlEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
+    this._applyMusic();
     this.whaleExit = null; this.templeExit = null; this.abyssExits = []; this.door = null; this.key = null; this.hasKey = false; this.columns = [];
     // (whirl* gameplay state is owned + reset by the whirlpool MiniGame's exit(), not here)
     this._placeDiver(s.returnX, s.returnY, 0);
@@ -1926,6 +1954,7 @@ export class Reef {
     this._enteredWhale = whale;
     this._snapshotReef(m.x + whale.facing * 34, m.y);
     this.zone = 'belly';
+    this._applyMusic();
     this._generateBelly();
     // Spawn at the throat exit (top of the main shaft), like the temple/abyss:
     // full air with the exit right there, then descend into the belly for loot
@@ -1946,6 +1975,7 @@ export class Reef {
   _enterTemple(gate) {
     this._snapshotReef(gate.x, gate.y + 50);
     this.zone = 'temple';
+    this._applyMusic();
     this._generateTemple();
     // Drop in at the top of the temple's central shaft, just inside the entrance
     // gate — the exit is then right above you, so you descend to loot and climb
@@ -1960,6 +1990,7 @@ export class Reef {
   _enterAbyss(entrance) {
     this._snapshotReef(entrance.x, entrance.y + 50);
     this.zone = 'abyss';
+    this._applyMusic();
     this._generateAbyss();
     // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
     // trench by headlight to find one of the exit hatches. inSub is always on
@@ -2456,8 +2487,7 @@ export class Reef {
 
     // Dark cave — remind the player how to light it (suppressed once the torch
     // is actually burning, and torch-aware when they own one).
-    const torchLit = this.torchOn && this.shockBattery > 0;
-    if (this.flareT <= 0 && !torchLit && this.darkZones && this.darkZones.some((z) => Math.hypot(this.diver.x - z.x, this.diver.y - z.y) < z.r) && this.zone === 'reef') {
+    if (this._inDark()) {
       let msg;
       if (this.hasTorch) msg = this.input.isTouch ? '🔦 DARK CAVE — tap 🔦 torch or 🔥 flare' : `🔦 DARK CAVE — ${this._key('torch')} for torch, ${this._key('flare')} for a flare`;
       else msg = this.flares > 0 ? (this.input.isTouch ? '🔦 DARK CAVE — tap 🔥 to light a flare' : `🔦 DARK CAVE — press ${this._key('flare')} to light a flare`) : '🔦 DARK CAVE — out of flares! Buy some at the shop';

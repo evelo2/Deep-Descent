@@ -22,6 +22,7 @@ const PROMPTS = {
   shop:  { key: 'B',             pad: 'B' },
   pause: { key: 'P / Esc',       pad: 'Start' },
   mute:  { key: 'M',             pad: 'Back' },
+  music: { key: 'J',             pad: 'L3' },
   jump:  { key: 'Space',         pad: 'A' },
   climb: { key: '↑ / ↓',         pad: 'Stick ↑ / ↓' },
 };
@@ -43,7 +44,7 @@ export function controlsHelpLines(scheme) {
     `Flare — ${g('flare')}   (light up a dark cave)`,
     `Torch — ${g('torch')}   (toggle a battery light; shares the shock-rod battery)`,
     `Shop — ${g('shop')}   at the boat or a dive bell`,
-    `Pause — ${g('pause')}     Mute — ${g('mute')}`,
+    `Pause — ${g('pause')}     Mute — ${g('mute')}     Music — ${g('music')}`,
   ];
 }
 
