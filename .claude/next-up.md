@@ -34,10 +34,10 @@ how much they're owed:
    `src/entities/creatures.js`) are *reasoned, not tuned* — those three never
    disengage, so an ungated flag would hold the chase layer open across a whole
    reef. If the pulse nags on a quiet dive, that's the dial.
-4. **Older balance debts.** Nobody has ever bought a Depth Valve mid-dive
-   (needs reef 3 + 400g); `VALVE.holdDepthM = 240` is a guess. Also the
-   deferred 2026-08-23 balance backlog (reef-gate bonus-zone spawns, salvage
-   upgrades → dive-count/dive-minute rentals).
+4. **Depth Valve balance.** Nobody has ever bought one mid-dive (needs reef 3
+   + 400g); `VALVE.holdDepthM = 240` is a guess. NOTE: the 2026-08-23 balance
+   backlog is NOT outstanding — both its items shipped that same day
+   (`ad03c00`, `73bae68`); only the MEMORY.md index line was stale.
 
 ## Watch-outs
 
