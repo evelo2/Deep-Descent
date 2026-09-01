@@ -64,6 +64,8 @@ export class Audio {
   setPalette(id) { if (this.music) this.music.setPalette(id); }
   // The threat layer: how hard the dive is being hunted, 0..1.
   setTension(t) { if (this.music) this.music.setTension(t); }
+  // 0 in open water, 1 in an unlit dark room: darker pads, sparser bells.
+  setShade(s) { if (this.music) this.music.setShade(s); }
   toggleMusicMuted() {
     this.musicMuted = !this.musicMuted;
     if (this.music) this.music.setMuted(this.musicMuted);
