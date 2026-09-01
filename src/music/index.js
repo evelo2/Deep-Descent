@@ -9,21 +9,16 @@
 // asset files. Everything sums into `bus` so music can be muted without
 // touching SFX.
 import { PALETTES, chordFreqs } from './palettes.js';
+import { eventTimes } from './timing.js';
+import { Tension } from './tension.js';
+
+// Re-exported so existing importers of the engine keep working unchanged.
+export { eventTimes };
 
 const BUS_GAIN = 0.5;
 const LOOKAHEAD = 0.5;     // seconds of audio scheduled ahead of the clock
 const TICK_MS = 200;       // how often the scheduler wakes
 const CROSSFADE = 2;       // seconds the outgoing palette takes to fade out
-
-// The event times inside [from, to) that follow `prev` at `interval` spacing.
-// Pure, and the reason scheduling never drifts: callers advance a window against
-// ctx.currentTime instead of chaining setTimeout.
-export function eventTimes(prev, interval, from, to) {
-  const out = [];
-  if (interval <= 0) return out;
-  for (let t = prev + interval; t < to; t += interval) if (t >= from) out.push(t);
-  return out;
-}
 
 export class Music {
   constructor(ctx, destination) {
@@ -52,6 +47,11 @@ export class Music {
     this.dry = ctx.createGain();
     this.dry.gain.value = 1;
     this.dry.connect(this.bus);
+
+    // The threat layer. It hangs off dry/send like any voice, so it reaches the
+    // bus and the existing music mute covers it with no new plumbing — but it
+    // keeps its own note list, so setPalette() cannot fade a chase out.
+    this.tension = new Tension(ctx, this.dry, this.send);
   }
 
   // A generated impulse response: stereo noise under an exponential decay. Cheap
@@ -184,6 +184,9 @@ export class Music {
     this.send.gain.setTargetAtTime(p.sendLevel * (0.7 + 0.5 * this.depth), this.ctx.currentTime, 0.5);
   }
 
+  // Called every frame by the dive with the level from threat.js.
+  setTension(t) { this.tension.setLevel(t); }
+
   _cutoff() {
     const p = this.palette;
     // Depth darkens the pad: at the floor the cutoff sits at the palette's base.
@@ -206,6 +209,7 @@ export class Music {
       this._motif(t);
       this._lastMotifTime = t;
     }
+    this.tension.schedule(now, horizon, this.palette);
   }
 
   // The drone under everything — felt more than heard, and most of "full".
@@ -223,6 +227,7 @@ export class Music {
   }
 
   stop() {
+    this.tension.stop();
     this.playing = false;
     if (this._timer) { clearInterval(this._timer); this._timer = null; }
     for (const v of this._voices.concat(this._fading)) {
