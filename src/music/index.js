@@ -11,6 +11,7 @@
 import { PALETTES, chordFreqs } from './palettes.js';
 import { eventTimes } from './timing.js';
 import { Tension } from './tension.js';
+import { makeImpulse } from './impulse.js';
 
 // Re-exported so existing importers of the engine keep working unchanged.
 export { eventTimes };
@@ -40,7 +41,7 @@ export class Music {
     this.bus.connect(destination);
 
     this.reverb = ctx.createConvolver();
-    this.reverb.buffer = this._impulse(6);
+    this.reverb.buffer = makeImpulse(ctx, 6);
     this.reverb.connect(this.bus);
 
     this.send = ctx.createGain();
@@ -55,22 +56,6 @@ export class Music {
     // bus and the existing music mute covers it with no new plumbing — but it
     // keeps its own note list, so setPalette() cannot fade a chase out.
     this.tension = new Tension(ctx, this.dry, this.send);
-  }
-
-  // A generated impulse response: stereo noise under an exponential decay. Cheap
-  // to build, no asset, and it is what gives the score its space.
-  _impulse(seconds) {
-    const ctx = this.ctx;
-    const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = buf.getChannelData(c);
-      for (let i = 0; i < len; i++) {
-        const decay = Math.pow(1 - i / len, 2.6);
-        d[i] = (Math.random() * 2 - 1) * decay;
-      }
-    }
-    return buf;
   }
 
   setMuted(m) {

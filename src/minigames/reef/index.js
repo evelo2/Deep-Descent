@@ -645,6 +645,7 @@ export class Reef {
   // roll, and on every zone change.
   _applyMusic() {
     this.audio.setPalette(paletteFor(this.zone, this.reefTheme && this.reefTheme.music));
+    this.audio.setZone(this.zone);   // the sea-life bed varies by zone too
   }
 
   // Inside an unlit dark room. The same test the dark-cave HUD hint uses — kept

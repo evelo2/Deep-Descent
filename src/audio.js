@@ -2,6 +2,7 @@
 // The procedural score lives in src/music/ and hangs off this facade as `music`,
 // summed into its own bus so it can be muted without silencing the SFX.
 import { Music } from './music/index.js';
+import { SeaLife } from './sealife.js';
 
 export class Audio {
   constructor() {
@@ -13,6 +14,7 @@ export class Audio {
     this._themeTimer = null;
     this.music = null;
     this.musicMuted = false;
+    this.sealife = null;
   }
 
   // Must be created after a user gesture (browser autoplay policy).
@@ -26,6 +28,10 @@ export class Audio {
     this._startAmbient();
     this.music = new Music(this.ctx, this.master);
     this.music.setMuted(this.musicMuted);
+    // Part of the world, not part of the score: hung off master so the world
+    // mute covers it and the music toggle does not.
+    this.sealife = new SeaLife(this.ctx, this.master);
+    this.sealife.start();
   }
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
@@ -56,6 +62,7 @@ export class Audio {
     if (!this.ctx) return;
     this.ambientGain.gain.setTargetAtTime(0.10 + t * 0.14, this.ctx.currentTime, 0.4);
     if (this.music) this.music.setDepth(t);
+    if (this.sealife) this.sealife.setDepth(t);
   }
 
   // The score. Muting music is deliberately independent of the SFX mute.
@@ -66,6 +73,8 @@ export class Audio {
   setTension(t) { if (this.music) this.music.setTension(t); }
   // 0 in open water, 1 in an unlit dark room: darker pads, sparser bells.
   setShade(s) { if (this.music) this.music.setShade(s); }
+  // The sea-life bed varies by zone as well as by depth.
+  setZone(z) { if (this.sealife) this.sealife.setZone(z); }
   toggleMusicMuted() {
     this.musicMuted = !this.musicMuted;
     if (this.music) this.music.setMuted(this.musicMuted);
