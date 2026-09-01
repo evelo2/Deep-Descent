@@ -21,7 +21,7 @@ globalThis.document = {
 };
 
 import { Reef, pressureDepth } from '../../src/minigames/reef/index.js';
-import { WORLD, AIR, VALVE } from '../../src/config.js';
+import { WORLD, AIR, VALVE, DARKZONE } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -57,6 +57,33 @@ check('valve: never worse than diving without it', drain(WORLD.WH, true) <= drai
 check('valve: the baseline breath is still charged', drain(WORLD.WH, true) > AIR.drainPerSec);
 check('valve: the floor costs exactly baseline + the line\'s depth term',
   Math.abs(drain(WORLD.WH, true) - (AIR.drainPerSec + holdY * AIR.drainDepthFactor)) < 1e-9);
+
+// --- BALANCE: how much the valve is actually worth, and where. ---------------
+// Shape alone is not enough: with the line set too deep the valve is dominated
+// by the Sealed Wetsuit (-35% at EVERY depth, from reef 1) and nobody buys it.
+// These pin the intended value curve so a future nudge to holdDepthM cannot
+// silently undo the balance pass of 2026-09-01.
+const yOf = (m) => WORLD.SURFACE + m * 10;
+const floorM = (WORLD.WH - WORLD.SURFACE) / 10;
+const saving = (m) => 1 - drain(yOf(m), true) / drain(yOf(m), false);
+
+check('no saving at all above the line', saving(VALVE.holdDepthM - 50) === 0);
+check('no saving exactly at the line', saving(VALVE.holdDepthM) === 0);
+check('the saving grows the deeper you go below the line',
+  saving(floorM) > saving(300) && saving(300) > saving(240));
+check('a worthwhile saving by 240 m (~15%)', saving(240) > 0.13 && saving(240) < 0.17);
+check('a strong saving at the world floor (~33%)',
+  saving(floorM) > 0.31 && saving(floorM) < 0.36);
+check('the valve never costs more air than diving without it',
+  [0, 50, 120, 200, 300, floorM].every((m) => saving(m) >= 0));
+
+// The line's identity: it starts paying about where the caves turn dark, so
+// "buy it before you go into the deep dark" is a legible rule of thumb.
+const darkStartM = DARKZONE.minDepthFrac * floorM;
+check('the valve line sits at or above the depth dark caves begin',
+  VALVE.holdDepthM <= darkStartM);
+check('the valve line is close to where dark caves begin, not far above it',
+  darkStartM - VALVE.holdDepthM < 25);
 
 // --- The shop row: a one-off unlock, reef-gated, gone once owned. Driven
 // through the REAL _shopItems() so the gate itself is what is under test. ---
