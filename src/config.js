@@ -204,7 +204,14 @@ export const TORCH = {
 export const VALVE = {
   cost: 400,        // shop price (a commitment, like the Torch)
   minReef: 3,       // shop-gate: appears from reef 3
-  holdDepthM: 240,  // metres: below this the pressure penalty stops growing
+  // Metres: below this the pressure penalty stops growing. Was 240, which made
+  // the valve worthless until ~300 m and capped it at a 22% saving on the very
+  // floor — strictly dominated by the Sealed Wetsuit (-35% at EVERY depth, from
+  // reef 1, for 700g), so nobody ever bought one. At 150 it saves ~15% by 240 m
+  // and ~33% at the floor, and the line now sits just above where dark caves
+  // begin (DARKZONE.minDepthFrac), giving it a legible identity: it starts
+  // paying where the water turns dark. Balance pass 2026-09-01.
+  holdDepthM: 150,
 };
 export const FLARE = {
   startCount: 2,
