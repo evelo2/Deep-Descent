@@ -1346,3 +1346,40 @@ git push
 **Type consistency.** `tensionLevel(creatures, krakens, guardian)` is defined in Task 1 and called with exactly that signature in Task 3. `Tension#setLevel/schedule/stop` are defined in Task 2 and used in Tasks 2 and 3. `Music#setTension/setShade/_motifInterval/_deepCurve/_rampFilters` are defined in Tasks 2 and 4 and referenced by the Task 4 tests. `makeImpulse(ctx, seconds)` is defined in Task 5 and consumed by both `index.js` and `sealife.js` in the same task. `poolFor/bandFor/pickVoice/VOICES` are defined and tested in Task 5.
 
 **Ordering note.** Task 2 Step 1 makes `index.js` import `./tension.js` before Step 4 creates it, so the suite is briefly red between those steps. That is called out in Step 2's expected output and closes within the same task.
+
+---
+
+## What the listening pass changed (2026-09-01)
+
+Measured in-browser with `OfflineAudioContext` renders rather than by ear alone,
+because "is it audible over the pads" is a level question with a real answer.
+Four things the plan as written got wrong:
+
+1. **The pulse was inaudible.** `PEAK = 0.085` put it at ~1% of the mix. Raised
+   to `0.20`, which measures at 0.21–0.47× the score's RMS across all five
+   palettes, with peak levels of 0.23–0.34 — no clipping.
+2. **The pulse was pitched onto the sub drone.** `degreeFreq` used
+   `12 * (octave - 1)`, putting it at 55–87 Hz — organic's root an octave down is
+   55 Hz against a 27.5 Hz sub, exactly an octave apart, so it thickened the
+   rumble instead of reading as rhythm. Now the root octave (`12 * octave`),
+   which lands exactly two octaves above the sub in every palette. Its lowpass
+   opened 1400 → 2600 Hz to keep some bite above the pads.
+3. **Three sea-life voices were far too quiet** to clear the pressure hum;
+   the groan was 0.07× it, because a 120 Hz lowpass on white noise leaves almost
+   nothing. Clicks 0.02 → 0.09, crackle 0.012 → 0.05, groan 0.07 → 0.75 with its
+   cutoff lifted to 180–340 Hz. All four now sit at 0.9–3× the hum's peak.
+4. **`setLevel` restarted its own ramp every frame.** The dive reports the same
+   level 60×/second while a chase holds; each call re-issued
+   `setTargetAtTime`, restarting the exponential — and since `rising` is false
+   once the target is stored, every re-issue used the 2.5 s *fall* constant. A
+   held chase measured 0.58 after 2.5 s instead of ~1. Now it returns early when
+   the target is unchanged; the rise measures 63.2% at one time constant and
+   99.9% by 2.5 s. Guarded by three checks in `music-tension.test.mjs`.
+
+Also worth recording: **`AudioParam.value` does not reflect scheduled
+automation**, so the plan's "read the filter frequency back" check is not a valid
+test in a real context — it returns the node default (350 Hz for a biquad). The
+stub's param object does update `.value`, which is why the Node test passes and
+told us nothing. Shading was instead verified by rendering audio and measuring
+high-frequency energy: shade drops it 16%, depth 26%. Total RMS is useless here —
+the unfiltered sub drone dominates it and masks the change entirely.

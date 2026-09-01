@@ -62,8 +62,10 @@ const reaches = (from, target, seen = new Set()) => {
   const sacral = degreeFreq(PALETTES.sacral, 0);
   const horror = degreeFreq(PALETTES.horror, 0);
   check('the pulse takes its key from the palette', sacral !== horror);
-  check('degree 0 sits an octave below the palette root',
-    Math.abs(sacral - PALETTES.sacral.root / 2) < 0.001);
+  check('degree 0 is the palette root itself, not an octave down onto the sub',
+    Math.abs(sacral - PALETTES.sacral.root) < 0.001);
+  check('the pulse clears the sub drone by well over an octave',
+    Object.values(PALETTES).every((p) => degreeFreq(p, 0) > p.subFreq * 3));
   check('degrees past the scale wrap up an octave',
     degreeFreq(PALETTES.sacral, PALETTES.sacral.scale.length) > sacral);
 }
@@ -100,6 +102,24 @@ const reaches = (from, target, seen = new Set()) => {
   check('every pulse oscillator is started', oscs.every((o) => o._started));
   check('rests do not become notes — the pattern is sparser than its step grid',
     oscs.length < Math.ceil(4 / t._pattern.stepSeconds));
+}
+
+// --- Holding a level must not re-issue the ramp every frame -------------------
+// The dive reports the same level 60x a second while a chase holds. Re-issuing
+// restarts the exponential each frame, so the ramp never lands.
+{
+  const ctx = stubCtx();
+  const t = new Tension(ctx, ctx.destination, ctx.destination);
+  t.setLevel(0.7);
+  const afterFirst = t.gain.gain._calls.length;
+  for (let i = 0; i < 60; i++) t.setLevel(0.7);
+  check('holding the same level schedules no further automation',
+    t.gain.gain._calls.length === afterFirst);
+  t.setLevel(0.85);
+  check('an actual change does schedule', t.gain.gain._calls.length === afterFirst + 1);
+  check('a repeated zero is also a no-op',
+    (() => { t.setLevel(0); const n = t.gain.gain._calls.length;
+             for (let i = 0; i < 30; i++) t.setLevel(0); return t.gain.gain._calls.length === n; })());
 }
 
 // --- Variants: a fresh chase does not repeat the last pattern ----------------

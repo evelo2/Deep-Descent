@@ -14,7 +14,7 @@ import { eventTimes } from './timing.js';
 const RISE = 0.35;    // time constant on the way up — a lock-on should land fast
 const FALL = 2.5;     // and on the way down: "fades when the lock breaks"
 const SILENT = 0.01;  // below this the layer schedules nothing at all
-const PEAK = 0.085;   // per-note gain at full level
+const PEAK = 0.20;    // per-note gain at full level — loud enough to read OVER the pads
 const MAX_NOTES = 64; // ~15s of pulse; older ones are long finished
 
 // Three patterns, differing mostly in tempo — that is what reads as urgency.
@@ -26,12 +26,14 @@ export const PATTERNS = [
   { id: 'stalk', stepSeconds: 0.375, steps: [0, null, null, 4, 2, null] },
 ];
 
-// A degree an octave below the palette root — low and driving, under the pads.
-// Degrees past the end of the scale wrap up an octave, as elsewhere.
+// A degree in the palette's ROOT octave. Deliberately not an octave lower: down
+// there the pulse lands on the sub drone (organic's sub is 27.5 Hz and its root
+// an octave down is 55 — exactly an octave apart) and thickens the rumble
+// instead of reading as rhythm. Degrees past the scale wrap up, as elsewhere.
 export function degreeFreq(palette, deg) {
   const n = palette.scale.length;
   const octave = Math.floor(deg / n);
-  return noteFreq(palette.root, palette.scale[((deg % n) + n) % n] + 12 * (octave - 1));
+  return noteFreq(palette.root, palette.scale[((deg % n) + n) % n] + 12 * octave);
 }
 
 export class Tension {
@@ -55,9 +57,18 @@ export class Tension {
     this.sendGain.connect(send);
   }
 
-  // Called every frame with the raw target from threat.js. Idempotent.
+  // Called every frame with the raw target from threat.js.
+  //
+  // The early return is load-bearing, not an optimisation. The dive reports the
+  // same level every frame while a chase holds; re-issuing setTargetAtTime each
+  // frame restarts the exponential approach from wherever it had got to, so the
+  // ramp never completes — and because `rising` is false once the target has
+  // been stored, every one of those re-issues used the 2.5s FALL constant. The
+  // measured result was a chase reaching 0.58 after 2.5s instead of ~1. Schedule
+  // once per actual change and let the automation run.
   setLevel(target) {
     const t = Math.max(0, Math.min(1, target));
+    if (t === this.level) return;
     const rising = t > this.level;
     if (rising && this.level <= SILENT) this._pickPattern();
     this.level = t;
@@ -94,7 +105,8 @@ export class Tension {
     osc.frequency.setValueAtTime(freq, when);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1400, when);
+    // Open enough to keep some bite above the pads, which sit under 1100.
+    filter.frequency.setValueAtTime(2600, when);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, when);
     g.gain.linearRampToValueAtTime(PEAK, when + 0.012);

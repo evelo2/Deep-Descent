@@ -245,8 +245,17 @@ notches and home indicators via safe-area insets.
   sub drone and sparse bell motifs through a generated convolution reverb. Each
   reef theme picks its own palette and the score crossfades when it changes; the
   abyss, the temple and the whale's belly override it with their own. Descending
-  darkens the pads and floods the reverb. Mute the music alone with **J** (L3 on
-  a pad, or the 🎵 button on touch) — **M** still mutes everything.
+  darkens the pads and floods the reverb, harder still past the halfway mark, and
+  an unlit dark cave darkens them further and thins the bells. Get **hunted** and
+  a driving pulse rises *over* the score — the water keeps its own character
+  underneath, and the pulse carries through a zone change and changes key with
+  it. Mute the music alone with **J** (L3 on a pad, or the 🎵 button on touch) —
+  **M** still mutes everything.
+- 🐋 **A sea that sounds inhabited** — whale song, distant dolphin clicks,
+  groans from far below and the crackle of snapping shrimp, all synthesised and
+  varying with depth and zone. Pure atmosphere: it never tells you anything, and
+  it lives under **M** with the rest of the world rather than under the music
+  toggle.
 - 🔔 **Dive bells** — deep checkpoints that bank loot and refill air without surfacing.
 - ⚲ **Depth gauge & Depth Valve** — a gauge down the left edge shows your live
   depth against the whole water column, with a pip at the dive's deepest point.
