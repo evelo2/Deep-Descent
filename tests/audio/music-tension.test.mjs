@@ -145,5 +145,27 @@ const reaches = (from, target, seen = new Set()) => {
   check('stop() releases every note', t._notes.length === 0);
 }
 
+// --- The facade never throws without a context (audio must not break a dive) --
+{
+  const { Audio } = await import('../../src/audio.js');
+  const a = new Audio();
+  let threw = false;
+  try { a.setTension(1); } catch (e) { threw = true; }
+  check('setTension is safe before ensure()', !threw);
+}
+
+// --- Threat derivation reaches the layer end to end --------------------------
+{
+  const { tensionLevel } = await import('../../src/music/threat.js');
+  const ctx = stubCtx();
+  const m = new Music(ctx, ctx.destination);
+  m.start('dread');
+  m.setTension(tensionLevel([{ pursuing: true }], [], null));
+  check('one pursuer opens the layer through Music', m.tension.level > 0.5);
+  m.setTension(tensionLevel([{ pursuing: false }], [], null));
+  check('losing the pursuer closes it', m.tension.level === 0);
+  m.stop();
+}
+
 if (failed) { console.error(`FAILED ${failed}`); process.exit(1); }
 console.log(`ok music-tension.test.mjs (${passed} checks)`);
