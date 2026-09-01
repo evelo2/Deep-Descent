@@ -146,7 +146,7 @@ export class SeaLife {
       osc.frequency.setValueAtTime(2200 + Math.random() * 2600, when);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, when);
-      g.gain.linearRampToValueAtTime(0.02, when + 0.002);
+      g.gain.linearRampToValueAtTime(0.09, when + 0.002);
       g.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
       osc.connect(g).connect(pan);
       osc.start(when);
@@ -165,10 +165,13 @@ export class SeaLife {
     src.buffer = buf;
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(120 + Math.random() * 120, now);
+    // A 120 Hz lowpass on white noise leaves almost nothing, so this sits a
+    // little higher and much louder than the pitched voices to land at the same
+    // audible level.
+    lp.frequency.setValueAtTime(180 + Math.random() * 160, now);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.linearRampToValueAtTime(0.07, now + dur * 0.4);
+    g.gain.linearRampToValueAtTime(0.75, now + dur * 0.4);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     src.connect(lp).connect(g).connect(this._pan());
     src.start(now);
@@ -187,7 +190,7 @@ export class SeaLife {
       osc.frequency.setValueAtTime(1400 + Math.random() * 2000, when);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, when);
-      g.gain.linearRampToValueAtTime(0.012, when + 0.001);
+      g.gain.linearRampToValueAtTime(0.05, when + 0.001);
       g.gain.exponentialRampToValueAtTime(0.0001, when + 0.02);
       osc.connect(g).connect(pan);
       osc.start(when);
