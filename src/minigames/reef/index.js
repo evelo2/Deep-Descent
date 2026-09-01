@@ -57,6 +57,7 @@ import { unlockAchievement } from '../../platform/steam.js';
 import { applyLoadout, getRelic, tickEquippedRentals } from '../../meta/relics.js';
 import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
 import { paletteFor } from '../../music/palettes.js';
+import { tensionLevel } from '../../music/threat.js';
 
 // Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
 let { W, H } = WORLD;
@@ -1417,6 +1418,8 @@ export class Reef {
     this.camY += (ty - this.camY) * Math.min(1, dt * 6);
     this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
     this.audio.setDepth(Math.min(1, this.camY / WH));
+    // The score's threat layer: what is actually hunting the diver right now.
+    this.audio.setTension(tensionLevel(this.creatures, this.krakens, this.chestGuardian));
 
     // Air economy: bank + refill at the boat or a dive bell (reef only); vents
     // in the deep. Bells are mid-depth safe havens — bank & refuel, but you
