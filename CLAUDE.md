@@ -33,15 +33,15 @@ file you are editing — never import a habit from another file.**
 | Style | Signature | Files | Where |
 |---|---|---|---|
 | name-first (majority) | `check(name, cond)` | 62 | everywhere |
-| cond-first | `check(cond, msg)` | 23 | mostly `tests/core/` |
+| cond-first | `check(cond, msg)` | 24 | mostly `tests/core/` |
 | name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | all of `tests/stage/` + `tests/creatures/` |
 
 The two `check` styles are the dangerous pair: mixing them **silently
 always-passes** — calling `check(1 === 2, 'msg')` in a name-first file evaluates
 `cond = 'msg'`, which is truthy, so a false assertion reports success. The
 `assert` files also print per-check `ok`/`FAIL` lines as they go and exit
-non-zero from `done()`. Census verified 2026-09-01 against all 101 test files
-(62 + 23 + 16 = 101).
+non-zero from `done()`. Census verified 2026-09-02 against all 102 test files
+(62 + 24 + 16 = 102).
 
 Every test ends by printing its own summary line — `` console.log(`ok foo.test.mjs (${pass} checks)`) ``
 in the `check` files, `done()` in the `assert` ones.
@@ -88,7 +88,13 @@ that path after the branch builder wedged.)
 and progressive-tier ids double as **registered Steam achievement ids**.
 Renaming a goal id orphans real player progress. Ids that shipped before the
 P11.1 manifest layer are pinned in `src/core/grandfathered-ids.js`; goals added
-from now on must be namespaced `<minigameId>:<key>`.
+from now on must be namespaced `<minigameId>:<key>`. The first namespaced keys
+are `legacy:valveOffered` / `legacy:valveBought` (2026-09-02) — copy their
+shape: add to `STAT_KEYS`, emit from `_runDelta()`, and declare in the owning
+manifest's `goals.stats`. A `:` is inert downstream (the counters are just JSON
+object keys) and old saves backfill to 0 through `sanitize()`, so adding one
+needs no migration. A counter with no progressive track binding it mints no
+Steam achievement id — that is how to add a diagnostic without creating a goal.
 
 Counts drift — **recount from `src/meta/`, never quote a number from docs or
 memory.**
