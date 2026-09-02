@@ -47,6 +47,9 @@ check('undefined clamps to Lv0',  crushDepthM(undefined) === crushDepthM(0));
 // --- the oxygen line steepens the depth term, and only below 250 m ---------
 check('the oxygen line sits at 250 m', DEPTH.oxygenLineM === 250);
 check('the steepening factor is 1.6',  DEPTH.oxygenSteepen === 1.6);
+check('the crush timer is 14 s', DEPTH.crushTimer === 14);
+check('the timer recovers at 1 s per 1.5 s of safe water', DEPTH.crushRecoverRatio === 1.5);
+check('the gauge starts warning 40 m above crush depth', DEPTH.approachWarnM === 40);
 const perM = AIR.drainDepthFactor * 10;
 check('above the line the term is the unchanged linear rate',
   near(airDepthTerm(100, 0), 100 * perM));
