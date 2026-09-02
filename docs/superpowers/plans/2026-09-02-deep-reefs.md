@@ -324,10 +324,16 @@ extents, which is correct: each `Cave` instance is built after `setWorldSize`.
 Run:
 
 ```bash
-grep -rn '= WORLD;' src/ | grep -v 'OPEN_BAND, CELL' | grep -v 'let { W, H }'
+# Any destructure anywhere that pulls WW or WH out of WORLD:
+grep -rn '\(const\|let\|var\)\s*{[^}]*\bW[WH]\b[^}]*}\s*=\s*WORLD' src/
 ```
 
 Expected: no output. Any hit is a stale capture and a bug.
+
+(The earlier form of this grep — `grep -v 'OPEN_BAND, CELL'` — was too loose: it
+filtered on a literal word order, so `const { CELL, OPEN_BAND } = WORLD;` and any
+reordered capture slipped past it. The regex above matches on WW/WH themselves
+and cannot be evaded by reordering.)
 
 Then run the full suite and typecheck:
 
@@ -2236,5 +2242,5 @@ the browser or the deploy is serving old scripts.
   Tasks 8, 9, 10 and 12 are mutually independent once Task 7 lands and can be
   parallelised across agents.
 - The single easiest way to break this feature invisibly is to capture
-  `WORLD.WW`/`WORLD.WH` at module scope. The grep in Task 2 Step 6 is worth
-  re-running after every task.
+  `WORLD.WW`/`WORLD.WH` at module scope. The regex grep in Task 2 Step 6 is worth
+  re-running after every task — use that regex, not a word-order filter.
