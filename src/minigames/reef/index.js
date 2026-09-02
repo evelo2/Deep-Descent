@@ -2429,7 +2429,11 @@ export class Reef {
       W, H,
       depth: metresDown(this.diver.y),
       deepest: metresDown(WORLD.SURFACE + this.depthReached),
-      valveDepth: crushDepthM(this.valveLevel),
+      crushDepth: crushDepthM(this.valveLevel),
+      oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: this._crush.phase,
+      crushT: this._crush.t,
+      t: this.t,
     });
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');

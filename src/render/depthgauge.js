@@ -1,19 +1,21 @@
 // Depth gauge for the diver world: a vertical column down the right edge of the
 // HUD showing the WHOLE water column, so you can see at a glance how deep you
 // are and how much reef is still below you. A bright marker rides your live
-// depth; a faint pip stays at the deepest point of the dive; and once the Depth
-// Valve is bought, its line is drawn with the "held pressure" zone tinted
-// beneath it (see VALVE + airDepthTerm() in config.js).
+// depth; a faint pip stays at the deepest point of the dive. Below the oxygen
+// line the column tints amber; below crush depth it tints red, with a "⚠"
+// line always drawn at that depth (crush depth applies whether or not a Valve
+// was ever bought — see DEPTH + crushDepthM() in config.js). The crush band
+// flashes as the diver approaches it while still safe, and once the crush
+// alarm is running the whole column washes red with the countdown printed
+// beside the marker.
 //
 // The arithmetic is split out from the painting so it can be asserted directly
 // (tests/render/depthgauge.test.mjs). Geometry is computed from the LIVE
 // viewport passed in per frame — never cache W/H, setViewport reassigns them.
-import { WORLD } from '../config.js';
+import { WORLD, DEPTH } from '../config.js';
 import { text } from './chrome.js';
 
 const UNITS_PER_M = 10;     // world units per metre, matching the HUD's old readout
-const TICK_STEP_M = 50;     // a tick every 50 m...
-const LABEL_STEP_M = 100;   // ...labelled every 100 m
 
 // World y -> metres below the surface. Above the surface reads 0, not negative.
 export function metresDown(worldY) {
@@ -50,17 +52,44 @@ export function tickMarks(maxM, step) {
   return out;
 }
 
-export function drawDepthGauge(ctx, { W, H, depth, deepest = 0, valveDepth = null }) {
+// Tick spacing scales with the column's depth. The gauge shows the WHOLE water
+// column in a fixed on-screen height, so a tier-4 world compresses 1800 m into
+// the space that shows 411 m in tier 1 — at a fixed 50/100 m spacing that is an
+// unreadable stripe of labels. Pure, so it is asserted directly.
+export function gaugeTickStep(maxM) {
+  if (maxM <= 500)  return { tick: 50,  label: 100 };
+  if (maxM <= 900)  return { tick: 100, label: 200 };
+  if (maxM <= 1400) return { tick: 100, label: 500 };
+  return { tick: 200, label: 600 };
+}
+
+export function drawDepthGauge(ctx, {
+  W, H, depth, deepest = 0,
+  crushDepth, oxygenLine, crushPhase = 'safe', crushT = 0, t = 0,
+}) {
   const maxM = floorDepthM();
   const R = gaugeRect(W, H);
   const y = (m) => depthToY(m, maxM, R.top, R.bottom);
+  const { tick, label } = gaugeTickStep(maxM);
   ctx.save();
 
-  // The valve's held-pressure zone goes down first, under the column itself.
-  if (valveDepth != null) {
-    const vy = y(valveDepth);
-    ctx.fillStyle = 'rgba(120,220,255,0.10)';
-    ctx.fillRect(R.x - 4, vy, R.w + 12, R.bottom - vy);
+  // The amber oxygen band, then the red crush band, go down first, under the
+  // column itself. The crush band (and its line, below) flash faster as the
+  // diver nears crush depth while still safe — the danger reads before the
+  // alarm ever sounds.
+  if (oxygenLine != null) {
+    const oy = y(oxygenLine);
+    ctx.fillStyle = 'rgba(255,176,64,0.10)';
+    ctx.fillRect(R.x - 4, oy, R.w + 12, R.bottom - oy);
+  }
+
+  const approaching = crushPhase === 'safe' && depth > crushDepth - DEPTH.approachWarnM;
+  const flashK = approaching ? 0.5 + 0.5 * Math.sin(t * 8) : 1;
+  let cdY = null;
+  if (crushDepth != null) {
+    cdY = y(crushDepth);
+    ctx.fillStyle = `rgba(255,64,64,${(0.16 * flashK).toFixed(4)})`;
+    ctx.fillRect(R.x - 4, cdY, R.w + 12, R.bottom - cdY);
   }
 
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
@@ -68,11 +97,11 @@ export function drawDepthGauge(ctx, { W, H, depth, deepest = 0, valveDepth = nul
 
   const cy = y(depth);   // the live marker's row — tick labels give way to it
 
-  // Ticks every 50 m, numbers every 100 m — all to the LEFT of the column so
-  // nothing runs off the right edge of the screen.
-  for (const m of tickMarks(maxM, TICK_STEP_M)) {
+  // Ticks (spacing scales with the tier), numbers on the majors — all to the
+  // LEFT of the column so nothing runs off the right edge of the screen.
+  for (const m of tickMarks(maxM, tick)) {
     const ty = y(m);
-    const major = m % LABEL_STEP_M === 0;
+    const major = m % label === 0;
     ctx.fillStyle = major ? 'rgba(190,225,250,0.55)' : 'rgba(190,225,250,0.28)';
     ctx.fillRect(R.x + R.w, ty, major ? 7 : 4, 1);
     // A tick label gives way to anything it would print on top of: the live
@@ -89,12 +118,21 @@ export function drawDepthGauge(ctx, { W, H, depth, deepest = 0, valveDepth = nul
     ctx.fillRect(R.x - 5, dy, R.w + 12, 1);
   }
 
-  // The valve's line, over the tint.
-  if (valveDepth != null) {
-    const vy = y(valveDepth);
-    ctx.fillStyle = 'rgba(120,220,255,0.75)';
-    ctx.fillRect(R.x - 6, vy, R.w + 14, 2);
-    text(ctx, `⚲ ${Math.round(valveDepth)}m`, R.x + R.w + 11, vy - 9, 10, 'rgba(150,230,255,0.9)', 'left', 'middle');
+  // The crush line, over the bands — always drawn, since crush depth applies
+  // whether or not the diver has ever bought a Valve.
+  if (crushDepth != null) {
+    const crushColor = `rgba(255,90,90,${(0.85 * flashK).toFixed(4)})`;
+    ctx.fillStyle = crushColor;
+    ctx.fillRect(R.x - 6, cdY, R.w + 14, 2);
+    text(ctx, `⚠ ${Math.round(crushDepth)}m`, R.x + R.w + 11, cdY - 9, 10, crushColor, 'left', 'middle');
+  }
+
+  // Alarm: the crush timer is counting down — wash the whole column red and
+  // print the seconds left beside the marker.
+  if (crushPhase === 'alarmed') {
+    ctx.fillStyle = 'rgba(255,64,64,0.35)';
+    ctx.fillRect(R.x - 6, R.top, R.w + 14, R.bottom - R.top);
+    text(ctx, `${crushT.toFixed(1)}s`, R.x + R.w + 13, cy + 16, 12, '#ff6a6a', 'left', 'middle', true);
   }
 
   // Live depth: a marker riding the column plus the reading beside it.
