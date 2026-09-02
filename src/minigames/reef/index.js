@@ -40,7 +40,7 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -97,15 +97,6 @@ const PU_INFO = {
 // enough to empty a full tank in twelve seconds. Only the abyss term remains.
 export function oxygenMultiplier(zone, inSub = false) {
   return (zone === 'abyss' && !inSub) ? ABYSS.airMult : 1;
-}
-
-// Pure: the depth the air drain's PRESSURE TERM is charged at. The Depth Valve
-// (shop item) holds pressure below its line, so anything deeper than
-// VALVE.holdDepthM costs the same air as the line itself. The baseline breath
-// and every drain multiplier are untouched. Shared by update() + unit tests.
-export function pressureDepth(diverY, hasValve = false) {
-  const holdY = WORLD.SURFACE + VALVE.holdDepthM * 10;
-  return hasValve ? Math.min(diverY, holdY) : diverY;
 }
 
 // Pure: the chance a reef offers a bonus-zone portal (temple/stage/abyss/whirl),
@@ -305,7 +296,7 @@ export class Reef {
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
-    // Depth Valve shop telemetry: 0-or-1 each, since hasValve resets per run.
+    // Depth Valve shop telemetry: 0-or-1 each, since valveLevel resets per run.
     this.runValveOffered = 0; this.runValveBought = 0;
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
@@ -331,7 +322,7 @@ export class Reef {
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
     this.musicMuted = false;   // the score mutes independently of the SFX
-    this.hasValve = false;   // Depth Valve: holds pressure below its line (shop item)
+    this.valveLevel = 0;   // Depth Valve: tiered crush-depth + drain-discount gear (shop item)
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
@@ -775,8 +766,10 @@ export class Reef {
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     if (!this.hasTorch && this.reef >= TORCH.minReef)
       items.push({ kind: 'torch', id: 'torch', label: `🔦 Torch — battery light for dark caves (T)`, cost: TORCH.cost });
-    if (!this.hasValve && this.reef >= VALVE.minReef)
-      items.push({ kind: 'valve', id: 'valve', label: `⚲ Depth Valve — holds pressure below ${VALVE.holdDepthM} m`, cost: VALVE.cost });
+    if (this.valveLevel < VALVE.maxLevel && this.reef >= VALVE.minReef)
+      items.push({ kind: 'valve', id: 'valve',
+        label: `⚲ Depth Valve → Lv${this.valveLevel + 1} — dive to ${crushDepthM(this.valveLevel + 1)} m`,
+        cost: this._dblCost(VALVE.cost, this.valveLevel) });
     // Timed consumable buffs — gameplay-tied, run-long or until death. Buying one
     // while it's active refreshes its timer (label shows the live remaining).
     for (const c of CONSUMABLE) {
@@ -804,7 +797,7 @@ export class Reef {
     // rate. Assignment, not increment: one run counts once however many shops
     // it visits. This lives here rather than in _shopItems() because that
     // builder runs every frame while the shop is drawn and must stay pure.
-    if (!this.hasValve && this.reef >= VALVE.minReef) this.runValveOffered = 1;
+    if (this.valveLevel < VALVE.maxLevel && this.reef >= VALVE.minReef) this.runValveOffered = 1;
     this.audio.select();
   }
 
@@ -844,7 +837,7 @@ export class Reef {
       this.hasTorch = true;
       this.puName = 'TORCH!'; this.puCol = PAL.gateGlow; this.puT = 1.6;
     } else if (it.kind === 'valve') {
-      this.hasValve = true; this.runValveBought = 1;
+      this.valveLevel += 1; this.runValveBought = 1;
       this.puName = 'DEPTH VALVE!'; this.puCol = PAL.air; this.puT = 1.6;
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
@@ -1481,7 +1474,8 @@ export class Reef {
       // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
       const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
       const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
-      this.air -= (AIR.drainPerSec + pressureDepth(this.diver.y, this.hasValve) * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
+      const depthM = metresDown(this.diver.y);
+      this.air -= (AIR.drainPerSec + airDepthTerm(depthM, this.valveLevel)) * oxyMult * suitMult * lapseMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
@@ -2406,7 +2400,7 @@ export class Reef {
       W, H,
       depth: metresDown(this.diver.y),
       deepest: metresDown(WORLD.SURFACE + this.depthReached),
-      valveDepth: this.hasValve ? VALVE.holdDepthM : null,
+      valveDepth: crushDepthM(this.valveLevel),
     });
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');

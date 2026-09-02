@@ -3,7 +3,7 @@
 // are and how much reef is still below you. A bright marker rides your live
 // depth; a faint pip stays at the deepest point of the dive; and once the Depth
 // Valve is bought, its line is drawn with the "held pressure" zone tinted
-// beneath it (see VALVE + pressureDepth() in the reef).
+// beneath it (see VALVE + airDepthTerm() in config.js).
 //
 // The arithmetic is split out from the painting so it can be asserted directly
 // (tests/render/depthgauge.test.mjs). Geometry is computed from the LIVE
