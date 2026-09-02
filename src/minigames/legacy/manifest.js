@@ -50,6 +50,10 @@ export default {
       { key: 'careerScore',     label: 'Career score' },
       { key: 'chestsOpened',    label: 'Chests opened' },
       { key: 'guardiansFelled', label: 'Guardians felled' },
+      // Diagnostic counters, not player goals: no track binds them, so they
+      // mint no Steam achievement ids and draw nothing on the Trophy Wall.
+      { key: 'legacy:valveOffered', label: 'Runs offered a Depth Valve' },
+      { key: 'legacy:valveBought',  label: 'Depth Valves bought' },
     ],
     // Copied VERBATIM from meta/badges.js — the manifests test asserts every
     // field matches, so the two can never drift.

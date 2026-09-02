@@ -14,6 +14,12 @@ export const STAT_KEYS = [
   'salvageEarned', 'pearlsBanked', 'bossesFelled', 'careerScore',
   // Guardian-chest + Treasure Chest Madness accumulators.
   'm3Pearls', 'm3Gems', 'm3Coins', 'm3Explosions', 'chestsOpened', 'guardiansFelled',
+  // Depth Valve shop telemetry — offered is the denominator (runs that reached
+  // its gate reef without already owning one), bought the numerator, so the
+  // ratio is the attach rate. Namespaced because everything added from P11.1
+  // onward must be (src/core/grandfathered-ids.js); the bare keys above are the
+  // grandfathered pre-P11.1 set.
+  'legacy:valveOffered', 'legacy:valveBought',
 ];
 
 export function defaultStats() {
