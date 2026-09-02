@@ -12,7 +12,6 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 check('gold rate tightened to 0.2', Math.abs(GOLD.rate - 0.2) < 1e-9);
 check('reef goal raised (12000 base / 2500 per reef)', RELIC.goalBase === 12000 && RELIC.goalPerReef === 2500);
 check('dive bells scarcer (1 per reef)', BELL.count === 1);
-check('air penalty steeper (0.15/reef)', Math.abs(GAME.oxygenPenaltyPerReef - 0.15) < 1e-9);
 check('lives are capped', GAME.maxLives === 5);
 check('first extra life costs more (8000) and escalates (+6000)', GAME.firstLifeScore === 8000 && GAME.lifeScoreStep === 6000);
 check('a hit spills carried loot', GAME.hitLootPenalty > 0 && GAME.hitLootPenalty <= 0.5);

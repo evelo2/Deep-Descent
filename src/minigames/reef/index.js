@@ -91,13 +91,12 @@ const PU_INFO = {
   life:      { name: 'EXTRA LIFE!',      col: PAL.diver },
 };
 
-// Pure: the effective air-drain multiplier for a given reef number + zone — the
-// reef's own depth penalty, times an extra 150% while on foot in the abyss.
-// Piloting the mini-sub negates the abyss factor. Shared by update() + unit tests.
-export function oxygenMultiplier(reef, zone, inSub = false) {
-  let m = 1 + GAME.oxygenPenaltyPerReef * Math.min(reef - 1, GAME.oxygenPenaltyCap);
-  if (zone === 'abyss' && !inSub) m *= ABYSS.airMult;
-  return m;
+// Pure: the non-depth multipliers on air drain. The per-reef penalty was
+// DELETED with Deep Reefs (spec locked decision 3): depth is now the difficulty
+// axis, and a reef multiplier on top of a 1800 m world double-counted badly
+// enough to empty a full tank in twelve seconds. Only the abyss term remains.
+export function oxygenMultiplier(zone, inSub = false) {
+  return (zone === 'abyss' && !inSub) ? ABYSS.airMult : 1;
 }
 
 // Pure: the depth the air drain's PRESSURE TERM is charged at. The Depth Valve
@@ -1475,9 +1474,9 @@ export class Reef {
       if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
-      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty
-      // (negated while piloting the mini-sub).
-      const oxyMult = oxygenMultiplier(this.reef, this.zone, this.inSub);
+      // depth (WORLD.WH) drives air drain now; the abyss adds its own 150%
+      // on-foot penalty (negated while piloting the mini-sub).
+      const oxyMult = oxygenMultiplier(this.zone, this.inSub);
       // Sealed Wetsuit consumable eases air drain; a lapsed extraction countdown
       // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
       const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;

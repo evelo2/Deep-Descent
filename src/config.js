@@ -104,10 +104,6 @@ export const GAME = {
   maxLives: 5,          // extra lives can't bank past this — no snowball
   firstLifeScore: 8000, // score for the first extra life (was a flat 5000)
   lifeScoreStep: 6000,  // additional score required per subsequent extra life
-  // Each new reef bites harder: air drains this much faster per reef (15% each),
-  // capped, on top of the creature-count/size scaling.
-  oxygenPenaltyPerReef: 0.15,
-  oxygenPenaltyCap: 8,
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
   exitAirRefillFrac: 0.5,    // leaving ANY special level tops up air by up to this fraction of the tank
   // Ambient combat encounter (a whale OR a kraken) — a flat, modest roll so even
