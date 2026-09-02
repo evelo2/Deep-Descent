@@ -12,6 +12,48 @@ export const WORLD = {
   CELL: 60,        // cave grid cell size
 };
 
+// --- Deep Reefs: the world grows in four fixed STEPS, not per reef ---------
+// Tier 1 is byte-identical to the pre-Deep-Reefs world and is the regression
+// anchor for the whole feature. Steps at reefs 4, 11 and 21; reef 40 caps the
+// SIZE only — reefs continue past it at tier-4 size (spec locked decision 11).
+// See docs/superpowers/specs/2026-09-02-deep-reefs-design.md.
+export const WORLD_TIERS = [
+  { minReef: 1,  WW: 2760, WH: 4200  },   //  411 m — unchanged from main
+  { minReef: 4,  WW: 3600, WH: 7090  },   //  700 m
+  { minReef: 11, WW: 4200, WH: 11590 },   // 1150 m
+  { minReef: 21, WW: 4800, WH: 18090 },   // 1800 m
+];
+
+// The tier-1 floor in metres (411). Task 11's value functions key off this so
+// tier-1 payouts stay exactly as they were before Deep Reefs.
+export const tier1FloorM = (WORLD_TIERS[0].WH - WORLD.SURFACE) / 10;
+
+// Pure: reef -> tier index. Anything non-finite, fractional or out of range
+// clamps rather than throwing — world generation must never fail.
+export function worldTier(reef) {
+  const r = Number(reef);
+  if (!Number.isFinite(r)) return 0;
+  const n = Math.floor(r);
+  let t = 0;
+  for (let i = 0; i < WORLD_TIERS.length; i++) if (n >= WORLD_TIERS[i].minReef) t = i;
+  return t;
+}
+
+// Pure: reef -> the world extents for that reef.
+export function worldSize(reef) {
+  const { WW, WH } = WORLD_TIERS[worldTier(reef)];
+  return { WW, WH };
+}
+
+// Assign this reef's extents onto the LIVE WORLD object. Mirrors setViewport():
+// WW/WH must never be captured at module scope, or a stale world is pinned.
+// Called once at the top of the reef's _generateWorld(), BEFORE the Cave is
+// constructed (Cave derives GW/GH from the extents in its constructor).
+export function setWorldSize(reef) {
+  const { WW, WH } = worldSize(reef);
+  WORLD.WW = WW; WORLD.WH = WH;
+}
+
 // The 900×600 core is the design reference; the visible logical viewport is
 // extended along the LONG axis to match the device aspect so the canvas fills
 // the screen instead of letterboxing inside a fixed 3:2 box. The core is always

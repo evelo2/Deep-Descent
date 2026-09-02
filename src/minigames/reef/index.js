@@ -59,9 +59,11 @@ import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
 import { paletteFor } from '../../music/palettes.js';
 import { tensionLevel } from '../../music/threat.js';
 
-// Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
+// Live logical viewport (see LIVE VIEWPORT note).
 let { W, H } = WORLD;
-const { WW, WH, OPEN_BAND, CELL } = WORLD;
+// WORLD.WW/WORLD.WH are LIVE — setWorldSize(reef) reassigns them per world tier, exactly as
+// setViewport reassigns W/H. Capturing them here would pin a stale world.
+const { OPEN_BAND, CELL } = WORLD;
 
 // Reef flavour: each reef gets a wacky procedural name + a light theme.
 // `music` names a palette in src/music/palettes.js — the score the reef plays.
@@ -159,7 +161,7 @@ export class Reef {
     this.progressState = host.progression.progress;
     // Run-state (mirrors the legacy Game ctor).
     this.t = 0; this.shake = 0;
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
@@ -354,7 +356,7 @@ export class Reef {
     this.hasSub = false; this.inSub = false;   // the mini-sub is bought per-reef
     this._newReefName();
     this.diver.reset();
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
     // Prospector's Chart: reveal a wider patch of fog around the reef's entry
     // point (bigger than the normal per-frame radius-5 reveal at ~1125).
@@ -371,11 +373,11 @@ export class Reef {
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null;   // reef portal (reef-owned); whirl gameplay state lives in the whirlpool MiniGame
-    const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
+    const chestValue = (y) => 200 + Math.round((y / WORLD.WH) * 400);   // 200..600 by depth
 
     // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
     // (clams) only appear below a minimum depth — the shallows hold chests.
-    const pearlMinDepth = WH * GAME.pearlMinDepthFrac;
+    const pearlMinDepth = WORLD.WH * GAME.pearlMinDepthFrac;
     for (const f of spread(C.floors(), 34, 150)) {
       if (f.y > pearlMinDepth && Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
       else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
@@ -383,13 +385,13 @@ export class Reef {
     // A rare deep GIANT clam with a golden pearl — a trophy worth score+gold and
     // a chunk of Salvage. At most one, only in the deep, well clear of others.
     if (Math.random() < SHELL.giantChance) {
-      const deep = C.floors(WH * SHELL.giantMinDepthFrac);
+      const deep = C.floors(WORLD.WH * SHELL.giantMinDepthFrac);
       if (deep.length) { const g = deep[(Math.random() * deep.length) | 0]; this.shells.push(new GiantClam(g.x, g.y - SHELL.giantRadius * 0.35)); }
     }
     // Scattered coins & gems drift in open water.
     for (let i = 0; i < 40; i++) {
       const c = C.randomOpen(); if (!c) continue;
-      this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WH) * 0.18 ? 'gem' : 'coin'));
+      this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WORLD.WH) * 0.18 ? 'gem' : 'coin'));
     }
     // Treasure-sweep bonus baseline: total loose treasure this reef, and which
     // completion tiers (80/90/100%) have paid out (see the check in update()).
@@ -417,15 +419,15 @@ export class Reef {
     }
 
     // Dive bells: deep refuel/bank checkpoints hanging in roomy chambers.
-    let bellSpots = spread(C.chambers(WH * BELL.minDepthFrac), BELL.count, 900);
-    if (!bellSpots.length) { const c = C.randomOpen(WH * 0.5); if (c) bellSpots = [c]; }
+    let bellSpots = spread(C.chambers(WORLD.WH * BELL.minDepthFrac), BELL.count, 900);
+    if (!bellSpots.length) { const c = C.randomOpen(WORLD.WH * 0.5); if (c) bellSpots = [c]; }
     for (const s of bellSpots) this.bells.push(new DiveBell(s.x, s.y));
 
     // A supply crate sometimes drifts in the reef — free gear when you reach it.
     if (Math.random() < 0.5) { const c = C.randomOpen(OPEN_BAND + 300); if (c) this.crates.push(new SupplyCrate(c.x, c.y)); }
 
     // Dark caves: pitch-black chambers (light a flare) hiding rich loot.
-    const darkSpots = spread(C.chambers(WH * DARKZONE.minDepthFrac), DARKZONE.count, 800);
+    const darkSpots = spread(C.chambers(WORLD.WH * DARKZONE.minDepthFrac), DARKZONE.count, 800);
     for (const s of darkSpots) {
       this.darkZones.push({ x: s.x, y: s.y, r: DARKZONE.radius });
       // Reward the dark: a few gems, a flare or two, and a supply crate.
@@ -451,7 +453,7 @@ export class Reef {
     this.flora = new Flora(spread(C.floors(), 110, 70));
 
     // Whale skeletons resting on the deepest floors.
-    const deepFloors = C.floors().filter((f) => f.y > WH * 0.72);
+    const deepFloors = C.floors().filter((f) => f.y > WORLD.WH * 0.72);
     for (const s of spread(deepFloors, 3, 500)) this.skeletons.push({ x: s.x, y: s.y - 6 });
 
     // Creatures change with depth; density and shark size rise with the reef
@@ -460,7 +462,7 @@ export class Reef {
     const sizeUp = Math.min((this.reef - 1) * 0.06, 0.5);      // bigger sharks deeper into a run
     for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
-      const deep = c.y / WH;
+      const deep = c.y / WORLD.WH;
       const band = deep < 0.30 ? 'shallow' : deep < 0.62 ? 'mid' : 'deep';
       const entry = pickFauna(band, this.reef); if (!entry) continue;
       const spawned = spawnCreature(entry, c.x, c.y, this.reef, { sizeUp });
@@ -486,7 +488,7 @@ export class Reef {
     // even early reefs feel alive. Separate from the bonus-zone portals below.
     {
       const roomy = C.chambers(OPEN_BAND + 500);
-      const deep = C.chambers(WH * 0.5);
+      const deep = C.chambers(WORLD.WH * 0.5);
       const options = [];
       if (roomy.length) options.push('whale');
       if (deep.length) options.push('kraken');
@@ -510,10 +512,10 @@ export class Reef {
     // portals/reef from reef 1). Chance ramps with depth; see bonusZoneChance().
     this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null;
     if (Math.random() < bonusZoneChance(this.reef)) {
-      const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
-      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WH * 0.72);
-      const abyssDeep = C.floors(WH * ABYSS.entranceMinDepthFrac);
-      const whirlSpots = C.floors().filter((f) => f.y > WH * 0.55);
+      const gateFloors = C.floors().filter((f) => f.y > WORLD.WH * 0.3 && f.y < WORLD.WH * 0.7);
+      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WORLD.WH * 0.72);
+      const abyssDeep = C.floors(WORLD.WH * ABYSS.entranceMinDepthFrac);
+      const whirlSpots = C.floors().filter((f) => f.y > WORLD.WH * 0.55);
       const options = [];
       if (gateFloors.length) options.push('temple');
       if (stageFloors.length) options.push('stage');
@@ -545,7 +547,7 @@ export class Reef {
     // Rare guarded chest → Treasure Chest Madness. Deep third only, at most one
     // per dive; Siren's Lure boosts the odds. See specialChestChance().
     if (Math.random() < specialChestChance(this.reef, this._hasChestRelic())) {
-      const cands = C.floors().filter((f) => f.y > WH * SPECIAL_CHEST.minDepthFrac);
+      const cands = C.floors().filter((f) => f.y > WORLD.WH * SPECIAL_CHEST.minDepthFrac);
       if (cands.length) {
         const f = pickOne(cands);
         this.specialChest = { x: f.x, y: f.y - 20, r: 26, opened: false };
@@ -563,7 +565,7 @@ export class Reef {
     // The reef's relic objective + this reef's high points fallback.
     this.reefBanked = 0; this.relicBanked = false; this.carryingRelic = false;
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
-    const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
+    const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WORLD.WW / 2, y: WORLD.WH * 0.5 };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
 
     // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself
@@ -571,7 +573,7 @@ export class Reef {
     // convert to persistent Salvage.
     const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0) + (this._relicEye ? 1 : 0);
     for (let i = 0; i < pearlCount; i++) {
-      const pc = C.randomOpen(WH * 0.55);
+      const pc = C.randomOpen(WORLD.WH * 0.55);
       if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
     }
 
@@ -932,7 +934,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
-    const value = (y) => 400 + Math.round((y / WH) * 500);
+    const value = (y) => 400 + Math.round((y / WORLD.WH) * 500);
 
     // Scattered loot + a couple of air vents + light hazards.
     for (const f of spread(C.floors(), 10, 200)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
@@ -948,10 +950,10 @@ export class Reef {
     for (const f of spread(C.floors(), 18, 200)) this.columns.push({ x: f.x, y: f.y });
 
     // The key, mid-temple.
-    const kc = C.randomOpen(OPEN_BAND + 400) || { x: WW / 2, y: WH * 0.4 };
+    const kc = C.randomOpen(OPEN_BAND + 400) || { x: WORLD.WW / 2, y: WORLD.WH * 0.4 };
     this.key = { x: kc.x, y: kc.y, r: 20, taken: false };
     // The locked door deep down, with the vault (locked loot) behind/below it.
-    const dc = C.randomOpen(WH * 0.6) || { x: WW / 2, y: WH * 0.7 };
+    const dc = C.randomOpen(WORLD.WH * 0.6) || { x: WORLD.WW / 2, y: WORLD.WH * 0.7 };
     const dFloor = C.surfaceBelow(dc.x, dc.y, 200);
     this.door = { x: dc.x, y: dFloor - 90, w: 74, h: 180, open: 0 };
     // Vault loot sits in the OPEN chamber around the door (above the floor —
@@ -967,7 +969,7 @@ export class Reef {
     this.flora = new Flora([]);
     this._makeCurrents(2);
     this._makePowerups(1);
-    this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this.templeExit = { x: WORLD.WW / 2, y: OPEN_BAND - 6, r: 46 };
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -980,7 +982,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.door = null; this.key = null;
-    const value = (y) => 450 + Math.round((y / WH) * 650);   // richer than the reef — the abyss's whole point
+    const value = (y) => 450 + Math.round((y / WORLD.WH) * 650);   // richer than the reef — the abyss's whole point
 
     // Dense loot: chests on every ledge, gems & coins thick in open water.
     for (const f of spread(C.floors(), 14, 170)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
@@ -1013,10 +1015,10 @@ export class Reef {
     // bigger Salvage bonus on the way out (see the exit check in update()).
     this.abyssExits = [];
     for (const spot of spread(C.chambers(OPEN_BAND + 200), ABYSS.exits, 700)) {
-      const depthFrac = spot.y / WH;
+      const depthFrac = spot.y / WORLD.WH;
       this.abyssExits.push({ x: spot.x, y: spot.y, r: 40, bonus: Math.round(ABYSS.exitBonusBase * (0.6 + depthFrac)) });
     }
-    if (!this.abyssExits.length) { const c = C.randomOpen(WH * 0.5) || { x: WW / 2, y: WH * 0.5 }; this.abyssExits.push({ x: c.x, y: c.y, r: 40, bonus: ABYSS.exitBonusBase }); }
+    if (!this.abyssExits.length) { const c = C.randomOpen(WORLD.WH * 0.5) || { x: WORLD.WW / 2, y: WORLD.WH * 0.5 }; this.abyssExits.push({ x: c.x, y: c.y, r: 40, bonus: ABYSS.exitBonusBase }); }
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -1055,7 +1057,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
-    const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
+    const value = (y) => 350 + Math.round((y / WORLD.WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
     for (const f of spread(C.floors(), 40, 130)) this.ribs.push({ x: f.x, y: f.y - 40, dir: Math.random() < 0.5 ? 1 : -1 });
@@ -1074,7 +1076,7 @@ export class Reef {
     this._makeCurrents(3);   // churning guts
     this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
-    this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this.whaleExit = { x: WORLD.WW / 2, y: OPEN_BAND - 6, r: 46 };
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -1431,12 +1433,12 @@ export class Reef {
     this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
 
     // 2D camera follows the diver, clamped to the world.
-    const tx = Math.max(0, Math.min(WW - W, this.diver.x - W / 2));
-    const ty = Math.max(0, Math.min(WH - H, this.diver.y - H / 2));
+    const tx = Math.max(0, Math.min(WORLD.WW - W, this.diver.x - W / 2));
+    const ty = Math.max(0, Math.min(WORLD.WH - H, this.diver.y - H / 2));
     this.camX += (tx - this.camX) * Math.min(1, dt * 6);
     this.camY += (ty - this.camY) * Math.min(1, dt * 6);
     this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
-    this.audio.setDepth(Math.min(1, this.camY / WH));
+    this.audio.setDepth(Math.min(1, this.camY / WORLD.WH));
     // The score's threat layer: what is actually hunting the diver right now.
     this.audio.setTension(tensionLevel(this.creatures, this.krakens, this.chestGuardian));
     this.audio.setShade(this._inDark() ? 1 : 0);
@@ -1929,7 +1931,7 @@ export class Reef {
     this.hasSub = false; this.inSub = false;   // per-reef: buy it again on the new reef
     this.diver.reset();
     if (this._relicChart) this.cave.reveal(this.diver.x, this.diver.y, 14);
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this.air = this.airMax;
     this._shell.state = 'playing';
     this.audio.bank();
@@ -1972,7 +1974,7 @@ export class Reef {
     // full air with the exit right there, then descend into the belly for loot
     // and climb back to leave. The old deep-random spawn could strand the diver
     // in a pocket with no reachable air vent — a suffocation soft-lock.
-    const c = this.cave.nearestOpen(this.whaleExit.x, this.whaleExit.y + 90) || { x: WW / 2, y: OPEN_BAND + 60 };
+    const c = this.cave.nearestOpen(this.whaleExit.x, this.whaleExit.y + 90) || { x: WORLD.WW / 2, y: OPEN_BAND + 60 };
     this._placeDiver(c.x, c.y, 0);
     this.shake = 10; this.zoneFade = 1;
     this.audio.gasp();
@@ -2007,7 +2009,7 @@ export class Reef {
     // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
     // trench by headlight to find one of the exit hatches. inSub is always on
     // here now (the sub IS the entrance); the hull armor soaks several hits.
-    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: WH * 0.62 };
+    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WORLD.WW / 2, y: WORLD.WH * 0.62 };
     this._placeDiver(c.x, c.y, 0);
     this.inSub = true; this.subArmor = SUB.armor;
     // Remember the haul on entry: leaving via a hatch keeps whatever you gather
@@ -2064,8 +2066,8 @@ export class Reef {
     if (this._world) { this._world.placeDiver(x, y, vx); return; }
     const d = this.diver;
     d.x = x; d.y = y; d.vx = vx; d.vy = 0; d.invuln = 1.6;
-    this.camX = Math.max(0, Math.min(WW - W, x - W / 2));
-    this.camY = Math.max(0, Math.min(WH - H, y - H / 2));
+    this.camX = Math.max(0, Math.min(WORLD.WW - W, x - W / 2));
+    this.camY = Math.max(0, Math.min(WORLD.WH - H, y - H / 2));
   }
 
   _blockDoor(d) {
@@ -2090,7 +2092,7 @@ export class Reef {
     if (this.shake > 0.2) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
 
     const cx = this.camX, cy = this.camY;
-    const depthT = Math.min(1, cy / WH);
+    const depthT = Math.min(1, cy / WORLD.WH);
     // Distant shoals + sunken-wreck silhouettes only in the open-ocean reef;
     // enclosed zones (belly/temple/abyss) draw their own backdrops over this.
     this.bg.draw(ctx, cx, cy, this.t, depthT, { reef: this.zone === 'reef' });
@@ -2719,7 +2721,7 @@ export class Reef {
 
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
-    const mw = 116, mh = Math.round(mw * WH / WW), mx = W - mw - 16, my = 128;
+    const mw = 116, mh = Math.round(mw * WORLD.WH / WORLD.WW), mx = W - mw - 16, my = 128;
     // The map is translucent, and fades further when the diver swims behind it
     // so it never hides the action. Eased for a smooth transition.
     const dsx = this.diver.x - this.camX, dsy = this.diver.y - this.camY;
@@ -2737,7 +2739,7 @@ export class Reef {
     ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(C.mini, mx, my, mw, mh);
-    const wx = (x) => mx + (x / WW) * mw, wy = (y) => my + (y / WH) * mh;
+    const wx = (x) => mx + (x / WORLD.WW) * mw, wy = (y) => my + (y / WORLD.WH) * mh;
     // Has the diver revealed the cell at a world point? The Prospector's Chart
     // reveals a wider radius, so it naturally surfaces more vents/bells below.
     const revealed = (x, y) => !!C.seen[Math.floor(y / CELL) * C.GW + Math.floor(x / CELL)];

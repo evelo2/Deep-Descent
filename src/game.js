@@ -21,9 +21,11 @@ const CONTROLS_KEY = 'deepdescent.controls';
 // (main.js sizes them on resize): the 900x600 core is always on screen and the
 // long axis is extended out to the edges. They're module-level `let` so all
 // HUD / menu / camera layout here — and input.js + render, which read WORLD.W/H
-// — follow the live size. WW/WH (the scrollable world) stay fixed.
+// — follow the live size.
 let { W, H } = WORLD;
-const { WW, WH, OPEN_BAND, CELL } = WORLD;
+// WW/WH are LIVE — setWorldSize(reef) reassigns them per world tier, exactly as
+// setViewport reassigns W/H. Capturing them here would pin a stale world.
+const { OPEN_BAND, CELL } = WORLD;
 
 // Called by main.js whenever the viewport resizes/rotates. Updates both the
 // module-level W/H used throughout this file and WORLD.W/H used by input.js and
