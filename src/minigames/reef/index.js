@@ -40,7 +40,7 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, DEPTH } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, crushRecover, DEPTH } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -1460,6 +1460,14 @@ export class Reef {
     if (atStation) {
       const rate = atBell ? BELL.refillPerSec : AIR.refillPerSec;
       if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + rate * dt); if (Math.random() < 0.3) this.audio.refill(); }
+      // A station shelters like safe water: the alarm clears immediately, but
+      // the timer still recovers at the normal 1s-per-1.5s rate, not instantly —
+      // a full recovery costs ~21s docked, a real decision against the few
+      // seconds an air top-up takes. Bells spawn below earlier tiers' crush
+      // depth, so docking while alarmed is a normal deep-tier situation, not an
+      // edge case; without this the diver would undock still alarmed and die
+      // moments after leaving the very refuge that just saved them.
+      if (this.zone === 'reef') crushRecover(this._crush, dt);
       // The boat is home — it auto-banks the haul at full value. A dive bell only
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.

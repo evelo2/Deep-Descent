@@ -290,6 +290,17 @@ export function airDepthTerm(depthM, valveLevel = 0) {
   return (shallow + deep) * (1 - valveDiscount(valveLevel));
 }
 
+// Pure: recover the crush timer as though at safe depth — the shared
+// arithmetic behind crushStep's safe branch AND the docked (boat/dive-bell)
+// path in reef/index.js. A station shelters exactly like safe water, at the
+// same 1-per-1.5s rate: recovering fully costs ~21s docked, a real decision
+// against the few seconds an air top-up takes, not a free instant clear.
+export function crushRecover(state, dt) {
+  state.phase = 'safe';
+  state.t = Math.min(DEPTH.crushTimer, state.t + dt / DEPTH.crushRecoverRatio);
+  return state;
+}
+
 // Pure: advance the crush state machine by dt. `state` is { phase, t } where
 // phase is 'safe' | 'alarmed' | 'crushed' and t is the seconds of timer left.
 // Mutates and returns state (called every frame; allocating per frame would be
@@ -302,11 +313,9 @@ export function crushStep(state, depthM, valveLevel, dt) {
     state.phase = 'alarmed';
     state.t -= dt;
     if (state.t <= 0) { state.t = 0; state.phase = 'crushed'; }
-  } else {
-    state.phase = 'safe';
-    state.t = Math.min(DEPTH.crushTimer, state.t + dt / DEPTH.crushRecoverRatio);
+    return state;
   }
-  return state;
+  return crushRecover(state, dt);
 }
 export const FLARE = {
   startCount: 2,
