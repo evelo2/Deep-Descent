@@ -398,8 +398,13 @@ gameplay signal, not score.
 
 The action pauses with a dismissable modal the first time the diver approaches
 each line — one for the oxygen line, one for the crush line. Seen-once flags are
-new fields inside `deepdescent.progress.v1`; the key name is untouched and old
-saves backfill through `sanitize()`.
+new boolean fields inside **`deepdescent.salvage.v2`**, alongside `lifeMax`.
+
+They may **not** live in `deepdescent.progress.v1`: that key is sanitized to
+`{ earned: [...] }` filtered against `ID_SET` on every save
+(`src/meta/progressive.js:76,88`), so any extra field is silently discarded.
+`salvage.v2` is the general meta bag and already round-trips arbitrary fields
+through an explicit sanitizer.
 
 ## Telemetry
 
