@@ -88,6 +88,19 @@ export const AIR = {
   ventRefillPerSec: 34, // refill rate while inside a vent's bubble stream
 };
 
+// --- Deep Reefs: the two fixed danger depths ------------------------------
+// Both are ABSOLUTE METRES, identical in every reef, so the player learns them
+// once (spec locked decision 1). 250 m sits in the bottom third of the tier-1
+// world, so reefs 1-3 teach the oxygen line gently before any deeper tier
+// exists. oxygenSteepen is the PRIMARY BALANCE DIAL of the whole feature.
+export const DEPTH = {
+  oxygenLineM: 250,        // below this the depth term steepens
+  oxygenSteepen: 1.6,      // <- move this first if the deep tiers feel wrong
+  crushTimer: 14,          // seconds from crossing crush depth to death
+  crushRecoverRatio: 1.5,  // seconds of safe water per second of timer recovered
+  approachWarnM: 40,       // the gauge flashes within this many metres of crush depth
+};
+
 // Air vents: bubble clams on ledges emit a rising stream; swim through it to
 // refill air. Makes deep cave diving viable without surfacing.
 export const VENT = {
@@ -235,22 +248,47 @@ export const TORCH = {
   drain: 8,         // battery drained per second while lit (~12.5s on a full battery)
 };
 
-// Depth Valve: a one-off shop unlock (like the Torch) that HOLDS PRESSURE below
-// its line — deeper than holdDepthM the depth term of the air drain stops
-// growing, so the world floor costs the same air as the line. It never touches
-// the baseline breath or any drain multiplier. See pressureDepth() in the reef.
+// Depth Valve: the tiered pressure gear. One level per world tier — the rule is
+// "each tier of the world needs the next Valve". A level buys BOTH crush depth
+// (how deep you may go before the alarm) and a share of the depth-drain
+// discount. It buys air as well as depth because at 1800 m a crush-depth-only
+// valve leaves a full tank empty in eleven seconds — see "Why decision 7
+// changed" in the spec. holdDepthM is retained only to document the pre-Deep-
+// Reefs clamp the Lv1 discount is pinned against in valve-air.test.mjs.
 export const VALVE = {
-  cost: 400,        // shop price (a commitment, like the Torch)
+  cost: 400,        // Lv1 price; doubles per level via Game#_dblCost
   minReef: 3,       // shop-gate: appears from reef 3
-  // Metres: below this the pressure penalty stops growing. Was 240, which made
-  // the valve worthless until ~300 m and capped it at a 22% saving on the very
-  // floor — strictly dominated by the Sealed Wetsuit (-35% at EVERY depth, from
-  // reef 1, for 700g), so nobody ever bought one. At 150 it saves ~15% by 240 m
-  // and ~33% at the floor, and the line now sits just above where dark caves
-  // begin (DARKZONE.minDepthFrac), giving it a legible identity: it starts
-  // paying where the water turns dark. Balance pass 2026-09-01.
-  holdDepthM: 150,
+  maxLevel: 3,
+  holdDepthM: 150,  // historical: the clamp Deep Reefs replaced
+  // Index = valve level (0 = none).
+  crushDepthM: [400, 720, 1160, 1820],
+  drainDiscount: [0, 0.40, 0.63, 0.76],
 };
+
+function valveLevelIndex(level) {
+  const l = Number(level);
+  if (!Number.isFinite(l)) return 0;
+  return Math.max(0, Math.min(VALVE.maxLevel, Math.floor(l)));
+}
+
+// Pure: the depth (m) below which this Valve level triggers the crush alarm.
+export function crushDepthM(level) { return VALVE.crushDepthM[valveLevelIndex(level)]; }
+
+// Pure: the fraction of the depth term this Valve level removes.
+export function valveDiscount(level) { return VALVE.drainDiscount[valveLevelIndex(level)]; }
+
+// Pure: air drained per second by DEPTH alone — excludes the AIR.drainPerSec
+// baseline and every multiplier (abyss, wetsuit, extraction lapse). Two
+// segments: the unchanged linear rate down to the oxygen line, then a steeper
+// rate below it. AIR.drainDepthFactor is per WORLD UNIT and there are 10 units
+// per metre, hence the x10.
+export function airDepthTerm(depthM, valveLevel = 0) {
+  const m = Math.max(0, Number(depthM) || 0);
+  const perM = AIR.drainDepthFactor * 10;
+  const shallow = Math.min(m, DEPTH.oxygenLineM) * perM;
+  const deep = Math.max(0, m - DEPTH.oxygenLineM) * perM * DEPTH.oxygenSteepen;
+  return (shallow + deep) * (1 - valveDiscount(valveLevel));
+}
 export const FLARE = {
   startCount: 2,
   duration: 16,         // seconds a flare burns (long, to offset the darker caves)
