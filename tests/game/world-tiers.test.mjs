@@ -55,5 +55,23 @@ check('setWorldSize(21) sets WORLD.WH live', WORLD.WH === 18090);
 setWorldSize(1);
 check('setWorldSize(1) restores the tier 1 world', WORLD.WW === 2760 && WORLD.WH === 4200);
 
+// --- the tier-1 regression anchor -----------------------------------------
+// Reefs 1-3 must produce exactly the world main produced. If this fails, the
+// feature has changed the game where players already are.
+for (const reef of [1, 2, 3]) {
+  setWorldSize(reef);
+  check(`reef ${reef} generates the unchanged 2760x4200 world`,
+    WORLD.WW === 2760 && WORLD.WH === 4200);
+}
+
+// --- and the steps actually take effect on the live WORLD -----------------
+setWorldSize(4);
+check('reef 4 generates a 700 m world', WORLD.WH === 7090);
+setWorldSize(11);
+check('reef 11 generates a 1150 m world', WORLD.WH === 11590);
+setWorldSize(21);
+check('reef 21 generates an 1800 m world', WORLD.WH === 18090);
+setWorldSize(1);   // leave the module in the tier-1 state for any later import
+
 console.log(`ok world-tiers.test.mjs (${passed} checks)`);
 if (failed > 0) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }

@@ -5,6 +5,13 @@ import { WORLD, PAL } from '../config.js';
 
 export class Background {
   constructor() {
+    this.reseed();
+  }
+
+  // (Re)seeds the three parallax layer arrays from the current WORLD extents.
+  // Called once at construction, and again whenever the world resizes (see
+  // _generateWorld() in the reef MiniGame) so parallax spans the new world.
+  reseed() {
     // Parallax motes seeded across the whole world. Each carries a depth d in
     // [0,1]: far motes (d→0) are tiny/faint and barely parallax; near motes
     // (d→1) are larger/brighter and slide faster — layering the water column.

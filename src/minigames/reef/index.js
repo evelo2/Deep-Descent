@@ -19,7 +19,7 @@
 // LIVE VIEWPORT: W/H are re-synced from WORLD (the shared, setViewport-mutated
 // source of truth) at the top of update()/render() each frame.
 
-import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL } from '../../config.js';
+import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL, setWorldSize } from '../../config.js';
 import { Diver } from '../../entities/diver.js';
 import { Boat } from '../../entities/boat.js';
 import { Clam, Chest, GiantClam } from '../../entities/shell.js';
@@ -365,6 +365,11 @@ export class Reef {
   }
 
   _generateWorld() {
+    // This reef's world extents come first: the Cave derives its grid from
+    // WORLD.WW/WH in its constructor, and every fraction-of-depth placement
+    // below reads them live. See worldSize() in config.js.
+    setWorldSize(this.reef);
+    if (this.bg && typeof this.bg.reseed === 'function') this.bg.reseed();   // re-seed parallax layers across the new world
     const C = this.cave = new Cave('reef', this.reef);
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
