@@ -341,14 +341,16 @@ and migration.
 `GAME.maxLives: 5` is replaced by a configurable pair and a permanent purchase:
 
 ```js
-LIVES = { baseMax: 3, capMax: 6, costBase: <salvage> }   // capMax is the config knob
+LIVES = { baseMax: 3, capMax: 6, costBase: 300 }   // capMax is the config knob
 ```
 
 A `lifeMax` field is added to `deepdescent.salvage.v2` alongside the existing
 `slots`, which is the exact pattern to copy: a permanent Salvage purchase with a
-doubling `slotCostBase` and a `maxSlots` ceiling, clamped in `sanitize()`
+doubling cost and a hard ceiling, clamped in `sanitize()`
 (`src/meta/salvage.js:13`, `clampSlots`). Old saves backfill to `baseMax`; no key
-rename, no migration.
+rename, no migration. Priced in **Salvage**, doubling from 300 — so the three
+purchases are 300 / 600 / 1200, dearer than a Log slot (200 base) because a life
+is worth more than a relic slot.
 
 Score-earned 1-UPs (`reef/index.js:1634`) are unchanged in mechanism — the
 unlock raises the ceiling they bank against.
