@@ -228,13 +228,19 @@ today:
 |---|---|---|
 | none | 0% | 3.5 /s at 400 m |
 | Lv1 | 40% | ~4.2 /s at 700 m |
-| Lv2 | 62% | ~4.5 /s at 1150 m |
+| Lv2 | 63% | ~4.5 /s at 1150 m |
 | Lv3 | 76% | ~4.7 /s at 1800 m |
 
-Value tests additionally pin the Lv1 saving at 240 m and at the old 411 m floor
-to match what the 2026-09-01 rebalance deliberately achieved, so the item keeps
-the curve it was tuned to and merely extends into water that did not exist when
-it was tuned.
+Value tests pin **Lv1 parity at 240 m**: the shipped clamp charges 1.08 /s
+there, the new Lv1 discount charges 1.04 /s — within 4%, so the item a player
+already owns behaves as it did where it was tuned.
+
+At the old 411 m floor the numbers deliberately **diverge**: the clamp charged
+1.08 /s, Lv1 now charges 2.19 /s, because the oxygen line has raised the
+unvalved cost there too (2.96 → 3.66 /s). The valve's *share* of the saving
+falls from 34% to 23% at that depth. This is intended — the item is no longer a
+hard floor on air cost, which is what made a deeper oxygen line impossible — and
+the 411 m figure is pinned as a new number rather than as parity.
 
 ### Crush depth and the Valve ladder
 
@@ -414,7 +420,12 @@ manifest's `goals.stats`:
 
 - `legacy:crushAlarmed` — runs where the alarm fired at least once
 - `legacy:crushDeaths` — runs ended by the crush timer
-- `legacy:deepestMetres` — deepest metres reached, lifetime maximum
+- `legacy:crushEscapes` — alarms survived by ascending in time
+
+All three are **additive**, because `addRun()` in `src/meta/stats.js:71` folds a
+run's delta by summation only. A "deepest metres, lifetime maximum" counter was
+dropped for exactly that reason: it would need max-semantics the store does not
+have, and cumulative depth is already covered by `metersDived`.
 
 Namespaced per the P11.1 contract (bare names are rejected by
 `tests/core/grandfathered-ids.test.mjs`, which is the contract working). **No
