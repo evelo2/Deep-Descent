@@ -289,6 +289,25 @@ export function airDepthTerm(depthM, valveLevel = 0) {
   const deep = Math.max(0, m - DEPTH.oxygenLineM) * perM * DEPTH.oxygenSteepen;
   return (shallow + deep) * (1 - valveDiscount(valveLevel));
 }
+
+// Pure: advance the crush state machine by dt. `state` is { phase, t } where
+// phase is 'safe' | 'alarmed' | 'crushed' and t is the seconds of timer left.
+// Mutates and returns state (called every frame; allocating per frame would be
+// wasteful). 'crushed' is terminal — the dive is over, and ascending does not
+// undo it.
+export function crushStep(state, depthM, valveLevel, dt) {
+  if (state.phase === 'crushed') return state;
+  const limit = crushDepthM(valveLevel);
+  if (depthM > limit) {
+    state.phase = 'alarmed';
+    state.t -= dt;
+    if (state.t <= 0) { state.t = 0; state.phase = 'crushed'; }
+  } else {
+    state.phase = 'safe';
+    state.t = Math.min(DEPTH.crushTimer, state.t + dt / DEPTH.crushRecoverRatio);
+  }
+  return state;
+}
 export const FLARE = {
   startCount: 2,
   duration: 16,         // seconds a flare burns (long, to offset the darker caves)

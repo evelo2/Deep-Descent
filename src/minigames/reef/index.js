@@ -40,7 +40,7 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, DEPTH } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -298,6 +298,8 @@ export class Reef {
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
     // Depth Valve shop telemetry: 0-or-1 each, since valveLevel resets per run.
     this.runValveOffered = 0; this.runValveBought = 0;
+    // Crush-timer telemetry (see the update() crush block below).
+    this.runCrushAlarmed = 0; this.runCrushEscapes = 0; this.runCrushDeaths = 0;
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
@@ -323,6 +325,10 @@ export class Reef {
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
     this.musicMuted = false;   // the score mutes independently of the SFX
     this.valveLevel = 0;   // Depth Valve: tiered crush-depth + drain-discount gear (shop item)
+    // Crush state. Reset here — the update loop's own else-branch forces it
+    // back to 'safe' on every zone !== 'reef' transition, so a stale 'alarmed'
+    // cannot leak in from a prior zone; only a fresh RUN needs an explicit reset.
+    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
@@ -1479,6 +1485,21 @@ export class Reef {
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
+
+      // Crush depth applies in the REEF ZONE ONLY — the abyss, temple, belly and
+      // whirlpool are self-contained and separately tuned (spec scope line).
+      if (this.zone === 'reef') {
+        const wasAlarmed = this._crush.phase === 'alarmed';
+        crushStep(this._crush, depthM, this.valveLevel, dt);
+        if (this._crush.phase === 'alarmed' && !wasAlarmed) this.runCrushAlarmed = 1;
+        else if (this._crush.phase === 'safe' && wasAlarmed) this.runCrushEscapes++;
+        if (this._crush.phase === 'crushed') {
+          this.runCrushDeaths = 1;
+          this.deathCause = 'crushed'; this._gameOver();
+        }
+      } else if (this._crush.phase !== 'safe') {
+        this._crush.phase = 'safe'; this._crush.t = DEPTH.crushTimer;
+      }
     }
     // Open the shop while docked. The boat auto-banked, so it opens empty-handed;
     // a dive bell opens with loot too — banking there (at its depth discount) is a

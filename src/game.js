@@ -686,10 +686,10 @@ export class Game {
     this._panel();
     // Post-P6 the run summary lives on the reef MiniGame; the shell reads it back.
     const s = (this._reef && this._reef.finalStats()) || {};
-    const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : 'OUT OF AIR';
+    const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : s.deathCause === 'crushed' ? 'CRUSHED' : 'OUT OF AIR';
     this._text(title, cx, 220, 48, s.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
     if (!s.won) {
-      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : 'You ran out of air';
+      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : s.deathCause === 'crushed' ? 'The pressure took you' : 'You ran out of air';
       this._text(sub, cx, 256, 15, '#ff9a6b', 'center', 'middle');
     }
     this._text(`SCORE ${s.score || 0}`, cx, 290, 30, PAL.hudText, 'center', 'middle');
