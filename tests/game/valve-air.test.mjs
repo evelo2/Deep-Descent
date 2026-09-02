@@ -94,6 +94,7 @@ function shopStub(over = {}) {
     weaponLevel: { harpoon: 3, net: 3 }, harpoonAmmo: 30, harpoonMax: 30, harpoonCapLevel: 3,
     speargunAmmo: 0, chargeAmmo: 0, chargeMax: 1, chargeCapLevel: 0, aimLevel: 9,
     tankLevel: 9, flares: 3, hasTorch: true, hasValve: false, buffT: {},
+    runValveBought: 0, runValveOffered: 0,
     _dblCost: Reef.prototype._dblCost, _mmss: () => '0:00',
     ...over,
   };
@@ -120,6 +121,7 @@ check('the valve row names its depth so the player knows what they are buying',
   check('buying the valve sets the flag', stub.hasValve === true);
   check('buying the valve spends exactly its cost', stub.gold === 0);
   check('buying the valve flashes a pickup name', typeof stub.puName === 'string' && stub.puName.length > 0);
+  check('buying the valve records the purchase', stub.runValveBought === 1);
 }
 {
   const broke = shopStub();
@@ -130,6 +132,69 @@ check('the valve row names its depth so the player knows what they are buying',
   Reef.prototype._shopBuy.call(broke);
   check('too little gold buys nothing', broke.hasValve !== true && broke.gold === VALVE.cost - 1);
   check('too little gold shows the deny flash', broke.shopDeny > 0);
+  check('too little gold records no purchase', broke.runValveBought === 0);
+}
+
+// --- Purchase telemetry. Two 0-or-1 per-run flags feed the lifetime counters
+// legacy:valveOffered / legacy:valveBought, whose ratio is the attach rate —
+// the evidence the 2026-09-01 rebalance was decided without. The OFFER is
+// recorded in _openShop, not in _shopItems: that builder runs every frame while
+// the shop is drawn and must stay side-effect-free. ---
+function openStub(over = {}) {
+  return {
+    _shell: {}, audio: { select() {} }, reef: VALVE.minReef, hasValve: false,
+    runValveOffered: 0, ...over,
+  };
+}
+const offerOf = (over, times = 1) => {
+  const s = openStub(over);
+  for (let i = 0; i < times; i++) Reef.prototype._openShop.call(s, 'boat');
+  return s.runValveOffered;
+};
+
+check('opening the shop at the gate reef records the offer', offerOf() === 1);
+check('opening the shop deeper than the gate reef records the offer', offerOf({ reef: VALVE.minReef + 4 }) === 1);
+check('opening the shop before the gate reef records no offer', offerOf({ reef: VALVE.minReef - 1 }) === 0);
+check('opening the shop when you already own one records no offer', offerOf({ hasValve: true }) === 0);
+check('re-opening the shop counts the run once, not once per visit', offerOf({}, 4) === 1);
+check('recording the offer does not disturb the shop it opened',
+  (() => { const s = openStub(); Reef.prototype._openShop.call(s, 'boat');
+    return s._shell.state === 'shop' && s.shopWhere === 'boat' && s.shopSel === 0; })());
+
+// --- Both flags reach the lifetime counters through the real _runDelta(). ---
+function deltaStub(over = {}) {
+  return {
+    runSharkKills: 0, depthReached: 0, runTime: 0, runSubLoot: 0, runNetted: 0,
+    lastPayout: 0, blackPearlsBanked: 0, bossesFelled: 0, score: 0,
+    runChestsOpened: 0, runGuardiansFelled: 0,
+    runValveBought: 0, runValveOffered: 0, ...over,
+  };
+}
+const deltaOf = (over) => Reef.prototype._runDelta.call(deltaStub(over));
+
+check('the run delta carries the offer under its namespaced key',
+  deltaOf({ runValveOffered: 1 })['legacy:valveOffered'] === 1);
+check('the run delta carries the purchase under its namespaced key',
+  deltaOf({ runValveBought: 1, runValveOffered: 1 })['legacy:valveBought'] === 1);
+check('a run that never saw the shop contributes 0 to both',
+  deltaOf()['legacy:valveOffered'] === 0 && deltaOf()['legacy:valveBought'] === 0);
+check('the counters are exactly 0 or 1 — one run can buy at most one valve',
+  [deltaOf({ runValveBought: 1, runValveOffered: 1 }), deltaOf()]
+    .every((d) => [0, 1].includes(d['legacy:valveBought']) && [0, 1].includes(d['legacy:valveOffered'])));
+
+// The invariant that makes the ratio meaningful: buying is only reachable
+// through a shop that offered it, so bought <= offered on every real path.
+{
+  const s = shopStub();
+  Reef.prototype._openShop.call(Object.assign(s, { _shell: {}, audio: { select() {}, gasp() {}, bank() {} } }), 'boat');
+  s.shopSel = Reef.prototype._shopItems.call(s).findIndex((it) => it.kind === 'valve');
+  s._shopItems = () => Reef.prototype._shopItems.call(s);
+  s.particles = { sparkle() {} };
+  Reef.prototype._shopBuy.call(s);
+  const d = Reef.prototype._runDelta.call(deltaStub({ runValveBought: s.runValveBought, runValveOffered: s.runValveOffered }));
+  check('the real open-then-buy path records both an offer and a purchase',
+    d['legacy:valveOffered'] === 1 && d['legacy:valveBought'] === 1);
+  check('bought never exceeds offered', d['legacy:valveBought'] <= d['legacy:valveOffered']);
 }
 
 console.log(`valve-air: ${passed} passed, ${failed} failed`);

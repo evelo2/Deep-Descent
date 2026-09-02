@@ -304,6 +304,8 @@ export class Reef {
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
+    // Depth Valve shop telemetry: 0-or-1 each, since hasValve resets per run.
+    this.runValveOffered = 0; this.runValveBought = 0;
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
@@ -790,7 +792,15 @@ export class Reef {
     return { x, y: top + i * step, w, h: Math.min(40, step - 6) };
   }
 
-  _openShop(where) { this._shell.state = 'shop'; this.shopWhere = where; this.shopSel = 0; this.shopDeny = 0; this.audio.select(); }
+  _openShop(where) {
+    this._shell.state = 'shop'; this.shopWhere = where; this.shopSel = 0; this.shopDeny = 0;
+    // Record that this run was OFFERED a valve — the denominator of the attach
+    // rate. Assignment, not increment: one run counts once however many shops
+    // it visits. This lives here rather than in _shopItems() because that
+    // builder runs every frame while the shop is drawn and must stay pure.
+    if (!this.hasValve && this.reef >= VALVE.minReef) this.runValveOffered = 1;
+    this.audio.select();
+  }
 
   _closeShop() { this._shell.state = 'playing'; this._fireGrace = 0.3; }   // don't fire on the closing press
 
@@ -828,7 +838,7 @@ export class Reef {
       this.hasTorch = true;
       this.puName = 'TORCH!'; this.puCol = PAL.gateGlow; this.puT = 1.6;
     } else if (it.kind === 'valve') {
-      this.hasValve = true;
+      this.hasValve = true; this.runValveBought = 1;
       this.puName = 'DEPTH VALVE!'; this.puCol = PAL.air; this.puT = 1.6;
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
@@ -1886,6 +1896,8 @@ export class Reef {
       careerScore: this.score,
       chestsOpened: this.runChestsOpened,
       guardiansFelled: this.runGuardiansFelled,
+      'legacy:valveOffered': this.runValveOffered,
+      'legacy:valveBought': this.runValveBought,
     };
   }
 
