@@ -17,8 +17,8 @@ import { makeImpulse } from './music/impulse.js';
 
 export const VOICES = ['whale', 'clicks', 'groan', 'crackle'];
 
-const MIN_GAP = 14;   // seconds between events — sparse is the whole point
-const MAX_GAP = 38;
+const MIN_GAP = 9;    // seconds between events — sparse, but audible within a dive
+const MAX_GAP = 24;
 const TICK_MS = 1000; // events are tens of seconds apart; no need to wake often
 
 export function bandFor(depth) { return depth < 0.5 ? 'shallow' : 'deep'; }
@@ -26,8 +26,8 @@ export function bandFor(depth) { return depth < 0.5 ? 'shallow' : 'deep'; }
 // Weighted pools per zone and band. An unrecognised zone yields an empty pool
 // and therefore silence — audio must never be able to break a dive.
 const POOLS = {
-  'reef:shallow': [['crackle', 6], ['clicks', 3], ['whale', 1]],
-  'reef:deep': [['groan', 4], ['whale', 2], ['crackle', 2]],
+  'reef:shallow': [['crackle', 6], ['clicks', 3], ['whale', 2]],
+  'reef:deep': [['groan', 4], ['whale', 3], ['crackle', 2]],
   'abyss:shallow': [['groan', 5], ['whale', 1]],
   'abyss:deep': [['groan', 6], ['whale', 2]],
   'temple:shallow': [['whale', 2], ['groan', 2]],

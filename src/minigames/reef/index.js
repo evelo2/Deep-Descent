@@ -19,7 +19,7 @@
 // LIVE VIEWPORT: W/H are re-synced from WORLD (the shared, setViewport-mutated
 // source of truth) at the top of update()/render() each frame.
 
-import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL } from '../../config.js';
+import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL, setWorldSize, LIVES } from '../../config.js';
 import { Diver } from '../../entities/diver.js';
 import { Boat } from '../../entities/boat.js';
 import { Clam, Chest, GiantClam } from '../../entities/shell.js';
@@ -40,7 +40,7 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, crushRecover, DEPTH, treasureTier, treasureDepthWeight, chestValueAt, treasureValueMult } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -48,6 +48,7 @@ import { makeWhirlpool } from '../whirlpool/index.js';
 import { makeStage } from '../stage/index.js';
 import { makeHost } from '../../core/host.js';
 import { drawDepthGauge, metresDown } from '../../render/depthgauge.js';
+import { warnKindFor, WARN_COPY } from './warnings.js';
 import { STAGE } from '../../config.js';
 import { saveSalvage, runPayout, bankReefRelic, consumeReefRelic, skipStartGold } from '../../meta/salvage.js';
 import { awardBadges, saveBadges, rankFor } from '../../meta/badges.js';
@@ -59,9 +60,11 @@ import { text, panel, overlay, keycap, mmss } from '../../render/chrome.js';
 import { paletteFor } from '../../music/palettes.js';
 import { tensionLevel } from '../../music/threat.js';
 
-// Live logical viewport (see LIVE VIEWPORT note). WW/WH/etc. are fixed.
+// Live logical viewport (see LIVE VIEWPORT note).
 let { W, H } = WORLD;
-const { WW, WH, OPEN_BAND, CELL } = WORLD;
+// WORLD.WW/WORLD.WH are LIVE — setWorldSize(reef) reassigns them per world tier, exactly as
+// setViewport reassigns W/H. Capturing them here would pin a stale world.
+const { OPEN_BAND, CELL } = WORLD;
 
 // Reef flavour: each reef gets a wacky procedural name + a light theme.
 // `music` names a palette in src/music/palettes.js — the score the reef plays.
@@ -89,22 +92,12 @@ const PU_INFO = {
   life:      { name: 'EXTRA LIFE!',      col: PAL.diver },
 };
 
-// Pure: the effective air-drain multiplier for a given reef number + zone — the
-// reef's own depth penalty, times an extra 150% while on foot in the abyss.
-// Piloting the mini-sub negates the abyss factor. Shared by update() + unit tests.
-export function oxygenMultiplier(reef, zone, inSub = false) {
-  let m = 1 + GAME.oxygenPenaltyPerReef * Math.min(reef - 1, GAME.oxygenPenaltyCap);
-  if (zone === 'abyss' && !inSub) m *= ABYSS.airMult;
-  return m;
-}
-
-// Pure: the depth the air drain's PRESSURE TERM is charged at. The Depth Valve
-// (shop item) holds pressure below its line, so anything deeper than
-// VALVE.holdDepthM costs the same air as the line itself. The baseline breath
-// and every drain multiplier are untouched. Shared by update() + unit tests.
-export function pressureDepth(diverY, hasValve = false) {
-  const holdY = WORLD.SURFACE + VALVE.holdDepthM * 10;
-  return hasValve ? Math.min(diverY, holdY) : diverY;
+// Pure: the non-depth multipliers on air drain. The per-reef penalty was
+// DELETED with Deep Reefs (spec locked decision 3): depth is now the difficulty
+// axis, and a reef multiplier on top of a 1800 m world double-counted badly
+// enough to empty a full tank in twelve seconds. Only the abyss term remains.
+export function oxygenMultiplier(zone, inSub = false) {
+  return (zone === 'abyss' && !inSub) ? ABYSS.airMult : 1;
 }
 
 // Pure: the chance a reef offers a bonus-zone portal (temple/stage/abyss/whirl),
@@ -118,11 +111,17 @@ export function bonusZoneChance(reef) {
 
 // Poisson-ish thinning: shuffle `list`, keep points at least `minDist` apart, up
 // to `count`. Used across world generation to scatter entities without clumping.
-function spread(list, count, minDist) {
+// Deep Reefs: an optional `weightFn(candidate) => [0,1]` rejects a shuffled
+// candidate with probability (1 - weight) before the min-dist test, biasing
+// which points survive without touching the shuffle itself. Omitted at every
+// pre-existing call site, so they draw no extra randomness and are unaffected;
+// only the treasure (shells/wrecks) call sites in _generateWorld pass one.
+function spread(list, count, minDist, weightFn) {
   const shuffled = list.slice();
   for (let i = shuffled.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
   const out = [];
   for (const c of shuffled) {
+    if (weightFn && Math.random() > weightFn(c)) continue;
     if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > minDist)) { out.push(c); if (out.length >= count) break; }
   }
   return out;
@@ -159,7 +158,7 @@ export class Reef {
     this.progressState = host.progression.progress;
     // Run-state (mirrors the legacy Game ctor).
     this.t = 0; this.shake = 0;
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this.diver = new Diver();
     this.boat = new Boat();
     this.flash = 0; this.bankPulse = 0;
@@ -176,6 +175,13 @@ export class Reef {
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.reefName = ''; this.reefTheme = REEF_THEMES[0];
     this.puT = 0; this.puName = ''; this.puCol = '#fff';
+    // Crush-depth state machine (Task 7) — must exist from construction, not
+    // just from start(): main.js's RAF loop calls update(dt) unconditionally
+    // from frame one, while the shell is still at 'menu', long before start()
+    // ever runs. The authoritative klaxon line in update() reads this._crush
+    // as its very first statement, so leaving it unset here crashed the menu.
+    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
+    this._warnKind = null;   // which one-time depth-warning modal is up, if any
     this.diver.reset();
     // Per-run relic flags (Salvage Log). The authority is applyLoadout() →
     // resetRelicFlags() in meta/relics.js, which re-sets these every run BEFORE any
@@ -304,8 +310,10 @@ export class Reef {
     this.kills = 0; this.creaturesSpawned = 0; this.tookDamage = false; this.didCleanSweep = false;
     // Per-run lifetime-stat deltas (folded into statState at game-over → progressive badges).
     this.runSharkKills = 0; this.runNetted = 0; this.runSubLoot = 0; this.runTime = 0;
-    // Depth Valve shop telemetry: 0-or-1 each, since hasValve resets per run.
+    // Depth Valve shop telemetry: 0-or-1 each, since valveLevel resets per run.
     this.runValveOffered = 0; this.runValveBought = 0;
+    // Crush-timer telemetry (see the update() crush block below).
+    this.runCrushAlarmed = 0; this.runCrushEscapes = 0; this.runCrushDeaths = 0;
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
@@ -330,7 +338,11 @@ export class Reef {
     this.flares = FLARE.startCount; this.flareT = 0; this.darkZones = [];
     this.hasTorch = false; this.torchOn = false;   // battery-powered dark-cave light (shop item)
     this.musicMuted = false;   // the score mutes independently of the SFX
-    this.hasValve = false;   // Depth Valve: holds pressure below its line (shop item)
+    this.valveLevel = 0;   // Depth Valve: tiered crush-depth + drain-discount gear (shop item)
+    // Crush state. Reset here — the update loop's own else-branch forces it
+    // back to 'safe' on every zone !== 'reef' transition, so a stale 'alarmed'
+    // cannot leak in from a prior zone; only a fresh RUN needs an explicit reset.
+    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
     this._fireGrace = 0.3;   // ignore the fire that started the game
     this.weaponLevel = {}; for (const w of WEAPON_ORDER) this.weaponLevel[w] = 1;
     this.tankLevel = 0; this.shopSel = 0; this.shopDeny = 0;
@@ -354,7 +366,7 @@ export class Reef {
     this.hasSub = false; this.inSub = false;   // the mini-sub is bought per-reef
     this._newReefName();
     this.diver.reset();
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this._generateWorld();
     // Prospector's Chart: reveal a wider patch of fog around the reef's entry
     // point (bigger than the normal per-frame radius-5 reveal at ~1125).
@@ -363,6 +375,11 @@ export class Reef {
   }
 
   _generateWorld() {
+    // This reef's world extents come first: the Cave derives its grid from
+    // WORLD.WW/WH in its constructor, and every fraction-of-depth placement
+    // below reads them live. See worldSize() in config.js.
+    setWorldSize(this.reef);
+    if (this.bg && typeof this.bg.reseed === 'function') this.bg.reseed();   // re-seed parallax layers across the new world
     const C = this.cave = new Cave('reef', this.reef);
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = []; this.skeletons = [];
@@ -371,35 +388,56 @@ export class Reef {
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null;   // reef portal (reef-owned); whirl gameplay state lives in the whirlpool MiniGame
-    const chestValue = (y) => 200 + Math.round((y / WH) * 400);   // 200..600 by depth
+    const chestValue = (y) => chestValueAt(metresDown(y));
+
+    // Deep Reefs: treasure grows by tier (see TREASURE_TIER in config.js) and
+    // migrates downward as `bias` increases; tier 1 has bias 0, so its weight
+    // is a flat 1 everywhere and placement stays byte-identical to main.
+    const T = treasureTier(this.reef);
+    const depthWeight = (c) => treasureDepthWeight(c.y / WORLD.WH, this.reef);
 
     // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
     // (clams) only appear below a minimum depth — the shallows hold chests.
-    const pearlMinDepth = WH * GAME.pearlMinDepthFrac;
-    for (const f of spread(C.floors(), 34, 150)) {
+    const pearlMinDepth = WORLD.WH * GAME.pearlMinDepthFrac;
+    for (const f of spread(C.floors(), T.shells, 150, depthWeight)) {
       if (f.y > pearlMinDepth && Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
       else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
     }
     // A rare deep GIANT clam with a golden pearl — a trophy worth score+gold and
     // a chunk of Salvage. At most one, only in the deep, well clear of others.
     if (Math.random() < SHELL.giantChance) {
-      const deep = C.floors(WH * SHELL.giantMinDepthFrac);
+      const deep = C.floors(WORLD.WH * SHELL.giantMinDepthFrac);
       if (deep.length) { const g = deep[(Math.random() * deep.length) | 0]; this.shells.push(new GiantClam(g.x, g.y - SHELL.giantRadius * 0.35)); }
     }
-    // Scattered coins & gems drift in open water.
-    for (let i = 0; i < 40; i++) {
-      const c = C.randomOpen(); if (!c) continue;
-      this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WH) * 0.18 ? 'gem' : 'coin'));
+    // Scattered coins & gems drift in open water. Deep Reefs: a candidate point
+    // is kept in proportion to its depth weight (a few retries, then take
+    // whatever comes), so the shallows of a late reef thin out while the deep
+    // fills in; tier 1's weight is always 1 so it never rejects. Value keys off
+    // absolute metres via treasureValueMult, exactly 1 within tier-1 depths.
+    const keepByDepth = (y) => Math.random() < treasureDepthWeight(y / WORLD.WH, this.reef);
+    const pickDeep = (candidates) => {
+      for (let tries = 0; tries < 8; tries++) {
+        const c = candidates(); if (!c) return null;
+        if (keepByDepth(c.y)) return c;
+      }
+      return candidates();
+    };
+    for (let i = 0; i < T.loose; i++) {
+      const c = pickDeep(() => C.randomOpen()); if (!c) continue;
+      const kind = Math.random() < 0.14 + (c.y / WORLD.WH) * 0.18 ? 'gem' : 'coin';
+      this.treasures.push(new Treasure(c.x, c.y, kind, treasureValueMult(metresDown(c.y))));
     }
     // Treasure-sweep bonus baseline: total loose treasure this reef, and which
     // completion tiers (80/90/100%) have paid out (see the check in update()).
     this._reefTreasureTotal = this.treasures.length; this._collectTier = 0;
 
-    // Air vents on cave walls, spread out.
+    // Air vents on cave walls, spread out. Deliberately NOT scaled or biased —
+    // fewer oxygen stops per unit area is the design's intended deep-water
+    // squeeze; see the Deep Reefs spec.
     for (const w of spread(C.walls(), 14, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
 
     // Shipwrecks seated on chamber floors, with a big chest on the deck + gems.
-    for (const ch of spread(C.chambers(), 4, 700)) {
+    for (const ch of spread(C.chambers(), T.wrecks, 700, depthWeight)) {
       const floorY = C.surfaceBelow(ch.x, ch.y, 300);
       this.wrecks.push(new Wreck(ch.x, floorY - 42));
       const cx = ch.x, cy = floorY - 66;
@@ -417,15 +455,15 @@ export class Reef {
     }
 
     // Dive bells: deep refuel/bank checkpoints hanging in roomy chambers.
-    let bellSpots = spread(C.chambers(WH * BELL.minDepthFrac), BELL.count, 900);
-    if (!bellSpots.length) { const c = C.randomOpen(WH * 0.5); if (c) bellSpots = [c]; }
+    let bellSpots = spread(C.chambers(WORLD.WH * BELL.minDepthFrac), BELL.count, 900);
+    if (!bellSpots.length) { const c = C.randomOpen(WORLD.WH * 0.5); if (c) bellSpots = [c]; }
     for (const s of bellSpots) this.bells.push(new DiveBell(s.x, s.y));
 
     // A supply crate sometimes drifts in the reef — free gear when you reach it.
     if (Math.random() < 0.5) { const c = C.randomOpen(OPEN_BAND + 300); if (c) this.crates.push(new SupplyCrate(c.x, c.y)); }
 
     // Dark caves: pitch-black chambers (light a flare) hiding rich loot.
-    const darkSpots = spread(C.chambers(WH * DARKZONE.minDepthFrac), DARKZONE.count, 800);
+    const darkSpots = spread(C.chambers(WORLD.WH * DARKZONE.minDepthFrac), DARKZONE.count, 800);
     for (const s of darkSpots) {
       this.darkZones.push({ x: s.x, y: s.y, r: DARKZONE.radius });
       // Reward the dark: a few gems, a flare or two, and a supply crate.
@@ -451,7 +489,7 @@ export class Reef {
     this.flora = new Flora(spread(C.floors(), 110, 70));
 
     // Whale skeletons resting on the deepest floors.
-    const deepFloors = C.floors().filter((f) => f.y > WH * 0.72);
+    const deepFloors = C.floors().filter((f) => f.y > WORLD.WH * 0.72);
     for (const s of spread(deepFloors, 3, 500)) this.skeletons.push({ x: s.x, y: s.y - 6 });
 
     // Creatures change with depth; density and shark size rise with the reef
@@ -460,7 +498,7 @@ export class Reef {
     const sizeUp = Math.min((this.reef - 1) * 0.06, 0.5);      // bigger sharks deeper into a run
     for (let i = 0; i < nCreatures; i++) {
       const c = C.randomOpen(OPEN_BAND + 200); if (!c) continue;
-      const deep = c.y / WH;
+      const deep = c.y / WORLD.WH;
       const band = deep < 0.30 ? 'shallow' : deep < 0.62 ? 'mid' : 'deep';
       const entry = pickFauna(band, this.reef); if (!entry) continue;
       const spawned = spawnCreature(entry, c.x, c.y, this.reef, { sizeUp });
@@ -486,7 +524,7 @@ export class Reef {
     // even early reefs feel alive. Separate from the bonus-zone portals below.
     {
       const roomy = C.chambers(OPEN_BAND + 500);
-      const deep = C.chambers(WH * 0.5);
+      const deep = C.chambers(WORLD.WH * 0.5);
       const options = [];
       if (roomy.length) options.push('whale');
       if (deep.length) options.push('kraken');
@@ -510,10 +548,10 @@ export class Reef {
     // portals/reef from reef 1). Chance ramps with depth; see bonusZoneChance().
     this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null;
     if (Math.random() < bonusZoneChance(this.reef)) {
-      const gateFloors = C.floors().filter((f) => f.y > WH * 0.3 && f.y < WH * 0.7);
-      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WH * 0.72);
-      const abyssDeep = C.floors(WH * ABYSS.entranceMinDepthFrac);
-      const whirlSpots = C.floors().filter((f) => f.y > WH * 0.55);
+      const gateFloors = C.floors().filter((f) => f.y > WORLD.WH * 0.3 && f.y < WORLD.WH * 0.7);
+      const stageFloors = C.floors().filter((f) => f.y > OPEN_BAND + 300 && f.y < WORLD.WH * 0.72);
+      const abyssDeep = C.floors(WORLD.WH * ABYSS.entranceMinDepthFrac);
+      const whirlSpots = C.floors().filter((f) => f.y > WORLD.WH * 0.55);
       const options = [];
       if (gateFloors.length) options.push('temple');
       if (stageFloors.length) options.push('stage');
@@ -545,7 +583,7 @@ export class Reef {
     // Rare guarded chest → Treasure Chest Madness. Deep third only, at most one
     // per dive; Siren's Lure boosts the odds. See specialChestChance().
     if (Math.random() < specialChestChance(this.reef, this._hasChestRelic())) {
-      const cands = C.floors().filter((f) => f.y > WH * SPECIAL_CHEST.minDepthFrac);
+      const cands = C.floors().filter((f) => f.y > WORLD.WH * SPECIAL_CHEST.minDepthFrac);
       if (cands.length) {
         const f = pickOne(cands);
         this.specialChest = { x: f.x, y: f.y - 20, r: 26, opened: false };
@@ -563,7 +601,22 @@ export class Reef {
     // The reef's relic objective + this reef's high points fallback.
     this.reefBanked = 0; this.relicBanked = false; this.carryingRelic = false;
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
-    const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WW / 2, y: WH * 0.5 };
+    // The reef's OBJECTIVE may never sit below where this diver can survive, or a
+    // player who skipped the shop generates an unwinnable reef. Loot below crush
+    // depth is a temptation; the thing you must have to sail on is not. EVERY path
+    // that can produce a candidate must respect relicMaxY — an unfiltered fallback
+    // (fix round 1) let the relic land arbitrarily deep whenever the primary loop
+    // missed, which is common rather than rare in the later tiers: at tier 4 an
+    // unvalved crush depth (400 m) is only ~22% of an 1800 m world, so most
+    // uniform draws from the whole column land below it. Retry generously before
+    // falling back to the clamped literal, which is the only unconditionally safe
+    // last resort.
+    const relicMaxY = WORLD.SURFACE + crushDepthM(this.valveLevel) * 10;
+    const aboveCrush = (c) => c && c.y <= relicMaxY;
+    let rc = null;
+    for (let i = 0; i < 40 && !rc; i++) { const c = C.randomOpen(OPEN_BAND + 400); if (aboveCrush(c)) rc = c; }
+    for (let i = 0; i < 40 && !rc; i++) { const c = C.randomOpen(OPEN_BAND);       if (aboveCrush(c)) rc = c; }
+    rc = rc || { x: WORLD.WW / 2, y: Math.min(WORLD.WH * 0.5, relicMaxY) };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
 
     // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself
@@ -571,7 +624,7 @@ export class Reef {
     // convert to persistent Salvage.
     const pearlCount = 1 + (Math.random() < 0.5 ? 1 : 0) + (this._relicEye ? 1 : 0);
     for (let i = 0; i < pearlCount; i++) {
-      const pc = C.randomOpen(WH * 0.55);
+      const pc = C.randomOpen(WORLD.WH * 0.55);
       if (pc && !C.isSolid(pc.x, pc.y)) this.treasures.push(new Treasure(pc.x, pc.y, 'blackpearl'));
     }
 
@@ -769,8 +822,10 @@ export class Reef {
       items.push({ kind: 'tank', id: 'tank', label: `🫁 Air Tank +${SHOP.tankBonus} (Lv${this.tankLevel + 1})`, cost: this._dblCost(SHOP.tankBaseCost, this.tankLevel) });
     if (!this.hasTorch && this.reef >= TORCH.minReef)
       items.push({ kind: 'torch', id: 'torch', label: `🔦 Torch — battery light for dark caves (T)`, cost: TORCH.cost });
-    if (!this.hasValve && this.reef >= VALVE.minReef)
-      items.push({ kind: 'valve', id: 'valve', label: `⚲ Depth Valve — holds pressure below ${VALVE.holdDepthM} m`, cost: VALVE.cost });
+    if (this.valveLevel < VALVE.maxLevel && this.reef >= VALVE.minReef)
+      items.push({ kind: 'valve', id: 'valve',
+        label: `⚲ Depth Valve → Lv${this.valveLevel + 1} — dive to ${crushDepthM(this.valveLevel + 1)} m`,
+        cost: this._dblCost(VALVE.cost, this.valveLevel) });
     // Timed consumable buffs — gameplay-tied, run-long or until death. Buying one
     // while it's active refreshes its timer (label shows the live remaining).
     for (const c of CONSUMABLE) {
@@ -798,7 +853,7 @@ export class Reef {
     // rate. Assignment, not increment: one run counts once however many shops
     // it visits. This lives here rather than in _shopItems() because that
     // builder runs every frame while the shop is drawn and must stay pure.
-    if (!this.hasValve && this.reef >= VALVE.minReef) this.runValveOffered = 1;
+    if (this.valveLevel < VALVE.maxLevel && this.reef >= VALVE.minReef) this.runValveOffered = 1;
     this.audio.select();
   }
 
@@ -838,7 +893,7 @@ export class Reef {
       this.hasTorch = true;
       this.puName = 'TORCH!'; this.puCol = PAL.gateGlow; this.puT = 1.6;
     } else if (it.kind === 'valve') {
-      this.hasValve = true; this.runValveBought = 1;
+      this.valveLevel += 1; this.runValveBought = 1;
       this.puName = 'DEPTH VALVE!'; this.puCol = PAL.air; this.puT = 1.6;
     } else if (it.kind === 'harpooncap') {
       this.harpoonCapLevel += 1; this.harpoonMax += SHOP.harpoonCapStep;
@@ -860,6 +915,22 @@ export class Reef {
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
   }
 
+  // First-encounter depth-warning modal (oxygen line / crush depth). Drawn
+  // OVER a still-visible HUD (see the render gate above) — the whole point is
+  // to explain the gauge's amber/red bands, so the gauge must stay on screen.
+  _warnScreen() {
+    const copy = WARN_COPY[this._warnKind];
+    if (!copy) return;
+    const cx = W / 2, cy = H / 2;
+    this._panel(0.74);
+    this._text(copy.title, cx, cy - 76, 30, this._warnKind === 'crushLine' ? PAL.danger : PAL.gold, 'center', 'middle', true);
+    this._text(copy.lines[0], cx, cy - 24, 16, PAL.hudText, 'center', 'middle');
+    this._text(copy.lines[1], cx, cy + 4, 16, PAL.hudText, 'center', 'middle');
+    this._text(copy.lines[2], cx, cy + 32, 16, PAL.hudText, 'center', 'middle');
+    this._text(this.input.isTouch ? 'Tap to continue' : 'Press any key / button to continue',
+      cx, cy + 72, 13, '#9fc6e0', 'center', 'middle');
+  }
+
   _shopScreen() {
     const ctx = this.ctx;
     this._panel(0.74);
@@ -877,6 +948,18 @@ export class Reef {
     });
     const hint = this.input.isTouch ? 'Tap an item to buy · tap Close to leave' : '↑ / ↓ select   ·   Space / A buy   ·   P / Esc close';
     this._text(hint, W / 2, this._shopRow(items.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
+  }
+
+  // Docking (boat or dive bell) shelters like safe water — crushRecover()
+  // clears the alarm immediately. That's an escape exactly like ascending
+  // back above the line in open water is (the reef-zone branch in update()),
+  // and bells sit below earlier tiers' Valve crush depth, so this is the
+  // characteristic deep-tier escape. Extracted from update() so it's testable
+  // against a stub, the same way _bankLoot() is.
+  _crushRecoverDocked(dt) {
+    const wasAlarmed = this._crush.phase === 'alarmed';
+    crushRecover(this._crush, dt);
+    if (wasAlarmed) this.runCrushEscapes++;
   }
 
   _bankLoot(rate = 1) {
@@ -925,6 +1008,13 @@ export class Reef {
   }
 
   _generateTemple() {
+    // Nested zones are fixed-size regardless of the host reef's tier — without
+    // this, the still-live WORLD.WW/WH from _generateWorld's setWorldSize(this.reef)
+    // leaks in, so a tier-4 reef's temple/abyss/belly balloons to 4800x18090
+    // while their value functions (below) stay fraction-of-WORLD.WH: cost scales,
+    // reward doesn't. setWorldSize() is undone by the next _generateWorld() for
+    // the reef itself, and _restoreReef() puts it back for THIS reef on the way out.
+    setWorldSize(1);
     const C = this.cave = new Cave('temple');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -932,7 +1022,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
-    const value = (y) => 400 + Math.round((y / WH) * 500);
+    const value = (y) => 400 + Math.round((y / WORLD.WH) * 500);
 
     // Scattered loot + a couple of air vents + light hazards.
     for (const f of spread(C.floors(), 10, 200)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
@@ -948,10 +1038,10 @@ export class Reef {
     for (const f of spread(C.floors(), 18, 200)) this.columns.push({ x: f.x, y: f.y });
 
     // The key, mid-temple.
-    const kc = C.randomOpen(OPEN_BAND + 400) || { x: WW / 2, y: WH * 0.4 };
+    const kc = C.randomOpen(OPEN_BAND + 400) || { x: WORLD.WW / 2, y: WORLD.WH * 0.4 };
     this.key = { x: kc.x, y: kc.y, r: 20, taken: false };
     // The locked door deep down, with the vault (locked loot) behind/below it.
-    const dc = C.randomOpen(WH * 0.6) || { x: WW / 2, y: WH * 0.7 };
+    const dc = C.randomOpen(WORLD.WH * 0.6) || { x: WORLD.WW / 2, y: WORLD.WH * 0.7 };
     const dFloor = C.surfaceBelow(dc.x, dc.y, 200);
     this.door = { x: dc.x, y: dFloor - 90, w: 74, h: 180, open: 0 };
     // Vault loot sits in the OPEN chamber around the door (above the floor —
@@ -967,12 +1057,14 @@ export class Reef {
     this.flora = new Flora([]);
     this._makeCurrents(2);
     this._makePowerups(1);
-    this.templeExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this.templeExit = { x: WORLD.WW / 2, y: OPEN_BAND - 6, r: 46 };
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
 
   _generateAbyss() {
+    // Nested zone: fixed baseline size — see the comment in _generateTemple().
+    setWorldSize(1);
     const C = this.cave = new Cave('abyss');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -980,7 +1072,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.columns = []; this.hasKey = false; this.templeGate = null; this.whaleExit = null; this.abyssEntrance = null; this.whirlEntrance = null; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.door = null; this.key = null;
-    const value = (y) => 450 + Math.round((y / WH) * 650);   // richer than the reef — the abyss's whole point
+    const value = (y) => 450 + Math.round((y / WORLD.WH) * 650);   // richer than the reef — the abyss's whole point
 
     // Dense loot: chests on every ledge, gems & coins thick in open water.
     for (const f of spread(C.floors(), 14, 170)) this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, value(f.y)));
@@ -1013,10 +1105,10 @@ export class Reef {
     // bigger Salvage bonus on the way out (see the exit check in update()).
     this.abyssExits = [];
     for (const spot of spread(C.chambers(OPEN_BAND + 200), ABYSS.exits, 700)) {
-      const depthFrac = spot.y / WH;
+      const depthFrac = spot.y / WORLD.WH;
       this.abyssExits.push({ x: spot.x, y: spot.y, r: 40, bonus: Math.round(ABYSS.exitBonusBase * (0.6 + depthFrac)) });
     }
-    if (!this.abyssExits.length) { const c = C.randomOpen(WH * 0.5) || { x: WW / 2, y: WH * 0.5 }; this.abyssExits.push({ x: c.x, y: c.y, r: 40, bonus: ABYSS.exitBonusBase }); }
+    if (!this.abyssExits.length) { const c = C.randomOpen(WORLD.WH * 0.5) || { x: WORLD.WW / 2, y: WORLD.WH * 0.5 }; this.abyssExits.push({ x: c.x, y: c.y, r: 40, bonus: ABYSS.exitBonusBase }); }
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -1048,6 +1140,8 @@ export class Reef {
   }
 
   _generateBelly() {
+    // Nested zone: fixed baseline size — see the comment in _generateTemple().
+    setWorldSize(1);
     const C = this.cave = new Cave('belly');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -1055,7 +1149,7 @@ export class Reef {
     this.specialChest = null; this.chestGuardian = null;
     this.templeGate = null; this.abyssEntrance = null; this.whirlEntrance = null; this.columns = []; this.powerups = []; this.relic = null; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = [];
-    const value = (y) => 350 + Math.round((y / WH) * 500);   // richer than the reef
+    const value = (y) => 350 + Math.round((y / WORLD.WH) * 500);   // richer than the reef
 
     // Rib bones lining the belly.
     for (const f of spread(C.floors(), 40, 130)) this.ribs.push({ x: f.x, y: f.y - 40, dir: Math.random() < 0.5 ? 1 : -1 });
@@ -1074,7 +1168,7 @@ export class Reef {
     this._makeCurrents(3);   // churning guts
     this._makePowerups(1);
     // Glowing throat exit up in the entrance band; the diver starts down in the belly.
-    this.whaleExit = { x: WW / 2, y: OPEN_BAND - 6, r: 46 };
+    this.whaleExit = { x: WORLD.WW / 2, y: OPEN_BAND - 6, r: 46 };
     this._orientShells();
     this._clearCreaturesNearPortals();
   }
@@ -1082,6 +1176,7 @@ export class Reef {
   onAction() {
     if (this._shell.state === 'menu' || this._shell.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(this._shell.pendingStartReef); }
     else if (this._shell.state === 'paused') { this._shell.state = 'playing'; this._fireGrace = 0.3; }
+    else if (this._shell.state === 'warn') { this._shell.state = 'playing'; this._fireGrace = 0.3; }
     else if (this._shell.state === 'playing') this._shell.state = 'paused';
     else if (this._shell.state === 'shop') this._shopBuy();
     else if (this._shell.state === 'drydock') this._shell._dryDockAct();
@@ -1230,6 +1325,21 @@ export class Reef {
 
   update(dt) {
     W = WORLD.W; H = WORLD.H;   // live viewport (setViewport mutates WORLD)
+    // Authoritative klaxon drive: runs before every early return in this
+    // function (menu/shop/drydock/sailing/help/stage/whirlpool/etc.), so the
+    // horn can never outlive the alarm — a diver who was alarmed in the reef
+    // and then enters a stage or whirlpool, docks, dies (from ANY cause, not
+    // just the crush itself — a shark hit mid-alarm leaves `_crush` frozen at
+    // 'alarmed' since the crush block is unreachable once the shell leaves
+    // 'playing'), or starts a new run has it forced off on the very next
+    // frame, because this line re-derives it fresh from state every single
+    // call rather than being toggled once and trusted to be turned off again
+    // by whichever branch ends the frame. Gated on `_shell.state === 'playing'`
+    // first (short-circuiting before `_crush`/`zone` are even read) so this
+    // also closes game-over/pause/shop/menu in one move, and so main.js's RAF
+    // loop — which calls update() from frame one, before start() has ever
+    // run — can't read `_crush` before it exists.
+    this.audio.setKlaxon(this._shell.state === 'playing' && this.zone === 'reef' && this._crush.phase === 'alarmed');
     this.t += dt;
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 3);
@@ -1265,6 +1375,14 @@ export class Reef {
     // About / versions overlay: read-only, opened by the menu's corner link.
     if (this._shell.state === 'about') { this._shell._updateAbout(startEdge); this.input.endFrame(); return; }
     if (this._shell.state === 'menu' && this.input.consumeButton('about')) { this._shell._openAbout('menu'); this.input.endFrame(); return; }
+
+    // Depth-warning modal (oxygen/crush line, first encounter only): read-only,
+    // tap-anywhere-to-continue. Keyboard/gamepad already dismiss it via the
+    // generic startEdge catch-all below, but touch has no gameplay buttons in
+    // this state — _syncTouchButtons adds a full-screen 'warnclose' rect (the
+    // same tap-anywhere pattern as 'aboutclose' just above) so a touch tap can
+    // reach it too. Without this, touch could never leave the modal at all.
+    if (this._shell.state === 'warn' && this.input.consumeButton('warnclose')) { this.onAction(); this.input.endFrame(); return; }
 
     // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
     if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._shell._openDryDock(this._shell.state); this.input.endFrame(); return; }
@@ -1431,12 +1549,12 @@ export class Reef {
     this.cave.reveal(this.diver.x, this.diver.y, 5);              // lift the fog of war
 
     // 2D camera follows the diver, clamped to the world.
-    const tx = Math.max(0, Math.min(WW - W, this.diver.x - W / 2));
-    const ty = Math.max(0, Math.min(WH - H, this.diver.y - H / 2));
+    const tx = Math.max(0, Math.min(WORLD.WW - W, this.diver.x - W / 2));
+    const ty = Math.max(0, Math.min(WORLD.WH - H, this.diver.y - H / 2));
     this.camX += (tx - this.camX) * Math.min(1, dt * 6);
     this.camY += (ty - this.camY) * Math.min(1, dt * 6);
     this.depthReached = Math.max(this.depthReached, this.diver.y - WORLD.SURFACE);
-    this.audio.setDepth(Math.min(1, this.camY / WH));
+    this.audio.setDepth(Math.min(1, this.camY / WORLD.WH));
     // The score's threat layer: what is actually hunting the diver right now.
     this.audio.setTension(tensionLevel(this.creatures, this.krakens, this.chestGuardian));
     this.audio.setShade(this._inDark() ? 1 : 0);
@@ -1455,6 +1573,14 @@ export class Reef {
     if (atStation) {
       const rate = atBell ? BELL.refillPerSec : AIR.refillPerSec;
       if (this.air < this.airMax) { this.air = Math.min(this.airMax, this.air + rate * dt); if (Math.random() < 0.3) this.audio.refill(); }
+      // A station shelters like safe water: the alarm clears immediately, but
+      // the timer still recovers at the normal 1s-per-1.5s rate, not instantly —
+      // a full recovery costs ~21s docked, a real decision against the few
+      // seconds an air top-up takes. Bells spawn below earlier tiers' crush
+      // depth, so docking while alarmed is a normal deep-tier situation, not an
+      // edge case; without this the diver would undock still alarmed and die
+      // moments after leaving the very refuge that just saved them.
+      if (this.zone === 'reef') this._crushRecoverDocked(dt);
       // The boat is home — it auto-banks the haul at full value. A dive bell only
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.
@@ -1468,17 +1594,45 @@ export class Reef {
       if (atBoat && this.input.consumeButton('sail') && this.carried === 0 && this.canSail) this._setSail();
     } else {
       this.dockHold = 0;
-      // deeper reefs = less air; the abyss adds its own 150% on-foot penalty
-      // (negated while piloting the mini-sub).
-      const oxyMult = oxygenMultiplier(this.reef, this.zone, this.inSub);
+      // depth (WORLD.WH) drives air drain now; the abyss adds its own 150%
+      // on-foot penalty (negated while piloting the mini-sub).
+      const oxyMult = oxygenMultiplier(this.zone, this.inSub);
       // Sealed Wetsuit consumable eases air drain; a lapsed extraction countdown
       // (The Deep) spikes it. Both fold into the same per-frame drain multiplier.
       const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
       const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
-      this.air -= (AIR.drainPerSec + pressureDepth(this.diver.y, this.hasValve) * AIR.drainDepthFactor) * oxyMult * suitMult * lapseMult * dt;
+      const depthM = metresDown(this.diver.y);
+      // First-encounter warning modals: fire once per flag, freeze the dive
+      // (diver, air, crush timer all stop this frame) until dismissed. The
+      // crush warning outranks the oxygen one — it is the lethal one.
+      if (this._shell.state === 'playing' && this.zone === 'reef') {
+        const kind = warnKindFor(depthM, this.valveLevel, this.meta.seen);
+        if (kind) {
+          this.meta.seen[kind] = true; saveSalvage(this.meta);
+          this._warnKind = kind; this._shell.state = 'warn';
+          this.audio.setKlaxon(false);
+          this.input.endFrame(); return;
+        }
+      }
+      this.air -= (AIR.drainPerSec + airDepthTerm(depthM, this.valveLevel)) * oxyMult * suitMult * lapseMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
       else if (this.air < 20 && Math.random() < 0.02) this.audio.gasp();
+
+      // Crush depth applies in the REEF ZONE ONLY — the abyss, temple, belly and
+      // whirlpool are self-contained and separately tuned (spec scope line).
+      if (this.zone === 'reef') {
+        const wasAlarmed = this._crush.phase === 'alarmed';
+        crushStep(this._crush, depthM, this.valveLevel, dt);
+        if (this._crush.phase === 'alarmed' && !wasAlarmed) this.runCrushAlarmed = 1;
+        else if (this._crush.phase === 'safe' && wasAlarmed) this.runCrushEscapes++;
+        if (this._crush.phase === 'crushed') {
+          this.runCrushDeaths = 1;
+          this.deathCause = 'crushed'; this._gameOver();
+        }
+      } else if (this._crush.phase !== 'safe') {
+        this._crush.phase = 'safe'; this._crush.t = DEPTH.crushTimer;
+      }
     }
     // Open the shop while docked. The boat auto-banked, so it opens empty-handed;
     // a dive bell opens with loot too — banking there (at its depth discount) is a
@@ -1576,6 +1730,13 @@ export class Reef {
         this.specialChest = null;             // consume — no re-enter on return
         this.chestGuardian = null;            // (already dead; belt-and-braces)
         this.reentryT = 1.5;                  // grace after match-3 closes
+        // Core.js only updates the TOP of the minigame stack, so once match-3 is
+        // pushed this reef's update() (and the authoritative klaxon line at the
+        // top of it) stops running entirely for the whole match-3 session. The
+        // Guardian Chest sits at 2/3 world depth — below the previous Valve
+        // rung's crush depth — so opening it while alarmed is normal play; silence
+        // the horn explicitly here or it blares through the whole minigame.
+        this.audio.setKlaxon(false);
         this.host.open('match3', { source: 'chest' });
         this.input.endFrame(); return;
       }
@@ -1630,8 +1791,10 @@ export class Reef {
     this.powerups = this.powerups.filter((p) => !p.taken);
     this.crates = this.crates.filter((c) => !c.taken);
 
-    // Extra lives at escalating score thresholds, capped so they can't snowball.
-    while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
+    // Extra lives at escalating score thresholds, capped at the Dry Dock's
+    // unlocked ceiling so they can't snowball past it.
+    const lifeCeiling = this.meta.lifeMax || LIVES.baseMax;
+    while (this.lives < lifeCeiling && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.carriedPearls === 0 && this.diver.atSurface) this._win();
 
@@ -1898,6 +2061,9 @@ export class Reef {
       guardiansFelled: this.runGuardiansFelled,
       'legacy:valveOffered': this.runValveOffered,
       'legacy:valveBought': this.runValveBought,
+      'legacy:crushAlarmed': this.runCrushAlarmed,
+      'legacy:crushDeaths': this.runCrushDeaths,
+      'legacy:crushEscapes': this.runCrushEscapes,
     };
   }
 
@@ -1929,7 +2095,7 @@ export class Reef {
     this.hasSub = false; this.inSub = false;   // per-reef: buy it again on the new reef
     this.diver.reset();
     if (this._relicChart) this.cave.reveal(this.diver.x, this.diver.y, 14);
-    this.camX = WW / 2 - W / 2; this.camY = 0;
+    this.camX = WORLD.WW / 2 - W / 2; this.camY = 0;
     this.air = this.airMax;
     this._shell.state = 'playing';
     this.audio.bank();
@@ -1946,6 +2112,13 @@ export class Reef {
 
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
+    // The restored `cave` object keeps its own GW/GH from construction time, so
+    // it's unaffected by whatever the nested zone left WORLD.WW/WH at — but a
+    // pile of reef-zone code (camera clamp, depth-fraction air/audio, minimap
+    // projection) reads WORLD.WW/WH LIVE every frame, not off the cave. Restore
+    // THIS reef's own tier extents before anything below (esp. _placeDiver's
+    // camera clamp) reads them, or a tier-4 reef comes back shrunk to baseline.
+    setWorldSize(this.reef);
     const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance', 'whirlEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';
@@ -1972,7 +2145,7 @@ export class Reef {
     // full air with the exit right there, then descend into the belly for loot
     // and climb back to leave. The old deep-random spawn could strand the diver
     // in a pocket with no reachable air vent — a suffocation soft-lock.
-    const c = this.cave.nearestOpen(this.whaleExit.x, this.whaleExit.y + 90) || { x: WW / 2, y: OPEN_BAND + 60 };
+    const c = this.cave.nearestOpen(this.whaleExit.x, this.whaleExit.y + 90) || { x: WORLD.WW / 2, y: OPEN_BAND + 60 };
     this._placeDiver(c.x, c.y, 0);
     this.shake = 10; this.zoneFade = 1;
     this.audio.gasp();
@@ -2007,7 +2180,7 @@ export class Reef {
     // Board the sub and drop in at a RANDOM safe open cell — you pilot the dark
     // trench by headlight to find one of the exit hatches. inSub is always on
     // here now (the sub IS the entrance); the hull armor soaks several hits.
-    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WW / 2, y: WH * 0.62 };
+    const c = this.cave.randomOpen(OPEN_BAND + 200) || { x: WORLD.WW / 2, y: WORLD.WH * 0.62 };
     this._placeDiver(c.x, c.y, 0);
     this.inSub = true; this.subArmor = SUB.armor;
     // Remember the haul on entry: leaving via a hatch keeps whatever you gather
@@ -2064,8 +2237,8 @@ export class Reef {
     if (this._world) { this._world.placeDiver(x, y, vx); return; }
     const d = this.diver;
     d.x = x; d.y = y; d.vx = vx; d.vy = 0; d.invuln = 1.6;
-    this.camX = Math.max(0, Math.min(WW - W, x - W / 2));
-    this.camY = Math.max(0, Math.min(WH - H, y - H / 2));
+    this.camX = Math.max(0, Math.min(WORLD.WW - W, x - W / 2));
+    this.camY = Math.max(0, Math.min(WORLD.WH - H, y - H / 2));
   }
 
   _blockDoor(d) {
@@ -2090,7 +2263,7 @@ export class Reef {
     if (this.shake > 0.2) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
 
     const cx = this.camX, cy = this.camY;
-    const depthT = Math.min(1, cy / WH);
+    const depthT = Math.min(1, cy / WORLD.WH);
     // Distant shoals + sunken-wreck silhouettes only in the open-ocean reef;
     // enclosed zones (belly/temple/abyss) draw their own backdrops over this.
     this.bg.draw(ctx, cx, cy, this.t, depthT, { reef: this.zone === 'reef' });
@@ -2278,10 +2451,11 @@ export class Reef {
     }
     ctx.restore();
 
-    if (this._shell.state === 'playing' || this._shell.state === 'paused') this._hud();
+    if (this._shell.state === 'playing' || this._shell.state === 'paused' || this._shell.state === 'warn') this._hud();
     if ((this._shell.state === 'playing' || this._shell.state === 'paused') && this.weaponSwapT > 0) this._weaponCarousel();
     if (this._shell.state === 'menu') this._shell._menu();
     if (this._shell.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
+    if (this._shell.state === 'warn') this._warnScreen();
     if (this._shell.state === 'shop') this._shopScreen();
     if (this._shell.state === 'drydock') this._shell._dryDockScreen();
     if (this._shell.state === 'help') this._shell._helpScreen();
@@ -2400,7 +2574,11 @@ export class Reef {
       W, H,
       depth: metresDown(this.diver.y),
       deepest: metresDown(WORLD.SURFACE + this.depthReached),
-      valveDepth: this.hasValve ? VALVE.holdDepthM : null,
+      crushDepth: crushDepthM(this.valveLevel),
+      oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: this._crush.phase,
+      crushT: this._crush.t,
+      t: this.t,
     });
 
     this._text(`SCORE ${this.score}`, W - 20, 22, 18, PAL.hudText, 'right', 'top');
@@ -2719,7 +2897,14 @@ export class Reef {
 
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
-    const mw = 116, mh = Math.round(mw * WH / WW), mx = W - mw - 16, my = 128;
+    // The panel is a FIXED box (~136x185 outer, mw x mh inner) regardless of
+    // world tier — only the cave image inside it scales. World aspect runs
+    // from 46:70 (tier 1) to 80:302 (tier 4, see config.js WORLD_TIERS), so a
+    // blit stretched to fill mw x mh would badly distort tier 4. Instead the
+    // image is letterboxed: scaled uniformly by the tighter of the two axis
+    // ratios (using the cave's live grid, not a cached WORLD snapshot) and
+    // centred in the panel, leaving bars on whichever axis has slack.
+    const mw = 116, mh = 177, mx = W - mw - 16, my = 128;
     // The map is translucent, and fades further when the diver swims behind it
     // so it never hides the action. Eased for a smooth transition.
     const dsx = this.diver.x - this.camX, dsy = this.diver.y - this.camY;
@@ -2736,8 +2921,11 @@ export class Reef {
     ctx.save();
     ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(C.mini, mx, my, mw, mh);
-    const wx = (x) => mx + (x / WW) * mw, wy = (y) => my + (y / WH) * mh;
+    const mscale = Math.min(mw / C.GW, mh / C.GH);
+    const iw = C.GW * mscale, ih = C.GH * mscale;
+    const ix = mx + (mw - iw) / 2, iy = my + (mh - ih) / 2;
+    ctx.drawImage(C.mini, ix, iy, iw, ih);
+    const wx = (x) => ix + (x / WORLD.WW) * iw, wy = (y) => iy + (y / WORLD.WH) * ih;
     // Has the diver revealed the cell at a world point? The Prospector's Chart
     // reveals a wider radius, so it naturally surfaces more vents/bells below.
     const revealed = (x, y) => !!C.seen[Math.floor(y / CELL) * C.GW + Math.floor(x / CELL)];

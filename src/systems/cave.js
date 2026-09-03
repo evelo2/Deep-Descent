@@ -4,15 +4,15 @@
 // along curved walls, and rendering soft-carves the caves out of a rock layer.
 import { WORLD, CAVE, caveParams, PAL } from '../config.js';
 
-const { WW, WH, CELL, OPEN_BAND } = WORLD;
+const { CELL, OPEN_BAND } = WORLD;
 const BIG = 9999;
 
 export class Cave {
   constructor(biome = 'reef', reef = 1) {
     this.biome = biome;   // 'reef' (rock) | 'belly' (fleshy) | 'temple' (stone) | 'abyss' (dark trench)
     this.reef = reef;     // drives per-reef carve density (deeper = branchier, vaster)
-    this.GW = Math.ceil(WW / CELL);
-    this.GH = Math.ceil(WH / CELL);
+    this.GW = Math.ceil(WORLD.WW / CELL);
+    this.GH = Math.ceil(WORLD.WH / CELL);
     this.CARVE = CAVE.carve;
     this.open = new Uint8Array(this.GW * this.GH);
     this._generate();
@@ -66,7 +66,7 @@ export class Cave {
     // directly under the boat (the dive point), so there's always an entrance and
     // a route to the bottom; the rest wander to make the network.
     const P = caveParams(this.reef);   // per-reef density: deeper reefs are vaster
-    const spawnGX = clampX(Math.round((WW / 2) / CELL));
+    const spawnGX = clampX(Math.round((WORLD.WW / 2) / CELL));
     // Seed the stack (processed LIFO via pop): push wanderers FIRST so the
     // shafts, pushed last, pop and carve FIRST — otherwise a deep reef's swarm
     // of wanderer branches exhausts the iteration guard before the shafts run
@@ -137,7 +137,7 @@ export class Cave {
   // open sea band; large (solid) outside the world.
   pxDist(x, y) {
     if (y < OPEN_BAND) return 0;
-    if (x < 0 || x >= WW || y >= WH) return this.CARVE + 1000;
+    if (x < 0 || x >= WORLD.WW || y >= WORLD.WH) return this.CARVE + 1000;
     const fx = x / CELL - 0.5, fy = y / CELL - 0.5;
     const x0 = Math.floor(fx), y0 = Math.floor(fy);
     const tx = fx - x0, ty = fy - y0;
@@ -279,7 +279,7 @@ export class Cave {
     // repaint the whole buffer below every frame.
     if (this.oc.width !== W || this.oc.height !== H) { this.oc.width = W; this.oc.height = H; }
     octx.clearRect(0, 0, W, H);
-    const depthT = Math.min(1, camY / WH);
+    const depthT = Math.min(1, camY / WORLD.WH);
     const b = this.biome;
     const C1 = b === 'belly' ? PAL.fleshRock : b === 'temple' ? PAL.templeRock : b === 'abyss' ? PAL.abyssRock : PAL.rock;
     const C2 = b === 'belly' ? PAL.fleshDark : b === 'temple' ? PAL.templeDark : b === 'abyss' ? PAL.abyssDark : PAL.rockDark;

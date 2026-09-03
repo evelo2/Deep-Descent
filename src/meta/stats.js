@@ -20,6 +20,10 @@ export const STAT_KEYS = [
   // onward must be (src/core/grandfathered-ids.js); the bare keys above are the
   // grandfathered pre-P11.1 set.
   'legacy:valveOffered', 'legacy:valveBought',
+  // Crush-depth telemetry (Deep Reefs). Diagnostics, not goals: alarmed is
+  // runs where the alarm fired, deaths is runs it ended, escapes is alarms
+  // survived by ascending. All additive — addRun only sums.
+  'legacy:crushAlarmed', 'legacy:crushDeaths', 'legacy:crushEscapes',
 ];
 
 export function defaultStats() {

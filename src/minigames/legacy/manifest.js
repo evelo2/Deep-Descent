@@ -54,6 +54,9 @@ export default {
       // mint no Steam achievement ids and draw nothing on the Trophy Wall.
       { key: 'legacy:valveOffered', label: 'Runs offered a Depth Valve' },
       { key: 'legacy:valveBought',  label: 'Depth Valves bought' },
+      { key: 'legacy:crushAlarmed', label: 'Runs that hit crush depth' },
+      { key: 'legacy:crushDeaths',  label: 'Divers crushed' },
+      { key: 'legacy:crushEscapes', label: 'Crush alarms survived' },
     ],
     // Copied VERBATIM from meta/badges.js — the manifests test asserts every
     // field matches, so the two can never drift.
