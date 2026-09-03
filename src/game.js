@@ -484,6 +484,13 @@ export class Game {
       screen.push({ id: 'badgesclose', x: W / 2 - 85, y: 552, w: 170, h: 34 });
     }
     if (this.state === 'about') screen.push({ id: 'aboutclose', x: 0, y: 0, w: W, h: H });   // tap anywhere closes
+    // The depth-warning modal (_warnScreen's "Tap to continue") has no button
+    // chrome to hit on touch — without this rect a touch player could not
+    // dismiss it at all (no gameplay buttons exist for 'warn', and main.js's
+    // touchstart-anywhere shortcut only covers 'menu'/'gameover'), soft-locking
+    // the run the first time oxygen/crush depth is crossed. Same tap-anywhere
+    // pattern as 'aboutclose' just above.
+    if (this.state === 'warn') screen.push({ id: 'warnclose', x: 0, y: 0, w: W, h: H });
     if (this.state === 'shop' && this._reef) {
       const items = this._reef._shopItems();   // shop is reef-owned (P6)
       items.forEach((it, i) => { const r = this._reef._shopRow(i); screen.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });

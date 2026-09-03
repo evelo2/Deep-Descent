@@ -175,6 +175,26 @@ check('the klaxon stays silent throughout the whole game-over screen',
   !klaxonCalls.includes(true));
 game.state = 'playing';   // restore for the remaining checks below
 
+// --- the Guardian Chest's match-3 launch must silence the klaxon too --------
+// Unlike stage/whirlpool/belly/temple/abyss (all covered above), this path
+// does NOT return early out of a zone branch that update() already handles —
+// it PUSHES match-3 onto the Core stack via host.open(), and core.js only
+// updates the top of that stack, so THIS reef's update() (and the
+// authoritative klaxon line at its very top) stops running entirely for the
+// whole match-3 session. The Guardian Chest spawns at 2/3 world depth — below
+// the previous Valve rung's crush depth — so opening it while alarmed is
+// normal play, not an edge case.
+reef.zone = 'reef';
+reef.reentryT = 0;
+reef.specialChest = { x: reef.diver.x, y: reef.diver.y, r: 40, opened: true };
+reef.chestGuardian = null;
+reef._crush = { phase: 'alarmed', t: DEPTH.crushTimer };
+klaxonCalls.length = 0;
+reef.update(1 / 60);
+check('opening the Guardian Chest match-3 while alarmed silences the klaxon',
+  klaxonCalls.includes(false) && last() === false);
+check('the chest was actually consumed (the update() branch really ran)', reef.specialChest === null);
+
 // --- a new run starts safe, not carrying a prior alarm -----------------------
 reef._crush = { phase: 'alarmed', t: 3 };   // simulate dying alarmed
 reef.start(1);

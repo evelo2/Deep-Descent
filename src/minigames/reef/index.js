@@ -1008,6 +1008,13 @@ export class Reef {
   }
 
   _generateTemple() {
+    // Nested zones are fixed-size regardless of the host reef's tier — without
+    // this, the still-live WORLD.WW/WH from _generateWorld's setWorldSize(this.reef)
+    // leaks in, so a tier-4 reef's temple/abyss/belly balloons to 4800x18090
+    // while their value functions (below) stay fraction-of-WORLD.WH: cost scales,
+    // reward doesn't. setWorldSize() is undone by the next _generateWorld() for
+    // the reef itself, and _restoreReef() puts it back for THIS reef on the way out.
+    setWorldSize(1);
     const C = this.cave = new Cave('temple');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -1056,6 +1063,8 @@ export class Reef {
   }
 
   _generateAbyss() {
+    // Nested zone: fixed baseline size — see the comment in _generateTemple().
+    setWorldSize(1);
     const C = this.cave = new Cave('abyss');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -1131,6 +1140,8 @@ export class Reef {
   }
 
   _generateBelly() {
+    // Nested zone: fixed baseline size — see the comment in _generateTemple().
+    setWorldSize(1);
     const C = this.cave = new Cave('belly');
     this.shells = []; this.treasures = []; this.creatures = [];
     this.vents = []; this.wrecks = []; this.harpoons = []; this.nets = []; this.charges = []; this.bigBubbles = [];
@@ -1364,6 +1375,14 @@ export class Reef {
     // About / versions overlay: read-only, opened by the menu's corner link.
     if (this._shell.state === 'about') { this._shell._updateAbout(startEdge); this.input.endFrame(); return; }
     if (this._shell.state === 'menu' && this.input.consumeButton('about')) { this._shell._openAbout('menu'); this.input.endFrame(); return; }
+
+    // Depth-warning modal (oxygen/crush line, first encounter only): read-only,
+    // tap-anywhere-to-continue. Keyboard/gamepad already dismiss it via the
+    // generic startEdge catch-all below, but touch has no gameplay buttons in
+    // this state — _syncTouchButtons adds a full-screen 'warnclose' rect (the
+    // same tap-anywhere pattern as 'aboutclose' just above) so a touch tap can
+    // reach it too. Without this, touch could never leave the modal at all.
+    if (this._shell.state === 'warn' && this.input.consumeButton('warnclose')) { this.onAction(); this.input.endFrame(); return; }
 
     // Open the Dry Dock from the menu or game-over screen (R or the 🛠 button).
     if ((this._shell.state === 'menu' || this._shell.state === 'gameover') && (this.input.pressed('drydock') || this.input.consumeButton('drydock'))) { this._shell._openDryDock(this._shell.state); this.input.endFrame(); return; }
@@ -1711,6 +1730,13 @@ export class Reef {
         this.specialChest = null;             // consume — no re-enter on return
         this.chestGuardian = null;            // (already dead; belt-and-braces)
         this.reentryT = 1.5;                  // grace after match-3 closes
+        // Core.js only updates the TOP of the minigame stack, so once match-3 is
+        // pushed this reef's update() (and the authoritative klaxon line at the
+        // top of it) stops running entirely for the whole match-3 session. The
+        // Guardian Chest sits at 2/3 world depth — below the previous Valve
+        // rung's crush depth — so opening it while alarmed is normal play; silence
+        // the horn explicitly here or it blares through the whole minigame.
+        this.audio.setKlaxon(false);
         this.host.open('match3', { source: 'chest' });
         this.input.endFrame(); return;
       }
@@ -2086,6 +2112,13 @@ export class Reef {
 
   _restoreReef() {
     const s = this.savedReef; if (!s) return;
+    // The restored `cave` object keeps its own GW/GH from construction time, so
+    // it's unaffected by whatever the nested zone left WORLD.WW/WH at — but a
+    // pile of reef-zone code (camera clamp, depth-fraction air/audio, minimap
+    // projection) reads WORLD.WW/WH LIVE every frame, not off the cave. Restore
+    // THIS reef's own tier extents before anything below (esp. _placeDiver's
+    // camera clamp) reads them, or a tier-4 reef comes back shrunk to baseline.
+    setWorldSize(this.reef);
     const keys = ['cave', 'shells', 'treasures', 'creatures', 'vents', 'wrecks', 'flora', 'skeletons', 'bigBubbles', 'whales', 'ribs', 'currents', 'krakens', 'templeGate', 'powerups', 'relic', 'bells', 'crates', 'darkZones', 'stageEntrances', 'abyssEntrance', 'whirlEntrance'];
     for (const k of keys) this[k] = s[k];
     this.zone = 'reef';

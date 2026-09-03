@@ -81,5 +81,54 @@ check('dismissing the second modal also resumes play', reef._shell.state === 'pl
 for (let i = 0; i < 3; i++) reef.update(1 / 60);
 check('with both flags set, no further warning ever fires', reef._shell.state === 'playing');
 
+// --- Touch dismissal: the modal must be genuinely dismissable on touch ------
+// This project has frozen touch devices twice before (see CLAUDE.md gotchas)
+// precisely because a mouse-only pass missed device-specific wiring — the
+// gameplay touch buttons and main.js's touchstart shortcut both skip the
+// 'warn' state, so a touch player had NO way to reach _warnScreen's own
+// "Tap to continue" prompt. A fresh Game/reef with isTouch:true drives the
+// real trigger, then simulates a genuine tap the same way main.js's
+// mousedown/touchstart handlers resolve one: hitButtonAt() finds whatever rect
+// _syncTouchButtons published for this frame's state, pressButton() registers
+// it, and the reef's update() consumes it via consumeButton() next frame.
+const touchBtnHits = new Set();
+const touchInput = {
+  poll() {}, endFrame() { touchBtnHits.clear(); }, pressed: () => false, consumeStart: () => false,
+  consumeTapFire: () => false, fireHeld: () => false, fireDown: () => false,
+  vector: () => ({ x: 0, y: 0 }), aimVector: () => null,
+  isTouch: true, touchButtons: [], _btnTouch: false,
+  hitButtonAt(x, y) {
+    for (const b of this.touchButtons) if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b.id;
+    return null;
+  },
+  pressButton(id) { touchBtnHits.add(id); },
+  consumeButton(id) { if (touchBtnHits.has(id)) { touchBtnHits.delete(id); return true; } return false; },
+};
+const touchEconomy = { state: { salvage: 0, rentals: {}, slots: 3, loadout: [], reefRelics: {}, lifeMax: 6, seen: { oxygenLine: false, crushLine: false } }, earn({ salvage = 0 } = {}) { this.state.salvage += salvage; return this.state.salvage; } };
+const touchGame = new Game(mkCtx(), touchInput, audio, particles, { draw() {} },
+  { economy: touchEconomy, progression: { badges: {}, stats: {}, progress: {} }, achievements: { unlock() {} } },
+  makeDiverWorld({ viewport: WORLD }));
+const touchReef = touchGame._reef;
+
+touchReef.start(1);
+touchReef.diver.y = WORLD.SURFACE + (crushDepthM(0) - 5) * 10;
+touchReef.update(1 / 60);   // the triggering frame
+check('touch: one update() flips the shell into warn state', touchReef._shell.state === 'warn');
+
+// A further update() runs _syncTouchButtons with the CURRENT ('warn') state
+// (the triggering frame above synced buttons for the OLD 'playing' state,
+// before the trigger fired later in that same frame).
+touchReef.update(1 / 60);
+const warnRect = touchInput.touchButtons.find((b) => b.id === 'warnclose');
+check('touch: a dismiss rect is published for the warn modal', !!warnRect);
+check('touch: the rect covers the whole screen (tap-anywhere, like aboutclose)',
+  !!warnRect && warnRect.x === 0 && warnRect.y === 0 && warnRect.w === WORLD.W && warnRect.h === WORLD.H);
+
+const hit = touchInput.hitButtonAt(WORLD.W / 2, WORLD.H / 2);   // a tap anywhere on screen
+check('touch: a tap anywhere on screen hits the dismiss rect', hit === 'warnclose');
+touchInput.pressButton(hit);
+touchReef.update(1 / 60);   // the reef consumes the button press and dismisses
+check('touch: the tap genuinely returns the state to playing (no soft-lock)', touchReef._shell.state === 'playing');
+
 console.log(`ok depth-warning-wiring.test.mjs (${passed} checks)`);
 if (failed > 0) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
