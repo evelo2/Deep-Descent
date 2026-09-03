@@ -2864,7 +2864,14 @@ export class Reef {
 
   _minimap() {
     const ctx = this.ctx, C = this.cave; if (!C) return;
-    const mw = 116, mh = Math.round(mw * WORLD.WH / WORLD.WW), mx = W - mw - 16, my = 128;
+    // The panel is a FIXED box (~136x185 outer, mw x mh inner) regardless of
+    // world tier — only the cave image inside it scales. World aspect runs
+    // from 46:70 (tier 1) to 80:302 (tier 4, see config.js WORLD_TIERS), so a
+    // blit stretched to fill mw x mh would badly distort tier 4. Instead the
+    // image is letterboxed: scaled uniformly by the tighter of the two axis
+    // ratios (using the cave's live grid, not a cached WORLD snapshot) and
+    // centred in the panel, leaving bars on whichever axis has slack.
+    const mw = 116, mh = 177, mx = W - mw - 16, my = 128;
     // The map is translucent, and fades further when the diver swims behind it
     // so it never hides the action. Eased for a smooth transition.
     const dsx = this.diver.x - this.camX, dsy = this.diver.y - this.camY;
@@ -2881,8 +2888,11 @@ export class Reef {
     ctx.save();
     ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(C.mini, mx, my, mw, mh);
-    const wx = (x) => mx + (x / WORLD.WW) * mw, wy = (y) => my + (y / WORLD.WH) * mh;
+    const mscale = Math.min(mw / C.GW, mh / C.GH);
+    const iw = C.GW * mscale, ih = C.GH * mscale;
+    const ix = mx + (mw - iw) / 2, iy = my + (mh - ih) / 2;
+    ctx.drawImage(C.mini, ix, iy, iw, ih);
+    const wx = (x) => ix + (x / WORLD.WW) * iw, wy = (y) => iy + (y / WORLD.WH) * ih;
     // Has the diver revealed the cell at a world point? The Prospector's Chart
     // reveals a wider radius, so it naturally surfaces more vents/bells below.
     const revealed = (x, y) => !!C.seen[Math.floor(y / CELL) * C.GW + Math.floor(x / CELL)];
