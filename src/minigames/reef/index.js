@@ -48,6 +48,7 @@ import { makeWhirlpool } from '../whirlpool/index.js';
 import { makeStage } from '../stage/index.js';
 import { makeHost } from '../../core/host.js';
 import { drawDepthGauge, metresDown } from '../../render/depthgauge.js';
+import { warnKindFor, WARN_COPY } from './warnings.js';
 import { STAGE } from '../../config.js';
 import { saveSalvage, runPayout, bankReefRelic, consumeReefRelic, skipStartGold } from '../../meta/salvage.js';
 import { awardBadges, saveBadges, rankFor } from '../../meta/badges.js';
@@ -180,6 +181,7 @@ export class Reef {
     // ever runs. The authoritative klaxon line in update() reads this._crush
     // as its very first statement, so leaving it unset here crashed the menu.
     this._crush = { phase: 'safe', t: DEPTH.crushTimer };
+    this._warnKind = null;   // which one-time depth-warning modal is up, if any
     this.diver.reset();
     // Per-run relic flags (Salvage Log). The authority is applyLoadout() →
     // resetRelicFlags() in meta/relics.js, which re-sets these every run BEFORE any
@@ -913,6 +915,22 @@ export class Reef {
     if (this.shopSel >= this._shopItems().length) this.shopSel = this._shopItems().length - 1;
   }
 
+  // First-encounter depth-warning modal (oxygen line / crush depth). Drawn
+  // OVER a still-visible HUD (see the render gate above) — the whole point is
+  // to explain the gauge's amber/red bands, so the gauge must stay on screen.
+  _warnScreen() {
+    const copy = WARN_COPY[this._warnKind];
+    if (!copy) return;
+    const cx = W / 2, cy = H / 2;
+    this._panel(0.74);
+    this._text(copy.title, cx, cy - 76, 30, this._warnKind === 'crushLine' ? PAL.danger : PAL.gold, 'center', 'middle', true);
+    this._text(copy.lines[0], cx, cy - 24, 16, PAL.hudText, 'center', 'middle');
+    this._text(copy.lines[1], cx, cy + 4, 16, PAL.hudText, 'center', 'middle');
+    this._text(copy.lines[2], cx, cy + 32, 16, PAL.hudText, 'center', 'middle');
+    this._text(this.input.isTouch ? 'Tap to continue' : 'Press any key / button to continue',
+      cx, cy + 72, 13, '#9fc6e0', 'center', 'middle');
+  }
+
   _shopScreen() {
     const ctx = this.ctx;
     this._panel(0.74);
@@ -1147,6 +1165,7 @@ export class Reef {
   onAction() {
     if (this._shell.state === 'menu' || this._shell.state === 'gameover') { this.audio.ensure(); this.audio.resume(); this.start(this._shell.pendingStartReef); }
     else if (this._shell.state === 'paused') { this._shell.state = 'playing'; this._fireGrace = 0.3; }
+    else if (this._shell.state === 'warn') { this._shell.state = 'playing'; this._fireGrace = 0.3; }
     else if (this._shell.state === 'playing') this._shell.state = 'paused';
     else if (this._shell.state === 'shop') this._shopBuy();
     else if (this._shell.state === 'drydock') this._shell._dryDockAct();
@@ -1564,6 +1583,18 @@ export class Reef {
       const suitMult = this.buffT.suit > 0 ? CONSUMABLE_BY_ID.suit.airMult : 1;
       const lapseMult = this.extractLapsed ? ABYSS.extractLapseMult : 1;
       const depthM = metresDown(this.diver.y);
+      // First-encounter warning modals: fire once per flag, freeze the dive
+      // (diver, air, crush timer all stop this frame) until dismissed. The
+      // crush warning outranks the oxygen one — it is the lethal one.
+      if (this._shell.state === 'playing' && this.zone === 'reef') {
+        const kind = warnKindFor(depthM, this.valveLevel, this.meta.seen);
+        if (kind) {
+          this.meta.seen[kind] = true; saveSalvage(this.meta);
+          this._warnKind = kind; this._shell.state = 'warn';
+          this.audio.setKlaxon(false);
+          this.input.endFrame(); return;
+        }
+      }
       this.air -= (AIR.drainPerSec + airDepthTerm(depthM, this.valveLevel)) * oxyMult * suitMult * lapseMult * dt;
       if (inVent) { this.air = Math.min(this.airMax, this.air + AIR.ventRefillPerSec * dt); if (Math.random() < 0.2) this.audio.refill(); }
       if (this.air <= 0) { this.air = 0; this._loseLife(); }
@@ -2387,10 +2418,11 @@ export class Reef {
     }
     ctx.restore();
 
-    if (this._shell.state === 'playing' || this._shell.state === 'paused') this._hud();
+    if (this._shell.state === 'playing' || this._shell.state === 'paused' || this._shell.state === 'warn') this._hud();
     if ((this._shell.state === 'playing' || this._shell.state === 'paused') && this.weaponSwapT > 0) this._weaponCarousel();
     if (this._shell.state === 'menu') this._shell._menu();
     if (this._shell.state === 'paused') this._overlay('PAUSED', (this.input.isTouch ? 'Tap ▶ to resume' : 'Press P / click to resume') + '   ·   H for help');
+    if (this._shell.state === 'warn') this._warnScreen();
     if (this._shell.state === 'shop') this._shopScreen();
     if (this._shell.state === 'drydock') this._shell._dryDockScreen();
     if (this._shell.state === 'help') this._shell._helpScreen();
