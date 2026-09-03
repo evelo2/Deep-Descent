@@ -22,42 +22,35 @@ globalThis.document = {
 };
 
 import { Reef, oxygenMultiplier } from '../../src/minigames/reef/index.js';
-import { GAME, ABYSS } from '../../src/config.js';
+import { ABYSS } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
 
-// --- Pure air-multiplier: abyss adds ABYSS.airMult on top of the reef's own
-// depth penalty; every other zone is unaffected. ---
+// --- Pure air-multiplier: the reef number no longer touches air drain (depth
+// is the sole difficulty axis now); only the abyss zone's ABYSS.airMult
+// remains, and every other zone is unaffected. ---
 {
-  const reef1Reef = oxygenMultiplier(1, 'reef');
-  const reef1Abyss = oxygenMultiplier(1, 'abyss');
-  check('reef 1, reef zone: no depth penalty yet (mult = 1)', Math.abs(reef1Reef - 1) < 1e-9);
-  check('reef 1, abyss zone: exactly ABYSS.airMult on top', Math.abs(reef1Abyss - ABYSS.airMult) < 1e-9);
+  check('the reef number no longer touches air drain', oxygenMultiplier('reef') === 1);
+  check('reef is not a parameter — a stray arg changes nothing',
+    oxygenMultiplier('reef') === oxygenMultiplier('reef', false));
+  check('the abyss still costs its 150% outside the sub',
+    Math.abs(oxygenMultiplier('abyss') - ABYSS.airMult) < 1e-9);
+  check('the sub still shelters you from the abyss cost', oxygenMultiplier('abyss', true) === 1);
 
-  const reef5Reef = oxygenMultiplier(5, 'reef');
-  const reef5Abyss = oxygenMultiplier(5, 'abyss');
-  const expectedReef5 = 1 + GAME.oxygenPenaltyPerReef * Math.min(4, GAME.oxygenPenaltyCap);
-  check('deeper reefs still apply the normal depth penalty', Math.abs(reef5Reef - expectedReef5) < 1e-9);
-  check('abyss multiplies the reef depth penalty, not replaces it', Math.abs(reef5Abyss - expectedReef5 * ABYSS.airMult) < 1e-9);
-
-  check('temple/belly/stage zones are unaffected by ABYSS.airMult', oxygenMultiplier(3, 'temple') === oxygenMultiplier(3, 'reef') &&
-    oxygenMultiplier(3, 'belly') === oxygenMultiplier(3, 'reef') && oxygenMultiplier(3, 'stage') === oxygenMultiplier(3, 'reef'));
+  check('temple/belly/stage zones are unaffected by ABYSS.airMult', oxygenMultiplier('temple') === oxygenMultiplier('reef') &&
+    oxygenMultiplier('belly') === oxygenMultiplier('reef') && oxygenMultiplier('stage') === oxygenMultiplier('reef'));
 }
 
 // --- Phase 2: the mini-sub's `inSub` arg negates the abyss penalty only in
 // the abyss; every other zone ignores it (there's nothing to negate). ---
 {
-  check('abyss on foot (inSub=false, the default): still x1.5', Math.abs(oxygenMultiplier(1, 'abyss') - ABYSS.airMult) < 1e-9);
-  check('abyss in the sub: same as the plain reef rate, no penalty', Math.abs(oxygenMultiplier(1, 'abyss', true) - oxygenMultiplier(1, 'reef')) < 1e-9);
+  check('abyss on foot (inSub=false, the default): still x1.5', Math.abs(oxygenMultiplier('abyss') - ABYSS.airMult) < 1e-9);
+  check('abyss in the sub: same as the plain reef rate, no penalty', Math.abs(oxygenMultiplier('abyss', true) - oxygenMultiplier('reef')) < 1e-9);
 
-  const reef7Reef = oxygenMultiplier(7, 'reef');
-  check('abyss in the sub at a deeper reef: matches that reef\'s own rate, not x1.5 of it',
-    Math.abs(oxygenMultiplier(7, 'abyss', true) - reef7Reef) < 1e-9);
-
-  check('non-abyss zones ignore the inSub arg entirely', oxygenMultiplier(4, 'reef', true) === oxygenMultiplier(4, 'reef', false) &&
-    oxygenMultiplier(4, 'temple', true) === oxygenMultiplier(4, 'temple', false) &&
-    oxygenMultiplier(4, 'belly', true) === oxygenMultiplier(4, 'belly', false));
+  check('non-abyss zones ignore the inSub arg entirely', oxygenMultiplier('reef', true) === oxygenMultiplier('reef', false) &&
+    oxygenMultiplier('temple', true) === oxygenMultiplier('temple', false) &&
+    oxygenMultiplier('belly', true) === oxygenMultiplier('belly', false));
 }
 
 // --- Smoke test: _generateAbyss() builds a usable zone off a stub Game. ---

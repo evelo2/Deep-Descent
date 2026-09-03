@@ -12,6 +12,88 @@ export const WORLD = {
   CELL: 60,        // cave grid cell size
 };
 
+// --- Deep Reefs: the world grows in four fixed STEPS, not per reef ---------
+// Tier 1 is byte-identical to the pre-Deep-Reefs world and is the regression
+// anchor for the whole feature. Steps at reefs 4, 11 and 21; reef 40 caps the
+// SIZE only — reefs continue past it at tier-4 size (spec locked decision 11).
+// See docs/superpowers/specs/2026-09-02-deep-reefs-design.md.
+export const WORLD_TIERS = [
+  { minReef: 1,  WW: 2760, WH: 4200  },   //  411 m — unchanged from main
+  { minReef: 4,  WW: 3600, WH: 7090  },   //  700 m
+  { minReef: 11, WW: 4200, WH: 11590 },   // 1150 m
+  { minReef: 21, WW: 4800, WH: 18090 },   // 1800 m
+];
+
+// The tier-1 floor in metres (411). Task 11's value functions key off this so
+// tier-1 payouts stay exactly as they were before Deep Reefs.
+export const tier1FloorM = (WORLD_TIERS[0].WH - WORLD.SURFACE) / 10;
+
+// Pure: reef -> tier index. Anything non-finite, fractional or out of range
+// clamps rather than throwing — world generation must never fail.
+export function worldTier(reef) {
+  const r = Number(reef);
+  if (!Number.isFinite(r)) return 0;
+  const n = Math.floor(r);
+  let t = 0;
+  for (let i = 0; i < WORLD_TIERS.length; i++) if (n >= WORLD_TIERS[i].minReef) t = i;
+  return t;
+}
+
+// Pure: reef -> the world extents for that reef.
+export function worldSize(reef) {
+  const { WW, WH } = WORLD_TIERS[worldTier(reef)];
+  return { WW, WH };
+}
+
+// Assign this reef's extents onto the LIVE WORLD object. Mirrors setViewport():
+// WW/WH must never be captured at module scope, or a stale world is pinned.
+// Called once at the top of the reef's _generateWorld(), BEFORE the Cave is
+// constructed (Cave derives GW/GH from the extents in its constructor).
+export function setWorldSize(reef) {
+  const { WW, WH } = worldSize(reef);
+  WORLD.WW = WW; WORLD.WH = WH;
+}
+
+// --- Deep Reefs: the deep economy ------------------------------------------
+// Spawn counts are ABSOLUTE, not densities, so a 7.5x larger tier-4 world would
+// be drastically emptier if these did not grow. They grow more slowly than area
+// on purpose: a deep reef should feel vast and sparse with its wealth
+// CONCENTRATED. `bias` drives the downward migration (0 = uniform).
+export const TREASURE_TIER = [
+  { loose: 40,  shells: 34,  wrecks: 4,  bias: 0    },   // tier 1 — unchanged from main
+  { loose: 70,  shells: 50,  wrecks: 6,  bias: 0.45 },
+  { loose: 110, shells: 72,  wrecks: 9,  bias: 0.70 },
+  { loose: 160, shells: 100, wrecks: 12, bias: 0.85 },
+];
+export function treasureTier(reef) { return TREASURE_TIER[worldTier(reef)]; }
+
+// Pure: how much a candidate spawn point at `depthFrac` (0 = surface, 1 = floor)
+// is favoured, in [0,1]. Used as a rejection weight at the existing spread() /
+// randomOpen() call sites — no new spawn code. Tier 1 returns a flat 1.
+export function treasureDepthWeight(depthFrac, reef) {
+  const b = treasureTier(reef).bias;
+  const raw = Number(depthFrac);
+  const f = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
+  return (1 - b) + b * f * f;
+}
+
+// Pure: a chest's value at an ABSOLUTE depth. The old form was
+// 200 + (y / WH) * 400, which topped out at 600 at ANY tier's floor — 1800 m
+// would have paid exactly what 411 m pays. Keyed to tier1FloorM so tier-1
+// payouts are bit-for-bit what they were.
+export function chestValueAt(depthM) {
+  const m = Math.max(0, Number(depthM) || 0);
+  return 200 + Math.round((m / tier1FloorM) * 400);
+}
+
+// Pure: the value multiplier on loose coins/gems. Exactly 1 everywhere tier 1
+// can reach, so tier-1 income is unchanged; it only opens up in water that
+// tier 1 does not have.
+export function treasureValueMult(depthM) {
+  const m = Math.max(0, Number(depthM) || 0);
+  return 1 + Math.max(0, m - tier1FloorM) / 700;
+}
+
 // The 900×600 core is the design reference; the visible logical viewport is
 // extended along the LONG axis to match the device aspect so the canvas fills
 // the screen instead of letterboxing inside a fixed 3:2 box. The core is always
@@ -46,6 +128,19 @@ export const AIR = {
   ventRefillPerSec: 34, // refill rate while inside a vent's bubble stream
 };
 
+// --- Deep Reefs: the two fixed danger depths ------------------------------
+// Both are ABSOLUTE METRES, identical in every reef, so the player learns them
+// once (spec locked decision 1). 250 m sits in the bottom third of the tier-1
+// world, so reefs 1-3 teach the oxygen line gently before any deeper tier
+// exists. oxygenSteepen is the PRIMARY BALANCE DIAL of the whole feature.
+export const DEPTH = {
+  oxygenLineM: 250,        // below this the depth term steepens
+  oxygenSteepen: 1.6,      // <- move this first if the deep tiers feel wrong
+  crushTimer: 14,          // seconds from crossing crush depth to death
+  crushRecoverRatio: 1.5,  // seconds of safe water per second of timer recovered
+  approachWarnM: 40,       // the gauge flashes within this many metres of crush depth
+};
+
 // Air vents: bubble clams on ledges emit a rising stream; swim through it to
 // refill air. Makes deep cave diving viable without surfacing.
 export const VENT = {
@@ -59,13 +154,8 @@ export const GAME = {
   invulnAfterHit: 1.6,  // seconds of mercy invulnerability
   hitCost: 1,           // lives lost per hit
   hitLootPenalty: 0.3,  // fraction of un-banked carried loot lost on a hit (stakes)
-  maxLives: 5,          // extra lives can't bank past this — no snowball
   firstLifeScore: 8000, // score for the first extra life (was a flat 5000)
   lifeScoreStep: 6000,  // additional score required per subsequent extra life
-  // Each new reef bites harder: air drains this much faster per reef (15% each),
-  // capped, on top of the creature-count/size scaling.
-  oxygenPenaltyPerReef: 0.15,
-  oxygenPenaltyCap: 8,
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
   exitAirRefillFrac: 0.5,    // leaving ANY special level tops up air by up to this fraction of the tank
   // Ambient combat encounter (a whale OR a kraken) — a flat, modest roll so even
@@ -166,6 +256,12 @@ export const GOLD = { rate: 0.2 };       // gold earned per point of loot banked
 // at the end of every run — win OR death — from milestones. Starting values;
 // a later balance pass tunes these.
 export const SALVAGE = { perReef: 8, perBoss: 40, perRelic: 15, perPearl: 30, startSlots: 2, maxSlots: 5, slotCostBase: 200 };
+// Max lives is a Dry Dock permanent unlock, not a free ceiling. It starts at
+// the 3 lives a run begins with; each Salvage purchase adds one, to capMax.
+// This deliberately lowers the old free ceiling of 5 — a giveaway becomes a
+// meta-progression ladder (spec locked decision 10). Priced dearer than a
+// Salvage-Log slot (200 base) because a life is worth more than a relic slot.
+export const LIVES = { baseMax: 3, capMax: 6, costBase: 300 };
 // Salvage-Log rentals: relics are rented for a number of DIVES (one run each),
 // ticking down only on dives where the relic was equipped. Rent/renew refills to
 // `dives`; `maxDives` is the load-time sanitize cap.
@@ -197,22 +293,75 @@ export const TORCH = {
   drain: 8,         // battery drained per second while lit (~12.5s on a full battery)
 };
 
-// Depth Valve: a one-off shop unlock (like the Torch) that HOLDS PRESSURE below
-// its line — deeper than holdDepthM the depth term of the air drain stops
-// growing, so the world floor costs the same air as the line. It never touches
-// the baseline breath or any drain multiplier. See pressureDepth() in the reef.
+// Depth Valve: the tiered pressure gear. One level per world tier — the rule is
+// "each tier of the world needs the next Valve". A level buys BOTH crush depth
+// (how deep you may go before the alarm) and a share of the depth-drain
+// discount. It buys air as well as depth because at 1800 m a crush-depth-only
+// valve leaves a full tank empty in eleven seconds — see "Why decision 7
+// changed" in the spec. holdDepthM is retained only to document the pre-Deep-
+// Reefs clamp the Lv1 discount is pinned against in valve-air.test.mjs.
 export const VALVE = {
-  cost: 400,        // shop price (a commitment, like the Torch)
+  cost: 400,        // Lv1 price; doubles per level via Game#_dblCost
   minReef: 3,       // shop-gate: appears from reef 3
-  // Metres: below this the pressure penalty stops growing. Was 240, which made
-  // the valve worthless until ~300 m and capped it at a 22% saving on the very
-  // floor — strictly dominated by the Sealed Wetsuit (-35% at EVERY depth, from
-  // reef 1, for 700g), so nobody ever bought one. At 150 it saves ~15% by 240 m
-  // and ~33% at the floor, and the line now sits just above where dark caves
-  // begin (DARKZONE.minDepthFrac), giving it a legible identity: it starts
-  // paying where the water turns dark. Balance pass 2026-09-01.
-  holdDepthM: 150,
+  maxLevel: 3,
+  holdDepthM: 150,  // historical: the clamp Deep Reefs replaced
+  // Index = valve level (0 = none).
+  crushDepthM: [400, 720, 1160, 1820],
+  drainDiscount: [0, 0.40, 0.63, 0.76],
 };
+
+function valveLevelIndex(level) {
+  const l = Number(level);
+  if (!Number.isFinite(l)) return 0;
+  return Math.max(0, Math.min(VALVE.maxLevel, Math.floor(l)));
+}
+
+// Pure: the depth (m) below which this Valve level triggers the crush alarm.
+export function crushDepthM(level) { return VALVE.crushDepthM[valveLevelIndex(level)]; }
+
+// Pure: the fraction of the depth term this Valve level removes.
+export function valveDiscount(level) { return VALVE.drainDiscount[valveLevelIndex(level)]; }
+
+// Pure: air drained per second by DEPTH alone — excludes the AIR.drainPerSec
+// baseline and every multiplier (abyss, wetsuit, extraction lapse). Two
+// segments: the unchanged linear rate down to the oxygen line, then a steeper
+// rate below it. AIR.drainDepthFactor is per WORLD UNIT and there are 10 units
+// per metre, hence the x10.
+export function airDepthTerm(depthM, valveLevel = 0) {
+  const m = Math.max(0, Number(depthM) || 0);
+  const perM = AIR.drainDepthFactor * 10;
+  const shallow = Math.min(m, DEPTH.oxygenLineM) * perM;
+  const deep = Math.max(0, m - DEPTH.oxygenLineM) * perM * DEPTH.oxygenSteepen;
+  return (shallow + deep) * (1 - valveDiscount(valveLevel));
+}
+
+// Pure: recover the crush timer as though at safe depth — the shared
+// arithmetic behind crushStep's safe branch AND the docked (boat/dive-bell)
+// path in reef/index.js. A station shelters exactly like safe water, at the
+// same 1-per-1.5s rate: recovering fully costs ~21s docked, a real decision
+// against the few seconds an air top-up takes, not a free instant clear.
+export function crushRecover(state, dt) {
+  state.phase = 'safe';
+  state.t = Math.min(DEPTH.crushTimer, state.t + dt / DEPTH.crushRecoverRatio);
+  return state;
+}
+
+// Pure: advance the crush state machine by dt. `state` is { phase, t } where
+// phase is 'safe' | 'alarmed' | 'crushed' and t is the seconds of timer left.
+// Mutates and returns state (called every frame; allocating per frame would be
+// wasteful). 'crushed' is terminal — the dive is over, and ascending does not
+// undo it.
+export function crushStep(state, depthM, valveLevel, dt) {
+  if (state.phase === 'crushed') return state;
+  const limit = crushDepthM(valveLevel);
+  if (depthM > limit) {
+    state.phase = 'alarmed';
+    state.t -= dt;
+    if (state.t <= 0) { state.t = 0; state.phase = 'crushed'; }
+    return state;
+  }
+  return crushRecover(state, dt);
+}
 export const FLARE = {
   startCount: 2,
   duration: 16,         // seconds a flare burns (long, to offset the darker caves)

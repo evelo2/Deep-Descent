@@ -3,7 +3,7 @@
 // Run: node tests/game/economy.test.mjs
 
 import { Reef } from '../../src/minigames/reef/index.js';
-import { GAME, GOLD, RELIC, BELL } from '../../src/config.js';
+import { GAME, GOLD, RELIC, BELL, LIVES } from '../../src/config.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -12,22 +12,24 @@ const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL
 check('gold rate tightened to 0.2', Math.abs(GOLD.rate - 0.2) < 1e-9);
 check('reef goal raised (12000 base / 2500 per reef)', RELIC.goalBase === 12000 && RELIC.goalPerReef === 2500);
 check('dive bells scarcer (1 per reef)', BELL.count === 1);
-check('air penalty steeper (0.15/reef)', Math.abs(GAME.oxygenPenaltyPerReef - 0.15) < 1e-9);
-check('lives are capped', GAME.maxLives === 5);
+check('lives ceiling is a Dry Dock unlock: base 3, cap 6 (no free 5 anymore)', LIVES.baseMax === 3 && LIVES.capMax === 6);
 check('first extra life costs more (8000) and escalates (+6000)', GAME.firstLifeScore === 8000 && GAME.lifeScoreStep === 6000);
 check('a hit spills carried loot', GAME.hitLootPenalty > 0 && GAME.hitLootPenalty <= 0.5);
 
-// --- Extra-life thresholds: escalate and cap (models update()'s award loop). ---
-function livesAfter(score, startLives) {
+// --- Extra-life thresholds: escalate and cap at whatever ceiling the Dry Dock
+// has unlocked (models update()'s award loop, which caps at this.meta.lifeMax
+// rather than a fixed constant). ---
+function livesAfter(score, startLives, lifeMax) {
   let lives = startLives, next = GAME.firstLifeScore;
-  while (lives < GAME.maxLives && score >= next) { lives += 1; next += GAME.lifeScoreStep; }
+  while (lives < lifeMax && score >= next) { lives += 1; next += GAME.lifeScoreStep; }
   return lives;
 }
-check('no bonus life below the first threshold', livesAfter(7999, 3) === 3);
-check('first bonus life at 8000', livesAfter(8000, 3) === 4);
-check('second bonus life at 14000 (8000+6000)', livesAfter(14000, 3) === 5);
-check('lives cap at maxLives — no snowball', livesAfter(1_000_000, 3) === GAME.maxLives);
-check('cap holds even from a high start', livesAfter(1_000_000, 5) === 5);
+check('no bonus life below the first threshold', livesAfter(7999, 3, LIVES.capMax) === 3);
+check('first bonus life at 8000', livesAfter(8000, 3, LIVES.capMax) === 4);
+check('second bonus life at 14000 (8000+6000)', livesAfter(14000, 3, LIVES.capMax) === 5);
+check('lives cap at the unlocked ceiling — no snowball (lifeMax = 3, the base)', livesAfter(1_000_000, 3, 3) === 3);
+check('a higher unlocked ceiling raises the cap too (lifeMax = 6, the max)', livesAfter(1_000_000, 3, 6) === 6);
+check('cap holds even from a high start', livesAfter(1_000_000, 5, 5) === 5);
 
 // --- On-hit loot penalty: driving the real Reef.prototype._hit(). -------------
 function hitStub(carried, lives) {

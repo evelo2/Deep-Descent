@@ -1,12 +1,13 @@
 // The reef's depth gauge: a vertical column down the right edge showing the
 // whole water column, a marker at the diver's live depth, a ghost pip at the
-// deepest point of the dive, and — once the Depth Valve is owned — its line
-// plus the tinted "held pressure" zone below it. The arithmetic is pure and
-// asserted directly; the painting is proved against a recording 2D context.
+// deepest point of the dive, an amber oxygen band and a red crush band (with
+// its "⚠" line always drawn, flashing on approach), and a countdown while the
+// crush alarm is running. The arithmetic is pure and asserted directly; the
+// painting is proved against a recording 2D context.
 // Run: node tests/render/depthgauge.test.mjs
 
-import { WORLD } from '../../src/config.js';
-import { metresDown, floorDepthM, gaugeRect, depthToY, tickMarks, drawDepthGauge } from '../../src/render/depthgauge.js';
+import { WORLD, DEPTH, crushDepthM } from '../../src/config.js';
+import { metresDown, floorDepthM, gaugeRect, depthToY, tickMarks, drawDepthGauge, gaugeTickStep } from '../../src/render/depthgauge.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -73,10 +74,13 @@ check('below the floor clamps to the bottom', depthToY(999, 411, 100, 500) === 5
   check('ticks cover the column', t.length === 9);
 }
 
-// ---- drawing: no valve owned ----------------------------------------------
+// ---- drawing: baseline (safe, well clear of the crush line) ---------------
 {
   const ctx = recordingCtx();
-  drawDepthGauge(ctx, { W: 900, H: 600, depth: 118, deepest: 162, valveDepth: null });
+  drawDepthGauge(ctx, {
+    W: 900, H: 600, depth: 118, deepest: 162,
+    crushDepth: 400, oxygenLine: 250, crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+  });
   const texts = ctx._fills.map((f) => f.str);
   const R = gaugeRect(900, 600);
 
@@ -86,7 +90,10 @@ check('below the floor clamps to the bottom', depthToY(999, 411, 100, 500) === 5
   check('the 50 m ticks are drawn but not labelled', !texts.includes('50') && !texts.includes('150'));
   check('the labels sit to the RIGHT of the column, out over the water',
     ctx._fills.every((f) => f.x >= R.x));
-  check('no valve marker is drawn when the valve is not owned', !texts.some((s) => s.includes('⚲')));
+  // There is no valve-ownership gate any more: the crush line is ALWAYS drawn,
+  // since crush depth applies whether or not a Valve was ever bought.
+  check('the crush line is always drawn, with its depth',
+    texts.some((s) => s.includes('⚠') && s.includes('400')));
 
   const yNow = depthToY(118, floorDepthM(), R.top, R.bottom);
   const yDeep = depthToY(162, floorDepthM(), R.top, R.bottom);
@@ -99,25 +106,37 @@ check('below the floor clamps to the bottom', depthToY(999, 411, 100, 500) === 5
 // ---- drawing: the ghost pip is pointless when you are at your deepest ------
 {
   const ctx = recordingCtx();
-  drawDepthGauge(ctx, { W: 900, H: 600, depth: 118, deepest: 118, valveDepth: null });
+  drawDepthGauge(ctx, {
+    W: 900, H: 600, depth: 118, deepest: 118,
+    crushDepth: 400, oxygenLine: 250, crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+  });
   const R = gaugeRect(900, 600);
   const y = depthToY(118, floorDepthM(), R.top, R.bottom);
   check('no ghost pip when the deepest point IS the current depth',
     !ctx._rects.some((r) => Math.abs(r.y - y) < 2 && r.h <= 3));
 }
 
-// ---- drawing: the Depth Valve owned ---------------------------------------
+// ---- drawing: the oxygen and crush bands are tinted ------------------------
 {
   const ctx = recordingCtx();
-  drawDepthGauge(ctx, { W: 900, H: 600, depth: 118, deepest: 118, valveDepth: 240 });
+  drawDepthGauge(ctx, {
+    W: 900, H: 600, depth: 118, deepest: 118,
+    crushDepth: 400, oxygenLine: 250, crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+  });
   const texts = ctx._fills.map((f) => f.str);
+  const rectFills = ctx._rects.map((r) => r.fillStyle);
   const R = gaugeRect(900, 600);
-  const vy = depthToY(240, floorDepthM(), R.top, R.bottom);
+  const cdY = depthToY(400, floorDepthM(), R.top, R.bottom);
+  const oyY = depthToY(250, floorDepthM(), R.top, R.bottom);
 
-  check('the valve line is labelled at its depth', texts.some((s) => s.includes('240')));
-  check('the valve label carries the valve glyph', texts.some((s) => s.includes('⚲')));
-  check('the held zone is tinted from the valve line down to the floor',
-    ctx._rects.some((r) => Math.abs(r.y - vy) < 2 && Math.abs((r.y + r.h) - R.bottom) < 2 && r.h > 10));
+  check('the crush line is labelled at its depth', texts.some((s) => s.includes('400')));
+  check('the crush label carries the crush glyph', texts.some((s) => s.includes('⚠')));
+  check('an amber oxygen band is painted', rectFills.some((f) => f.includes('255,176,64')));
+  check('a red crush band is painted', rectFills.some((f) => f.includes('255,64,64')));
+  check('the crush band runs from the crush line down to the floor',
+    ctx._rects.some((r) => r.fillStyle.includes('255,64,64') && Math.abs(r.y - cdY) < 2 && Math.abs((r.y + r.h) - R.bottom) < 2 && r.h > 10));
+  check('the oxygen band runs from the oxygen line down to the floor',
+    ctx._rects.some((r) => r.fillStyle.includes('255,176,64') && Math.abs(r.y - oyY) < 2 && Math.abs((r.y + r.h) - R.bottom) < 2 && r.h > 10));
 }
 
 // ---- drawing: the reading must not print on top of a tick label -----------
@@ -125,7 +144,10 @@ check('below the floor clamps to the bottom', depthToY(999, 411, 100, 500) === 5
   const ctx = recordingCtx();
   // Parked exactly on the 200 m tick. The bold live reading and that tick's
   // label are both right-aligned to nearly the same x, so the label gives way.
-  drawDepthGauge(ctx, { W: 900, H: 600, depth: 200, deepest: 200, valveDepth: null });
+  drawDepthGauge(ctx, {
+    W: 900, H: 600, depth: 200, deepest: 200,
+    crushDepth: 400, oxygenLine: 250, crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+  });
   const texts = ctx._fills.map((f) => f.str);
   check('the tick label under the marker is suppressed', !texts.includes('200'));
   check('the live reading is still printed', texts.some((s) => s.includes('200 m')));
@@ -137,11 +159,88 @@ check('below the floor clamps to the bottom', depthToY(999, 411, 100, 500) === 5
   // The floor cap ("411 m") sits ~12px under the 400 m tick. Same rule as the
   // marker: the tick label gives way rather than printing on top of it.
   const ctx = recordingCtx();
-  drawDepthGauge(ctx, { W: 900, H: 600, depth: 10, deepest: 10, valveDepth: null });
+  drawDepthGauge(ctx, {
+    W: 900, H: 600, depth: 10, deepest: 10,
+    crushDepth: 400, oxygenLine: 250, crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+  });
   const texts = ctx._fills.map((f) => f.str);
   check('the last tick label gives way to the floor cap', !texts.includes('400'));
   check('the floor cap itself is printed', texts.some((s) => s.includes('411')));
   check('tick labels clear of the cap are unaffected', texts.includes('200') && texts.includes('300'));
+}
+
+// ---- gaugeTickStep: tick spacing must scale with the tier ------------------
+{
+  const t1 = gaugeTickStep(411);
+  check('tier 1 keeps the 50/100 m spacing it always had', t1.tick === 50 && t1.label === 100);
+  const t4 = gaugeTickStep(1800);
+  check('an 1800 m column uses coarser ticks', t4.tick > 50);
+  check('an 1800 m column labels no more than 10 times', 1800 / t4.label <= 10);
+  check('labels are always a whole multiple of ticks', t4.label % t4.tick === 0);
+  check('tick spacing never shrinks as the world deepens', gaugeTickStep(1150).tick >= t1.tick);
+}
+
+// ---- drawing at tier-4 scale: bands, approach flash, alarm countdown -------
+{
+  WORLD.WH = 18090;   // tier 4 (1800 m), so a Lv1 crush depth (720 m) is on-scale
+
+  // The danger bands are painted, with the crush line labelled at its depth.
+  {
+    const ctx = recordingCtx();
+    drawDepthGauge(ctx, {
+      W: 900, H: 600, depth: 100, deepest: 100,
+      crushDepth: crushDepthM(1), oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: 'safe', crushT: DEPTH.crushTimer, t: 0,
+    });
+    const rectFills = ctx._rects.map((r) => r.fillStyle);
+    const texts = ctx._fills.map((f) => f.str);
+    check('an amber oxygen band is painted at tier-4 scale', rectFills.some((f) => f.includes('255,176,64')));
+    check('a red crush band is painted at tier-4 scale', rectFills.some((f) => f.includes('255,64,64')));
+    check('the crush line is labelled with its depth', texts.some((s) => s.includes('720')));
+  }
+
+  // Approaching the crush line while still safe flashes the band + line.
+  {
+    const near = DEPTH.approachWarnM - 5;   // just inside the warning band
+    const a = recordingCtx(), b = recordingCtx();
+    const args = (t) => ({
+      W: 900, H: 600, depth: crushDepthM(1) - near, deepest: 0,
+      crushDepth: crushDepthM(1), oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: 'safe', crushT: DEPTH.crushTimer, t,
+    });
+    drawDepthGauge(a, args(0));
+    drawDepthGauge(b, args(0.5));   // half a flash period later
+    check('the gauge paints differently as it flashes on approach',
+      JSON.stringify(a._rects) !== JSON.stringify(b._rects));
+  }
+
+  // Not approaching (well clear of the line, still safe) does not flash.
+  {
+    const a = recordingCtx(), b = recordingCtx();
+    const args = (t) => ({
+      W: 900, H: 600, depth: 100, deepest: 0,
+      crushDepth: crushDepthM(1), oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: 'safe', crushT: DEPTH.crushTimer, t,
+    });
+    drawDepthGauge(a, args(0));
+    drawDepthGauge(b, args(0.5));
+    check('well clear of the crush line, the bands do not flash',
+      JSON.stringify(a._rects) === JSON.stringify(b._rects));
+  }
+
+  // Alarm: the countdown prints the seconds remaining.
+  {
+    const ctx = recordingCtx();
+    drawDepthGauge(ctx, {
+      W: 900, H: 600, depth: 900, deepest: 900,
+      crushDepth: crushDepthM(1), oxygenLine: DEPTH.oxygenLineM,
+      crushPhase: 'alarmed', crushT: 7.4, t: 0,
+    });
+    const texts = ctx._fills.map((f) => f.str);
+    check('the alarm prints the seconds remaining', texts.some((s) => s.includes('7.4')));
+  }
+
+  WORLD.WH = 4200;   // restore the tier-1 world for anything importing later
 }
 
 console.log(`ok depthgauge.test.mjs (${passed} checks)`);

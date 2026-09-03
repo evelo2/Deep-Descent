@@ -5,7 +5,7 @@ import { VERSION } from './version.js';
 import { Harpoon } from './entities/harpoon.js';
 import { Net } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
-import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE } from './config.js';
+import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE, LIVES } from './config.js';
 import { makeReef } from './minigames/reef/index.js';
 import { text, panel, overlay, keycap, mmss } from './render/chrome.js';
 import { loadSalvage, saveSalvage, availableSkips, skipStartGold } from './meta/salvage.js';
@@ -21,9 +21,11 @@ const CONTROLS_KEY = 'deepdescent.controls';
 // (main.js sizes them on resize): the 900x600 core is always on screen and the
 // long axis is extended out to the edges. They're module-level `let` so all
 // HUD / menu / camera layout here — and input.js + render, which read WORLD.W/H
-// — follow the live size. WW/WH (the scrollable world) stay fixed.
+// — follow the live size.
 let { W, H } = WORLD;
-const { WW, WH, OPEN_BAND, CELL } = WORLD;
+// WW/WH are LIVE — setWorldSize(reef) reassigns them per world tier, exactly as
+// setViewport reassigns W/H. Capturing them here would pin a stale world.
+const { OPEN_BAND, CELL } = WORLD;
 
 // Called by main.js whenever the viewport resizes/rotates. Updates both the
 // module-level W/H used throughout this file and WORLD.W/H used by input.js and
@@ -247,6 +249,11 @@ export class Game {
     if (this.meta.slots < SALVAGE.maxSlots) {
       rows.push({ kind: 'slot', id: 'slot', label: `➕ Loadout slot (${this.meta.slots} → ${this.meta.slots + 1})`, cost: this._dblCost(SALVAGE.slotCostBase, this.meta.slots - SALVAGE.startSlots) });
     }
+    if (this.meta.lifeMax < LIVES.capMax) {
+      rows.push({ kind: 'life', id: 'life',
+        label: `❤️ Max lives (${this.meta.lifeMax} → ${this.meta.lifeMax + 1})`,
+        cost: this._dblCost(LIVES.costBase, this.meta.lifeMax - LIVES.baseMax) });
+    }
     rows.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
     return rows;
   }
@@ -287,6 +294,9 @@ export class Game {
     if (row.kind === 'slot') {
       if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
       this.meta.salvage -= row.cost; this.meta.slots += 1; saveSalvage(this.meta); this.audio.bank();
+    } else if (row.kind === 'life') {
+      if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
+      this.meta.salvage -= row.cost; this.meta.lifeMax += 1; saveSalvage(this.meta); this.audio.bank();
     } else if (row.kind === 'relic') {
       const wasRented = (this.meta.rentals[row.id] || 0) > 0;
       if (!rentRelic(this.meta, row.id)) { this.ddDeny = 0.6; this.audio.gasp(); return; }
@@ -474,6 +484,13 @@ export class Game {
       screen.push({ id: 'badgesclose', x: W / 2 - 85, y: 552, w: 170, h: 34 });
     }
     if (this.state === 'about') screen.push({ id: 'aboutclose', x: 0, y: 0, w: W, h: H });   // tap anywhere closes
+    // The depth-warning modal (_warnScreen's "Tap to continue") has no button
+    // chrome to hit on touch — without this rect a touch player could not
+    // dismiss it at all (no gameplay buttons exist for 'warn', and main.js's
+    // touchstart-anywhere shortcut only covers 'menu'/'gameover'), soft-locking
+    // the run the first time oxygen/crush depth is crossed. Same tap-anywhere
+    // pattern as 'aboutclose' just above.
+    if (this.state === 'warn') screen.push({ id: 'warnclose', x: 0, y: 0, w: W, h: H });
     if (this.state === 'shop' && this._reef) {
       const items = this._reef._shopItems();   // shop is reef-owned (P6)
       items.forEach((it, i) => { const r = this._reef._shopRow(i); screen.push({ id: 'shop' + i, x: r.x, y: r.y, w: r.w, h: r.h }); });
@@ -684,10 +701,10 @@ export class Game {
     this._panel();
     // Post-P6 the run summary lives on the reef MiniGame; the shell reads it back.
     const s = (this._reef && this._reef.finalStats()) || {};
-    const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : 'OUT OF AIR';
+    const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : s.deathCause === 'crushed' ? 'CRUSHED' : 'OUT OF AIR';
     this._text(title, cx, 220, 48, s.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
     if (!s.won) {
-      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : 'You ran out of air';
+      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : s.deathCause === 'crushed' ? 'The pressure took you' : 'You ran out of air';
       this._text(sub, cx, 256, 15, '#ff9a6b', 'center', 'middle');
     }
     this._text(`SCORE ${s.score || 0}`, cx, 290, 30, PAL.hudText, 'center', 'middle');

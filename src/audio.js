@@ -3,6 +3,7 @@
 // summed into its own bus so it can be muted without silencing the SFX.
 import { Music } from './music/index.js';
 import { SeaLife } from './sealife.js';
+import { Klaxon } from './klaxon.js';
 
 export class Audio {
   constructor() {
@@ -15,6 +16,7 @@ export class Audio {
     this.music = null;
     this.musicMuted = false;
     this.sealife = null;
+    this.klaxon = null;
   }
 
   // Must be created after a user gesture (browser autoplay policy).
@@ -32,6 +34,9 @@ export class Audio {
     // mute covers it and the music toggle does not.
     this.sealife = new SeaLife(this.ctx, this.master);
     this.sealife.start();
+    // Same reasoning as sealife: a gameplay signal, not score, so it hangs off
+    // master and follows the master mute (M), not the music toggle (J).
+    this.klaxon = new Klaxon(this.ctx, this.master);
   }
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
@@ -75,6 +80,9 @@ export class Audio {
   setShade(s) { if (this.music) this.music.setShade(s); }
   // The sea-life bed varies by zone as well as by depth.
   setZone(z) { if (this.sealife) this.sealife.setZone(z); }
+  // The crush-depth emergency klaxon — a gameplay signal, follows the master
+  // mute (M), not the music toggle (J). Safe to call before ensure().
+  setKlaxon(on) { if (this.klaxon) this.klaxon.set(on); }
   toggleMusicMuted() {
     this.musicMuted = !this.musicMuted;
     if (this.music) this.music.setMuted(this.musicMuted);

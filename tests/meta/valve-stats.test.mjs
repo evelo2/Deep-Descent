@@ -6,7 +6,7 @@
 // gate reef and did not already own one) and `legacy:valveBought` the
 // numerator, so bought/offered is the attach rate. Comparing against `dives`
 // would not answer the question: most runs end before the gate reef and were
-// never offered one at all. Both are 0-or-1 per run — hasValve resets each run.
+// never offered one at all. Both are 0-or-1 per run — valveLevel resets each run.
 //
 // These are also the FIRST namespaced stat keys. Every counter that shipped
 // before P11.1 is bare and grandfathered; everything new must be

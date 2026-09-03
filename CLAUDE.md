@@ -32,16 +32,16 @@ file you are editing — never import a habit from another file.**
 
 | Style | Signature | Files | Where |
 |---|---|---|---|
-| name-first (majority) | `check(name, cond)` | 62 | everywhere |
-| cond-first | `check(cond, msg)` | 24 | mostly `tests/core/` |
-| name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | all of `tests/stage/` + `tests/creatures/` |
+| name-first (majority) | `check(name, cond)` | 71 | everywhere |
+| cond-first | `check(cond, msg)` | 25 | scattered (heaviest in `tests/minigames/match3/`) |
+| name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | `tests/creatures/` + part of `tests/stage/` |
 
 The two `check` styles are the dangerous pair: mixing them **silently
 always-passes** — calling `check(1 === 2, 'msg')` in a name-first file evaluates
 `cond = 'msg'`, which is truthy, so a false assertion reports success. The
 `assert` files also print per-check `ok`/`FAIL` lines as they go and exit
-non-zero from `done()`. Census verified 2026-09-02 against all 102 test files
-(62 + 24 + 16 = 102).
+non-zero from `done()`. Census verified 2026-09-02 against all 112 test files
+(71 + 25 + 16 = 112).
 
 Every test ends by printing its own summary line — `` console.log(`ok foo.test.mjs (${pass} checks)`) ``
 in the `check` files, `done()` in the `assert` ones.
