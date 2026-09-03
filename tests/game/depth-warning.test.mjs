@@ -25,6 +25,10 @@ check('and it still fires at that level\'s own line',
   warnKindFor(crushDepthM(3) - 5, 3, { oxygenLine: true, crushLine: false }) === 'crushLine');
 check('both seen means silence forever',
   warnKindFor(crushDepthM(0) + 100, 0, { oxygenLine: true, crushLine: true }) === null);
+check('a null seen is treated as nothing seen (does not throw)',
+  warnKindFor(crushDepthM(0) - 5, 0, null) === 'crushLine');
+check('an undefined seen is treated as nothing seen (does not throw)',
+  warnKindFor(50, 0, undefined) === null);
 
 console.log(`ok depth-warning.test.mjs (${passed} checks)`);
 if (failed > 0) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }

@@ -24,9 +24,11 @@ export const WARN_COPY = {
 
 // depthM: the diver's depth. valveLevel: 0-3. seen: { oxygenLine, crushLine }.
 // Returns the warning to show, or null. The crush warning outranks the oxygen
-// one — it is the lethal one.
+// one — it is the lethal one. Pure and total: a missing/null/undefined `seen`
+// (or missing keys within it) is treated as nothing seen yet, never thrown.
 export function warnKindFor(depthM, valveLevel, seen) {
-  if (!seen.crushLine && depthM > crushDepthM(valveLevel) - DEPTH.approachWarnM) return 'crushLine';
-  if (!seen.oxygenLine && depthM > DEPTH.oxygenLineM - DEPTH.approachWarnM) return 'oxygenLine';
+  const s = seen || {};
+  if (!s.crushLine && depthM > crushDepthM(valveLevel) - DEPTH.approachWarnM) return 'crushLine';
+  if (!s.oxygenLine && depthM > DEPTH.oxygenLineM - DEPTH.approachWarnM) return 'oxygenLine';
   return null;
 }
