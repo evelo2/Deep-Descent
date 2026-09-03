@@ -16,8 +16,10 @@ const PERIOD = 0.9; // seconds per alternation
 // far louder than the same amplitude on a sine or triangle. It does not need
 // volume to grab attention — an alternating two-tone horn is conspicuous by
 // character. Compare: ambient hum 0.12, music tension send 0.18, sea-life
-// calls 0.09. Was 0.22, judged too loud in play 2026-09-02.
-const PEAK = 0.12;
+// calls 0.09. Was 0.22, then 0.12 — both judged too loud in play 2026-09-02.
+// At 0.08 it sits UNDER the ambient bed, which is right: it is a continuous
+// square wave competing with a score, not a one-shot.
+const PEAK = 0.08;
 
 export class Klaxon {
   /** @param {any} ctx @param {any} destination */
