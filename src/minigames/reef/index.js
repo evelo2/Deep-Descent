@@ -601,14 +601,20 @@ export class Reef {
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
     // The reef's OBJECTIVE may never sit below where this diver can survive, or a
     // player who skipped the shop generates an unwinnable reef. Loot below crush
-    // depth is a temptation; the thing you must have to sail on is not.
+    // depth is a temptation; the thing you must have to sail on is not. EVERY path
+    // that can produce a candidate must respect relicMaxY — an unfiltered fallback
+    // (fix round 1) let the relic land arbitrarily deep whenever the primary loop
+    // missed, which is common rather than rare in the later tiers: at tier 4 an
+    // unvalved crush depth (400 m) is only ~22% of an 1800 m world, so most
+    // uniform draws from the whole column land below it. Retry generously before
+    // falling back to the clamped literal, which is the only unconditionally safe
+    // last resort.
     const relicMaxY = WORLD.SURFACE + crushDepthM(this.valveLevel) * 10;
+    const aboveCrush = (c) => c && c.y <= relicMaxY;
     let rc = null;
-    for (let i = 0; i < 12 && !rc; i++) {
-      const c = C.randomOpen(OPEN_BAND + 400);
-      if (c && c.y <= relicMaxY) rc = c;
-    }
-    rc = rc || C.randomOpen(OPEN_BAND) || { x: WORLD.WW / 2, y: Math.min(WORLD.WH * 0.5, relicMaxY) };
+    for (let i = 0; i < 40 && !rc; i++) { const c = C.randomOpen(OPEN_BAND + 400); if (aboveCrush(c)) rc = c; }
+    for (let i = 0; i < 40 && !rc; i++) { const c = C.randomOpen(OPEN_BAND);       if (aboveCrush(c)) rc = c; }
+    rc = rc || { x: WORLD.WW / 2, y: Math.min(WORLD.WH * 0.5, relicMaxY) };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
 
     // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself
