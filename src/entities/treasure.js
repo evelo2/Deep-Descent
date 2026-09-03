@@ -10,10 +10,12 @@ const VALUE = { coin: 60, chest: 250, gem: 500, blackpearl: 0 };
 const RADIUS = { coin: 10, chest: 18, gem: 12, blackpearl: 11 };
 
 export class Treasure {
-  constructor(x, y, kind) {
+  constructor(x, y, kind, valueMult = 1) {
     this.x = x; this.y = y;
     this.kind = kind;                       // 'coin' | 'chest' | 'gem' | 'blackpearl'
-    this.value = VALUE[kind] ?? 60;
+    // Deep Reefs: loose loot is worth more the deeper it sits. The multiplier is
+    // exactly 1 everywhere tier 1 can reach, so tier-1 income is unchanged.
+    this.value = Math.round((VALUE[kind] ?? 60) * valueMult);
     this.radius = RADIUS[kind] ?? 10;
     this.phase = Math.random() * Math.PI * 2;
     this.baseY = y;

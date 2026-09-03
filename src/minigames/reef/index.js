@@ -40,7 +40,7 @@ import { Relic } from '../../entities/relic.js';
 import { DiveBell } from '../../entities/divebell.js';
 import { Net, DepthCharge, SupplyCrate } from '../../entities/weapons.js';
 import { prevScheme, prompt as ctrlPrompt } from '../../controls.js';
-import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, crushRecover, DEPTH } from '../../config.js';
+import { KRAKEN, POWERUP, RELIC, GOLD, BELL, bellBankRate, WEAPON_ORDER, WEAPON_INFO, NET, CHARGE, SHOCK, SPEARGUN, SHOP, AIM, DARKZONE, FLARE, TORCH, VALVE, SALVAGE, ABYSS, SUB, WHIRL, DIVER, COLLECT_BONUS, CONSUMABLE, CONSUMABLE_BY_ID, CRATE, pickWeighted, RELIC_INFO, SPECIAL_CHEST, specialChestChance, GUARDIAN, airDepthTerm, crushDepthM, crushStep, crushRecover, DEPTH, treasureTier, treasureDepthWeight, chestValueAt, treasureValueMult } from '../../config.js';
 import { drawWhaleSkeleton, drawRib, drawThroat, drawTempleGate, drawAbyssMaw, drawWhirlMaw, drawSub, drawKey, drawDoor, drawColumn } from '../../render/props.js';
 import { StageEntrance } from '../../entities/stageentrance.js';
 import { THEMES } from '../../stage/themes.js';
@@ -110,11 +110,17 @@ export function bonusZoneChance(reef) {
 
 // Poisson-ish thinning: shuffle `list`, keep points at least `minDist` apart, up
 // to `count`. Used across world generation to scatter entities without clumping.
-function spread(list, count, minDist) {
+// Deep Reefs: an optional `weightFn(candidate) => [0,1]` rejects a shuffled
+// candidate with probability (1 - weight) before the min-dist test, biasing
+// which points survive without touching the shuffle itself. Omitted at every
+// pre-existing call site, so they draw no extra randomness and are unaffected;
+// only the treasure (shells/wrecks) call sites in _generateWorld pass one.
+function spread(list, count, minDist, weightFn) {
   const shuffled = list.slice();
   for (let i = shuffled.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
   const out = [];
   for (const c of shuffled) {
+    if (weightFn && Math.random() > weightFn(c)) continue;
     if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > minDist)) { out.push(c); if (out.length >= count) break; }
   }
   return out;
@@ -380,12 +386,18 @@ export class Reef {
     this.columns = []; this.door = null; this.key = null; this.templeExit = null; this.hasKey = false; this.powerups = []; this.bells = []; this.crates = []; this.darkZones = [];
     this.stageEntrances = []; this.abyssEntrance = null; this.abyssExits = [];
     this.whirlEntrance = null;   // reef portal (reef-owned); whirl gameplay state lives in the whirlpool MiniGame
-    const chestValue = (y) => 200 + Math.round((y / WORLD.WH) * 400);   // 200..600 by depth
+    const chestValue = (y) => chestValueAt(metresDown(y));
+
+    // Deep Reefs: treasure grows by tier (see TREASURE_TIER in config.js) and
+    // migrates downward as `bias` increases; tier 1 has bias 0, so its weight
+    // is a flat 1 everywhere and placement stays byte-identical to main.
+    const T = treasureTier(this.reef);
+    const depthWeight = (c) => treasureDepthWeight(c.y / WORLD.WH, this.reef);
 
     // Clams and chests rest on cave-floor ledges, opening and closing. Pearls
     // (clams) only appear below a minimum depth — the shallows hold chests.
     const pearlMinDepth = WORLD.WH * GAME.pearlMinDepthFrac;
-    for (const f of spread(C.floors(), 34, 150)) {
+    for (const f of spread(C.floors(), T.shells, 150, depthWeight)) {
       if (f.y > pearlMinDepth && Math.random() < 0.62) this.shells.push(new Clam(f.x, f.y - SHELL.clamRadius * 0.35));
       else this.shells.push(new Chest(f.x, f.y - SHELL.chestRadius * 0.35, chestValue(f.y)));
     }
@@ -395,20 +407,35 @@ export class Reef {
       const deep = C.floors(WORLD.WH * SHELL.giantMinDepthFrac);
       if (deep.length) { const g = deep[(Math.random() * deep.length) | 0]; this.shells.push(new GiantClam(g.x, g.y - SHELL.giantRadius * 0.35)); }
     }
-    // Scattered coins & gems drift in open water.
-    for (let i = 0; i < 40; i++) {
-      const c = C.randomOpen(); if (!c) continue;
-      this.treasures.push(new Treasure(c.x, c.y, Math.random() < 0.14 + (c.y / WORLD.WH) * 0.18 ? 'gem' : 'coin'));
+    // Scattered coins & gems drift in open water. Deep Reefs: a candidate point
+    // is kept in proportion to its depth weight (a few retries, then take
+    // whatever comes), so the shallows of a late reef thin out while the deep
+    // fills in; tier 1's weight is always 1 so it never rejects. Value keys off
+    // absolute metres via treasureValueMult, exactly 1 within tier-1 depths.
+    const keepByDepth = (y) => Math.random() < treasureDepthWeight(y / WORLD.WH, this.reef);
+    const pickDeep = (candidates) => {
+      for (let tries = 0; tries < 8; tries++) {
+        const c = candidates(); if (!c) return null;
+        if (keepByDepth(c.y)) return c;
+      }
+      return candidates();
+    };
+    for (let i = 0; i < T.loose; i++) {
+      const c = pickDeep(() => C.randomOpen()); if (!c) continue;
+      const kind = Math.random() < 0.14 + (c.y / WORLD.WH) * 0.18 ? 'gem' : 'coin';
+      this.treasures.push(new Treasure(c.x, c.y, kind, treasureValueMult(metresDown(c.y))));
     }
     // Treasure-sweep bonus baseline: total loose treasure this reef, and which
     // completion tiers (80/90/100%) have paid out (see the check in update()).
     this._reefTreasureTotal = this.treasures.length; this._collectTier = 0;
 
-    // Air vents on cave walls, spread out.
+    // Air vents on cave walls, spread out. Deliberately NOT scaled or biased —
+    // fewer oxygen stops per unit area is the design's intended deep-water
+    // squeeze; see the Deep Reefs spec.
     for (const w of spread(C.walls(), 14, 360)) this.vents.push(new AirVent(w.x, w.y, w.side));
 
     // Shipwrecks seated on chamber floors, with a big chest on the deck + gems.
-    for (const ch of spread(C.chambers(), 4, 700)) {
+    for (const ch of spread(C.chambers(), T.wrecks, 700, depthWeight)) {
       const floorY = C.surfaceBelow(ch.x, ch.y, 300);
       this.wrecks.push(new Wreck(ch.x, floorY - 42));
       const cx = ch.x, cy = floorY - 66;
@@ -572,7 +599,16 @@ export class Reef {
     // The reef's relic objective + this reef's high points fallback.
     this.reefBanked = 0; this.relicBanked = false; this.carryingRelic = false;
     this.reefGoal = RELIC.goalBase + (this.reef - 1) * RELIC.goalPerReef;
-    const rc = C.randomOpen(OPEN_BAND + 400) || C.randomOpen(OPEN_BAND) || { x: WORLD.WW / 2, y: WORLD.WH * 0.5 };
+    // The reef's OBJECTIVE may never sit below where this diver can survive, or a
+    // player who skipped the shop generates an unwinnable reef. Loot below crush
+    // depth is a temptation; the thing you must have to sail on is not.
+    const relicMaxY = WORLD.SURFACE + crushDepthM(this.valveLevel) * 10;
+    let rc = null;
+    for (let i = 0; i < 12 && !rc; i++) {
+      const c = C.randomOpen(OPEN_BAND + 400);
+      if (c && c.y <= relicMaxY) rc = c;
+    }
+    rc = rc || C.randomOpen(OPEN_BAND) || { x: WORLD.WW / 2, y: Math.min(WORLD.WH * 0.5, relicMaxY) };
     this.relic = new Relic(rc.x, rc.y, RELIC.types[(Math.random() * RELIC.types.length) | 0]);
 
     // Black Pearls (Salvage Log): 1-2 per reef, seeded deep — the depth itself

@@ -54,6 +54,46 @@ export function setWorldSize(reef) {
   WORLD.WW = WW; WORLD.WH = WH;
 }
 
+// --- Deep Reefs: the deep economy ------------------------------------------
+// Spawn counts are ABSOLUTE, not densities, so a 7.5x larger tier-4 world would
+// be drastically emptier if these did not grow. They grow more slowly than area
+// on purpose: a deep reef should feel vast and sparse with its wealth
+// CONCENTRATED. `bias` drives the downward migration (0 = uniform).
+export const TREASURE_TIER = [
+  { loose: 40,  shells: 34,  wrecks: 4,  bias: 0    },   // tier 1 — unchanged from main
+  { loose: 70,  shells: 50,  wrecks: 6,  bias: 0.45 },
+  { loose: 110, shells: 72,  wrecks: 9,  bias: 0.70 },
+  { loose: 160, shells: 100, wrecks: 12, bias: 0.85 },
+];
+export function treasureTier(reef) { return TREASURE_TIER[worldTier(reef)]; }
+
+// Pure: how much a candidate spawn point at `depthFrac` (0 = surface, 1 = floor)
+// is favoured, in [0,1]. Used as a rejection weight at the existing spread() /
+// randomOpen() call sites — no new spawn code. Tier 1 returns a flat 1.
+export function treasureDepthWeight(depthFrac, reef) {
+  const b = treasureTier(reef).bias;
+  const raw = Number(depthFrac);
+  const f = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
+  return (1 - b) + b * f * f;
+}
+
+// Pure: a chest's value at an ABSOLUTE depth. The old form was
+// 200 + (y / WH) * 400, which topped out at 600 at ANY tier's floor — 1800 m
+// would have paid exactly what 411 m pays. Keyed to tier1FloorM so tier-1
+// payouts are bit-for-bit what they were.
+export function chestValueAt(depthM) {
+  const m = Math.max(0, Number(depthM) || 0);
+  return 200 + Math.round((m / tier1FloorM) * 400);
+}
+
+// Pure: the value multiplier on loose coins/gems. Exactly 1 everywhere tier 1
+// can reach, so tier-1 income is unchanged; it only opens up in water that
+// tier 1 does not have.
+export function treasureValueMult(depthM) {
+  const m = Math.max(0, Number(depthM) || 0);
+  return 1 + Math.max(0, m - tier1FloorM) / 700;
+}
+
 // The 900×600 core is the design reference; the visible logical viewport is
 // extended along the LONG axis to match the device aspect so the canvas fills
 // the screen instead of letterboxing inside a fixed 3:2 box. The core is always
