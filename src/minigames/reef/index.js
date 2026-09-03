@@ -300,6 +300,10 @@ export class Reef {
     this.runValveOffered = 0; this.runValveBought = 0;
     // Crush-timer telemetry (see the update() crush block below).
     this.runCrushAlarmed = 0; this.runCrushEscapes = 0; this.runCrushDeaths = 0;
+    // A fresh run always starts safe at the surface — reset the state machine
+    // itself, not just the klaxon, so a diver who died alarmed doesn't carry
+    // even a one-frame flash of the horn into the new dive.
+    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
@@ -1235,6 +1239,14 @@ export class Reef {
 
   update(dt) {
     W = WORLD.W; H = WORLD.H;   // live viewport (setViewport mutates WORLD)
+    // Authoritative klaxon drive: runs before every early return in this
+    // function (menu/shop/drydock/sailing/help/stage/whirlpool/etc.), so the
+    // horn can never outlive the alarm — a diver who was alarmed in the reef
+    // and then enters a stage or whirlpool, docks, dies, or starts a new run
+    // has it forced off on the very next frame, because this line re-derives
+    // it fresh from state every single call rather than being toggled once
+    // and trusted to be turned off again by whichever branch ends the frame.
+    this.audio.setKlaxon(this._crush.phase === 'alarmed' && this.zone === 'reef');
     this.t += dt;
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 3);
