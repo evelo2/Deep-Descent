@@ -19,7 +19,7 @@
 // LIVE VIEWPORT: W/H are re-synced from WORLD (the shared, setViewport-mutated
 // source of truth) at the top of update()/render() each frame.
 
-import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL, setWorldSize } from '../../config.js';
+import { WORLD, AIR, GAME, CAVE, HARPOON, SHARK, SHELL, BUBBLE, PAL, setWorldSize, LIVES } from '../../config.js';
 import { Diver } from '../../entities/diver.js';
 import { Boat } from '../../entities/boat.js';
 import { Clam, Chest, GiantClam } from '../../entities/shell.js';
@@ -1734,8 +1734,10 @@ export class Reef {
     this.powerups = this.powerups.filter((p) => !p.taken);
     this.crates = this.crates.filter((c) => !c.taken);
 
-    // Extra lives at escalating score thresholds, capped so they can't snowball.
-    while (this.lives < GAME.maxLives && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
+    // Extra lives at escalating score thresholds, capped at the Dry Dock's
+    // unlocked ceiling so they can't snowball past it.
+    const lifeCeiling = this.meta.lifeMax || LIVES.baseMax;
+    while (this.lives < lifeCeiling && this.score >= this.nextLifeScore) { this.lives += 1; this.nextLifeScore += GAME.lifeScoreStep; this.oneUpT = 2.2; this.audio.bank(); }
 
     if (this.zone === 'reef' && this.shells.every((s) => !s.hasLoot) && this.treasures.length === 0 && this.carried === 0 && this.carriedPearls === 0 && this.diver.atSurface) this._win();
 

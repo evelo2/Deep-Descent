@@ -3,14 +3,15 @@
 // Node-testable without a DOM: pass a fake `store` (getItem/setItem) in tests;
 // in the browser it defaults to `localStorage`.
 
-import { SALVAGE, SKIP, RENTAL } from '../config.js';
+import { SALVAGE, SKIP, RENTAL, LIVES } from '../config.js';
 import { getRelic } from './relics.js';
 
 const KEY_V1 = 'deepdescent.salvage.v1';   // legacy: had permanent `unlocked[]`
 const KEY_V2 = 'deepdescent.salvage.v2';   // current: `rentals{ id -> divesLeft }`
 
 export function defaultSalvage() {
-  return { salvage: 0, rentals: {}, slots: SALVAGE.startSlots, loadout: [], reefRelics: {} };
+  return { salvage: 0, rentals: {}, slots: SALVAGE.startSlots, loadout: [], reefRelics: {},
+           lifeMax: LIVES.baseMax, seen: { oxygenLine: false, crushLine: false } };
 }
 
 function resolveStore(store) {
@@ -29,6 +30,21 @@ function sanitizeSalvage(n) {
 
 function sanitizeArray(a) {
   return Array.isArray(a) ? a : [];
+}
+
+function clampLifeMax(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return LIVES.baseMax;
+  return Math.min(LIVES.capMax, Math.max(LIVES.baseMax, Math.round(n)));
+}
+
+// The one-time warning modals' seen flags. They live HERE and not in
+// deepdescent.progress.v1, which sanitizes to { earned: [...] } filtered
+// against ID_SET on every save and would silently discard them.
+function sanitizeSeen(o) {
+  return {
+    oxygenLine: !!(o && typeof o === 'object' && o.oxygenLine === true),
+    crushLine:  !!(o && typeof o === 'object' && o.crushLine === true),
+  };
 }
 
 // reefRelics: a bag of found reef-objective relics, keyed by reef number →
@@ -91,6 +107,8 @@ export function loadSalvage(store) {
     slots: clampSlots(merged.slots),
     loadout,
     reefRelics: sanitizeReefRelics(merged.reefRelics),
+    lifeMax: clampLifeMax(merged.lifeMax),
+    seen: sanitizeSeen(merged.seen),
   };
 }
 
@@ -98,8 +116,9 @@ export function saveSalvage(state, store) {
   const s = resolveStore(store);
   if (!s) return;
   try {
-    const { salvage, rentals, slots, loadout, reefRelics } = state;
-    s.setItem(KEY_V2, JSON.stringify({ salvage, rentals: rentals || {}, slots, loadout, reefRelics: reefRelics || {} }));
+    const { salvage, rentals, slots, loadout, reefRelics, lifeMax, seen } = state;
+    s.setItem(KEY_V2, JSON.stringify({ salvage, rentals: rentals || {}, slots, loadout,
+      reefRelics: reefRelics || {}, lifeMax: clampLifeMax(lifeMax), seen: sanitizeSeen(seen) }));
   } catch (e) {
     // Persistence must never throw (private-mode / quota / broken store).
   }

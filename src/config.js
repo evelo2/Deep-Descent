@@ -154,7 +154,6 @@ export const GAME = {
   invulnAfterHit: 1.6,  // seconds of mercy invulnerability
   hitCost: 1,           // lives lost per hit
   hitLootPenalty: 0.3,  // fraction of un-banked carried loot lost on a hit (stakes)
-  maxLives: 5,          // extra lives can't bank past this — no snowball
   firstLifeScore: 8000, // score for the first extra life (was a flat 5000)
   lifeScoreStep: 6000,  // additional score required per subsequent extra life
   pearlMinDepthFrac: 0.16,   // clams (pearls) only spawn below this fraction of the world
@@ -257,6 +256,12 @@ export const GOLD = { rate: 0.2 };       // gold earned per point of loot banked
 // at the end of every run — win OR death — from milestones. Starting values;
 // a later balance pass tunes these.
 export const SALVAGE = { perReef: 8, perBoss: 40, perRelic: 15, perPearl: 30, startSlots: 2, maxSlots: 5, slotCostBase: 200 };
+// Max lives is a Dry Dock permanent unlock, not a free ceiling. It starts at
+// the 3 lives a run begins with; each Salvage purchase adds one, to capMax.
+// This deliberately lowers the old free ceiling of 5 — a giveaway becomes a
+// meta-progression ladder (spec locked decision 10). Priced dearer than a
+// Salvage-Log slot (200 base) because a life is worth more than a relic slot.
+export const LIVES = { baseMax: 3, capMax: 6, costBase: 300 };
 // Salvage-Log rentals: relics are rented for a number of DIVES (one run each),
 // ticking down only on dives where the relic was equipped. Rent/renew refills to
 // `dives`; `maxDives` is the load-time sanitize cap.

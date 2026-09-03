@@ -5,7 +5,7 @@ import { VERSION } from './version.js';
 import { Harpoon } from './entities/harpoon.js';
 import { Net } from './entities/weapons.js';
 import { SCHEMES, SCHEME_LABEL, nextScheme, prompt as ctrlPrompt, controlsHelpLines, hintStrip } from './controls.js';
-import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE } from './config.js';
+import { GOLD, bellBankRate, WEAPON_INFO, SHOP, AIM, FLARE, TORCH, SALVAGE, CRATE, LIVES } from './config.js';
 import { makeReef } from './minigames/reef/index.js';
 import { text, panel, overlay, keycap, mmss } from './render/chrome.js';
 import { loadSalvage, saveSalvage, availableSkips, skipStartGold } from './meta/salvage.js';
@@ -249,6 +249,11 @@ export class Game {
     if (this.meta.slots < SALVAGE.maxSlots) {
       rows.push({ kind: 'slot', id: 'slot', label: `➕ Loadout slot (${this.meta.slots} → ${this.meta.slots + 1})`, cost: this._dblCost(SALVAGE.slotCostBase, this.meta.slots - SALVAGE.startSlots) });
     }
+    if (this.meta.lifeMax < LIVES.capMax) {
+      rows.push({ kind: 'life', id: 'life',
+        label: `❤️ Max lives (${this.meta.lifeMax} → ${this.meta.lifeMax + 1})`,
+        cost: this._dblCost(LIVES.costBase, this.meta.lifeMax - LIVES.baseMax) });
+    }
     rows.push({ kind: 'close', id: 'close', label: 'Close', cost: 0 });
     return rows;
   }
@@ -289,6 +294,9 @@ export class Game {
     if (row.kind === 'slot') {
       if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
       this.meta.salvage -= row.cost; this.meta.slots += 1; saveSalvage(this.meta); this.audio.bank();
+    } else if (row.kind === 'life') {
+      if (this.meta.salvage < row.cost) { this.ddDeny = 0.6; this.audio.gasp(); return; }
+      this.meta.salvage -= row.cost; this.meta.lifeMax += 1; saveSalvage(this.meta); this.audio.bank();
     } else if (row.kind === 'relic') {
       const wasRented = (this.meta.rentals[row.id] || 0) > 0;
       if (!rentRelic(this.meta, row.id)) { this.ddDeny = 0.6; this.audio.gasp(); return; }
