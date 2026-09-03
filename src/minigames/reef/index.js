@@ -890,6 +890,18 @@ export class Reef {
     this._text(hint, W / 2, this._shopRow(items.length).y + 8, 13, '#9fc6e0', 'center', 'middle');
   }
 
+  // Docking (boat or dive bell) shelters like safe water — crushRecover()
+  // clears the alarm immediately. That's an escape exactly like ascending
+  // back above the line in open water is (the reef-zone branch in update()),
+  // and bells sit below earlier tiers' Valve crush depth, so this is the
+  // characteristic deep-tier escape. Extracted from update() so it's testable
+  // against a stub, the same way _bankLoot() is.
+  _crushRecoverDocked(dt) {
+    const wasAlarmed = this._crush.phase === 'alarmed';
+    crushRecover(this._crush, dt);
+    if (wasAlarmed) this.runCrushEscapes++;
+  }
+
   _bankLoot(rate = 1) {
     const value = Math.round(this.carried * rate);
     const g = Math.round(value * GOLD.rate);
@@ -1488,7 +1500,7 @@ export class Reef {
       // depth, so docking while alarmed is a normal deep-tier situation, not an
       // edge case; without this the diver would undock still alarmed and die
       // moments after leaving the very refuge that just saved them.
-      if (this.zone === 'reef') crushRecover(this._crush, dt);
+      if (this.zone === 'reef') this._crushRecoverDocked(dt);
       // The boat is home — it auto-banks the haul at full value. A dive bell only
       // banks on demand (below), at a depth-scaled discount, so you can top up air
       // there and still carry a rich haul up to the boat for full value.
@@ -1948,6 +1960,9 @@ export class Reef {
       guardiansFelled: this.runGuardiansFelled,
       'legacy:valveOffered': this.runValveOffered,
       'legacy:valveBought': this.runValveBought,
+      'legacy:crushAlarmed': this.runCrushAlarmed,
+      'legacy:crushDeaths': this.runCrushDeaths,
+      'legacy:crushEscapes': this.runCrushEscapes,
     };
   }
 

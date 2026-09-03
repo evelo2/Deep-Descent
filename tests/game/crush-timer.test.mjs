@@ -5,6 +5,7 @@
 // Run: node tests/game/crush-timer.test.mjs
 
 import { DEPTH, crushDepthM, crushStep, crushRecover } from '../../src/config.js';
+import { Reef } from '../../src/minigames/reef/index.js';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => cond ? passed++ : (failed++, console.error(`  FAIL: ${name}`));
@@ -84,6 +85,43 @@ check('recovery while docked never exceeds the maximum', s.t === DEPTH.crushTime
 s = crushRecover({ phase: 'alarmed', t: 0.05 }, 0.1);
 check('a diver docked below their crush depth is not crushed — the haven genuinely shelters',
   s.phase === 'safe' && s.phase !== 'crushed');
+
+// --- docking counts as an escape too (Deep Reefs telemetry) ---------------
+// runCrushEscapes used to increment only in the reef-zone (open-water) branch
+// of update() when the diver ascends back above the line. Docking at a boat
+// or dive bell calls crushRecover() directly and used to clear the alarm
+// silently — undercounting the characteristic deep-tier escape, since bells
+// sit below earlier tiers' Valve crush depth. _crushRecoverDocked() is the
+// extracted method update() now calls; test it directly against a stub, the
+// same pattern tests/game/bank-station.test.mjs uses for _bankLoot().
+const dockRecover = Reef.prototype._crushRecoverDocked;
+
+function crushStub(phase, t = 5) {
+  return { _crush: { phase, t }, runCrushEscapes: 0 };
+}
+
+{
+  const stub = crushStub('alarmed');
+  dockRecover.call(stub, 0.1);
+  check('docking while alarmed clears the alarm', stub._crush.phase === 'safe');
+  check('docking while alarmed counts as an escape', stub.runCrushEscapes === 1);
+}
+
+{
+  const stub = crushStub('safe', DEPTH.crushTimer);
+  dockRecover.call(stub, 0.1);
+  check('docking while already safe does not manufacture an escape', stub.runCrushEscapes === 0);
+}
+
+{
+  // Docking recovers gradually (crushRecover), so a single alarmed→safe
+  // transition across several docked frames must still only count once.
+  const stub = crushStub('alarmed', 0.05);
+  dockRecover.call(stub, 0.1);
+  dockRecover.call(stub, 0.5);
+  dockRecover.call(stub, 0.5);
+  check('the escape counts once per alarm, not once per docked frame', stub.runCrushEscapes === 1);
+}
 
 console.log(`ok crush-timer.test.mjs (${passed} checks)`);
 if (failed > 0) { console.error(`FAILED ${failed} check(s)`); process.exit(1); }
