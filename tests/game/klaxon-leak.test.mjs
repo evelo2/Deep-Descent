@@ -7,9 +7,26 @@
 // reef and then entered a stage or whirlpool would carry a blaring emergency
 // klaxon through an entire unrelated minigame. The fix is one line at the very
 // top of update() — before every early return in the function — that
-// re-derives audio.setKlaxon fresh from `_crush.phase === 'alarmed' &&
-// zone === 'reef'` every single frame, rather than toggling it once and
-// trusting some later branch to turn it off again.
+// re-derives audio.setKlaxon fresh from `_shell.state === 'playing' &&
+// zone === 'reef' && _crush.phase === 'alarmed'` every single frame, rather
+// than toggling it once and trusting some later branch to turn it off again.
+//
+// Two things that line depends on turned out to have their own gaps (fix
+// round 1):
+//  - `_crush` used to be assigned only inside start(), never in the
+//    constructor — but main.js's RAF loop calls update(dt) unconditionally
+//    from frame one, while the shell is still at 'menu', long before start()
+//    ever runs. Reading `this._crush.phase` before checking shell state threw.
+//  - `_gameOver()` never touches `_crush`/`zone` — a death from any cause
+//    OTHER than the crush timer itself (air, a creature) while merely
+//    'alarmed' freezes `_crush` at 'alarmed' forever, since the crush block
+//    that would otherwise step it back to safe is unreachable once the shell
+//    leaves 'playing'. Gating the authoritative line on
+//    `_shell.state === 'playing'` (checked FIRST, short-circuiting before
+//    `_crush`/`zone` are even read) closes both: the pre-start() case (no
+//    `_crush` read at all while state is 'menu') and every non-'playing'
+//    death screen (game-over/pause/shop/menu).
+//
 // This test forces the alarmed state directly and drives the REAL update()
 // through each zone/lifecycle transition, watching only what reaches
 // audio.setKlaxon — the state machine itself (crushStep/crushRecover) is
@@ -57,11 +74,24 @@ check('game._reef exists', !!reef && reef.id === 'reef');
 reef._stage.update = () => {};
 reef._whirl.update = () => {};
 
+const last = () => klaxonCalls[klaxonCalls.length - 1];
+
+// --- CRITICAL: the real boot sequence calls update() before start() --------
+// main.js boots the legacy minigame and runs an unconditional RAF loop
+// calling update(dt) from frame one, while the shell is still at 'menu' —
+// long before the player ever presses start. `_crush` must exist from
+// construction (not just from start()) or this throws.
+check('shell starts at menu, not playing', game.state === 'menu');
+let threw = null;
+try { reef.update(1 / 60); } catch (e) { threw = e; }
+check('update() before start() does not throw', threw === null);
+if (threw) console.error('  threw:', threw);
+check('the klaxon never sounds before a run has begun', !klaxonCalls.includes(true));
+
+// --- normal play -------------------------------------------------------------
 reef.start(1);
 game.state = 'playing';
 check('a fresh run starts safe, not alarmed', reef._crush.phase === 'safe');
-
-const last = () => klaxonCalls[klaxonCalls.length - 1];
 
 // --- alarmed in the reef sounds the horn -------------------------------------
 reef._crush = { phase: 'alarmed', t: DEPTH.crushTimer };
@@ -96,10 +126,10 @@ for (const zone of ['belly', 'temple', 'abyss']) {
   reef.update(1 / 60);
   check(`${zone} while alarmed silences the klaxon`, last() === false);
 }
+reef.zone = 'reef';
 
 // --- docking (crushRecover) clears the alarm; the klaxon must follow --------
 reef._crush = { phase: 'alarmed', t: 5 };
-reef.zone = 'reef';
 klaxonCalls.length = 0;
 reef.update(1 / 60);
 check('still alarmed sounds before recovery', last() === true);
@@ -108,12 +138,10 @@ klaxonCalls.length = 0;
 reef.update(1 / 60);
 check('recovering to safe silences the klaxon', last() === false);
 
-// --- death / game-over must not leave the horn sounding ----------------------
-// A 'crushed' diver failed the timer — 'crushed' !== 'alarmed', so the
-// authoritative line already silences it regardless of shell state. (The real
-// alarmed->crushed transition + _gameOver() plumbing is proved by
-// tests/game/crush-timer.test.mjs and reef-seam.test.mjs; this test only needs
-// to show the klaxon follows the resulting phase.)
+// --- crush death must not leave the horn sounding ----------------------------
+// A 'crushed' diver failed the timer — the gate's phase check alone would
+// already close this ('crushed' !== 'alarmed'), but shell state closes it too
+// (see the NON-crush case below, where the phase check alone would NOT).
 reef._crush = { phase: 'crushed', t: 0 };
 reef.zone = 'reef';
 klaxonCalls.length = 0;
@@ -124,6 +152,28 @@ klaxonCalls.length = 0;
 reef.update(1 / 60);
 check('a game-over-state frame is not sounding the klaxon', last() === false);
 game.state = 'playing';
+
+// --- CRITICAL: a NON-crush death while still merely 'alarmed' ---------------
+// _gameOver() never touches _crush or zone. Die from a creature or from air
+// while the crush countdown is running but has not yet expired — entirely
+// plausible, a shark hit during the alarm — and `_crush.phase` freezes at
+// 'alarmed' forever (the crush block that would otherwise recover it is
+// unreachable once the shell leaves 'playing'). Only the shell-state gate
+// closes this; the phase check alone does not, because the phase genuinely
+// never changes.
+reef._crush = { phase: 'alarmed', t: 5 };
+reef.zone = 'reef';
+reef.lives = -1000;   // force the very next hit to end the run outright
+reef._loseLife('killed');   // a creature hit — NOT the crush timer
+check('the death was not caused by crushing', reef.deathCause === 'killed');
+check('game-over was reached', game.state === 'gameover');
+check("_crush is still frozen at 'alarmed' — the exact bug this guards against",
+  reef._crush.phase === 'alarmed');
+klaxonCalls.length = 0;
+for (let i = 0; i < 5; i++) reef.update(1 / 60);
+check('the klaxon stays silent throughout the whole game-over screen',
+  !klaxonCalls.includes(true));
+game.state = 'playing';   // restore for the remaining checks below
 
 // --- a new run starts safe, not carrying a prior alarm -----------------------
 reef._crush = { phase: 'alarmed', t: 3 };   // simulate dying alarmed

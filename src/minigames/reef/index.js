@@ -168,6 +168,12 @@ export class Reef {
     this.reef = 1; this.dockHold = 0; this.sailT = 0; this.zoneFade = 0;
     this.reefName = ''; this.reefTheme = REEF_THEMES[0];
     this.puT = 0; this.puName = ''; this.puCol = '#fff';
+    // Crush-depth state machine (Task 7) — must exist from construction, not
+    // just from start(): main.js's RAF loop calls update(dt) unconditionally
+    // from frame one, while the shell is still at 'menu', long before start()
+    // ever runs. The authoritative klaxon line in update() reads this._crush
+    // as its very first statement, so leaving it unset here crashed the menu.
+    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
     this.diver.reset();
     // Per-run relic flags (Salvage Log). The authority is applyLoadout() →
     // resetRelicFlags() in meta/relics.js, which re-sets these every run BEFORE any
@@ -300,10 +306,6 @@ export class Reef {
     this.runValveOffered = 0; this.runValveBought = 0;
     // Crush-timer telemetry (see the update() crush block below).
     this.runCrushAlarmed = 0; this.runCrushEscapes = 0; this.runCrushDeaths = 0;
-    // A fresh run always starts safe at the surface — reset the state machine
-    // itself, not just the klaxon, so a diver who died alarmed doesn't carry
-    // even a one-frame flash of the horn into the new dive.
-    this._crush = { phase: 'safe', t: DEPTH.crushTimer };
     this.newBadges = []; this.newTiers = []; this.lapsedRentals = [];
     this.metFauna = new Set();   // creature kinds already announced this run (reef-intro flash)
     this.toastQueue = [];        // queued flourishes played one-at-a-time through puName
@@ -1242,11 +1244,18 @@ export class Reef {
     // Authoritative klaxon drive: runs before every early return in this
     // function (menu/shop/drydock/sailing/help/stage/whirlpool/etc.), so the
     // horn can never outlive the alarm — a diver who was alarmed in the reef
-    // and then enters a stage or whirlpool, docks, dies, or starts a new run
-    // has it forced off on the very next frame, because this line re-derives
-    // it fresh from state every single call rather than being toggled once
-    // and trusted to be turned off again by whichever branch ends the frame.
-    this.audio.setKlaxon(this._crush.phase === 'alarmed' && this.zone === 'reef');
+    // and then enters a stage or whirlpool, docks, dies (from ANY cause, not
+    // just the crush itself — a shark hit mid-alarm leaves `_crush` frozen at
+    // 'alarmed' since the crush block is unreachable once the shell leaves
+    // 'playing'), or starts a new run has it forced off on the very next
+    // frame, because this line re-derives it fresh from state every single
+    // call rather than being toggled once and trusted to be turned off again
+    // by whichever branch ends the frame. Gated on `_shell.state === 'playing'`
+    // first (short-circuiting before `_crush`/`zone` are even read) so this
+    // also closes game-over/pause/shop/menu in one move, and so main.js's RAF
+    // loop — which calls update() from frame one, before start() has ever
+    // run — can't read `_crush` before it exists.
+    this.audio.setKlaxon(this._shell.state === 'playing' && this.zone === 'reef' && this._crush.phase === 'alarmed');
     this.t += dt;
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 3);
