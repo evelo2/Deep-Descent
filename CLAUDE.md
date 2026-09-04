@@ -32,7 +32,7 @@ file you are editing — never import a habit from another file.**
 
 | Style | Signature | Files | Where |
 |---|---|---|---|
-| name-first (majority) | `check(name, cond)` | 71 | everywhere |
+| name-first (majority) | `check(name, cond)` | 73 | everywhere |
 | cond-first | `check(cond, msg)` | 25 | scattered (heaviest in `tests/minigames/match3/`) |
 | name-first `assert` + `done()` | `assert(name, cond)`, ends `done()` | 16 | `tests/creatures/` + part of `tests/stage/` |
 
@@ -40,8 +40,10 @@ The two `check` styles are the dangerous pair: mixing them **silently
 always-passes** — calling `check(1 === 2, 'msg')` in a name-first file evaluates
 `cond = 'msg'`, which is truthy, so a false assertion reports success. The
 `assert` files also print per-check `ok`/`FAIL` lines as they go and exit
-non-zero from `done()`. Census verified 2026-09-02 against all 112 test files
-(71 + 25 + 16 = 112).
+non-zero from `done()`. Census verified 2026-09-04 against all 114 test files
+(73 + 25 + 16 = 114). Recounting: the name-first group hides three param-name
+variants — `(name, cond)`, `(n, c)`, and one `function check(name, cond)`
+declaration — so grep for the shape, not the literal text.
 
 Every test ends by printing its own summary line — `` console.log(`ok foo.test.mjs (${pass} checks)`) ``
 in the `check` files, `done()` in the `assert` ones.
@@ -127,9 +129,45 @@ memory.**
   early when the value is unchanged, or re-issuing `setTargetAtTime` restarts
   the ramp every frame and it never lands (cost us a chase that reached 0.58
   instead of 1.0, fixed 2026-09-01).
+- **`WORLD.WW`/`WORLD.WH` are LIVE too, not just `W`/`H`.** `setWorldSize(reef)`
+  reassigns them per world tier (411 m → 700 → 1150 → 1800 at reefs 4/11/21).
+  Never destructure them at module scope. Verify with
+  `grep -rE '(const|let|var)\s*\{[^}]*\bW[WH]\b[^}]*\}\s*=\s*WORLD' src/` —
+  a word-order filter is not enough, a reordered capture slips past it.
+- **Nested zones must reset the world size.** `_generateTemple`/`_generateAbyss`/
+  `_generateBelly` each call `setWorldSize(1)`, and `_restoreReef` calls
+  `setWorldSize(this.reef)`. Without both, a tier-4 temple inherits an 1800 m
+  world while its rewards stay fraction-of-height — cost scales, reward does
+  not, and you drown in what used to be a bonus.
+- **Anything driven per-frame must be driven from a place that always runs.**
+  The reef's `update()` early-returns for stage/whirlpool zones, non-playing
+  shell states, and docking. The crush klaxon is set from ONE line at the very
+  top of `update()` that re-derives on/off from state each frame — because a
+  setter that returns early when unchanged stays ON forever if the code that
+  would turn it off stops being reached. That line also gates on
+  `_shell.state === 'playing'` FIRST, so it cannot read run-state before
+  `start()` has run (main.js's RAF loop calls `update()` from frame one).
+- **Placement bugs need statistical tests, not unit tests.** The relic clamp
+  passed 25 unit tests while spawning unwinnable reefs in 14.7% of tier-4 runs,
+  because the units tested the weight functions and not the outcome.
+  `tests/game/relic-crush-depth.test.mjs` drives 250 real world generations and
+  asserts zero violations. It is the suite's slowest file (~10 s) and worth it.
 - **Registered minigame ids are `legacy` and `match3`.** `reef`, `stage` and
   `whirlpool` are internal zones of `legacy`, not registered minigames, despite
   having their own folders under `src/minigames/`.
+
+## Framing — do not reintroduce a lineage
+
+This project used to describe itself as a homage to a 1983 title, and shipped
+that game's ROM in the repo. **All of it was removed on 2026-09-04** (PR #7 plus
+a full history rewrite): the menu and About strapline, the page `<title>`, the
+README's origin/credits sections, `docs/DESIGN.md`'s origin, the LICENSE
+carve-out, and the `.z80` binary itself.
+
+Deep Descent is described **only as what it is** — an underwater
+dive-and-salvage game. Do not add a homage line, an "inspired by", a studio
+name, or a year to any player-facing string, doc, commit message or PR body.
+The strapline is *"dive deep, salvage what you can, surface alive"*.
 
 ## Working style
 
