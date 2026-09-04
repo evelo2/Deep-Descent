@@ -6,7 +6,7 @@ On `continue` (or any resume-style opener) at the start of a session, first read
 a handoff written by clear-prep before the last clear; it's the bridge across
 the context reset.
 
-A JS/Canvas browser game (homage to Durell's *Scuba Dive*, 1983), shipped to the
+A JS/Canvas browser game — dive, salvage and surface alive — shipped to the
 web and wrapped for Steam via Electron in `desktop/`. Architecture lives in
 `docs/platform/architecture.md`; this file is only the things that are easy to
 get wrong.

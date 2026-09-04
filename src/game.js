@@ -619,7 +619,7 @@ export class Game {
     const cx = W / 2;
     this._panel();
     this._text('DEEP DESCENT', cx, 170, 58, PAL.glow, 'center', 'middle', true);
-    this._text('a modern homage to Durell’s SCUBA DIVE (1983)', cx, 216, 16, '#bfe6ff', 'center', 'middle');
+    this._text('dive deep, salvage what you can, surface alive', cx, 216, 16, '#bfe6ff', 'center', 'middle');
     this._text('Explore 2D caves — tunnels, drop-offs & chambers.', cx, 288, 17, PAL.hudText, 'center', 'middle');
     this._text('Grab pearls, gems & sunken wrecks. Harpoon the hunters.', cx, 314, 17, PAL.hudText, 'center', 'middle');
     this._text('Refill air at bubble vents; surface at the boat to bank.', cx, 340, 17, PAL.hudText, 'center', 'middle');
@@ -683,7 +683,7 @@ export class Game {
     const info = this.aboutInfo || { engine: '—', app: '—', build: '—', games: [] };
     this._text('ⓘ ABOUT', cx, 78, 30, PAL.gold, 'center', 'middle', true);
     this._text('DEEP DESCENT', cx, 120, 22, PAL.glow, 'center', 'middle', true);
-    this._text("a modern homage to Durell's SCUBA DIVE (1983)", cx, 146, 12, '#9fc6e0', 'center', 'middle');
+    this._text('dive deep, salvage what you can, surface alive', cx, 146, 12, '#9fc6e0', 'center', 'middle');
 
     let y = 196;
     this._text('ENGINE', cx, y, 13, '#7fb0d0', 'center', 'middle', true); y += 24;

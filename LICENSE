@@ -20,10 +20,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
----
-
-Note: The MIT license above covers the original code and artwork authored for
-Deep Descent. It does NOT cover the included ZX Spectrum snapshot
-`Scuba_Dive_1983_Durell_Software.z80`, which is the original 1983 game by Durell
-Software Ltd, included here solely as a historical reference. All rights to
-Scuba Dive remain with their respective owners.
