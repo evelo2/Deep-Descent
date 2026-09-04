@@ -116,6 +116,14 @@ export function bonusZoneChance(reef) {
 // which points survive without touching the shuffle itself. Omitted at every
 // pre-existing call site, so they draw no extra randomness and are unaffected;
 // only the treasure (shells/wrecks) call sites in _generateWorld pass one.
+// Display name for whatever a creature is, for the death screen. Falls back to
+// null (generic wording) rather than guessing — an unnamed killer is better
+// than a wrong one.
+function _killerName(cr) {
+  const info = cr && cr.kind ? faunaInfo(cr.kind) : null;
+  return info ? info.name : null;
+}
+
 function spread(list, count, minDist, weightFn) {
   const shuffled = list.slice();
   for (let i = shuffled.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
@@ -216,7 +224,7 @@ export class Reef {
   // Run summary the shell's game-over screen reads.
   finalStats() {
     return {
-      score: this.score, reef: this.reef, deathCause: this.deathCause,
+      score: this.score, reef: this.reef, deathCause: this.deathCause, killedBy: this.killedBy,
       won: this.won, newHi: this.newHi, lastPayout: this.lastPayout,
       newBadges: this.newBadges, newTiers: this.newTiers, gold: this.gold,
       depthReached: this.depthReached, blackPearlsBanked: this.blackPearlsBanked,
@@ -353,7 +361,7 @@ export class Reef {
     this.nets = []; this.charges = []; this.burst = 0; this.burstT = 0; this.shockT = 0;
     this.shockBattery = SHOCK.batteryMax; this.shockBolts = [];
     this.puT = 0; this.puName = ''; this.reentryT = 0;
-    this.won = false; this.newHi = false; this.deathCause = null;
+    this.won = false; this.newHi = false; this.deathCause = null; this.killedBy = null; this._lastKiller = null;
     this.zone = 'reef'; this.savedReef = null; this.reef = startReef;
     this.audio.startMusic(); this._applyMusic();   // engine up before the palette is chosen
     // Consume the cashed reef relic (a reef-(N−1) token unlocks a start at reef N)
@@ -1659,10 +1667,10 @@ export class Reef {
     if (this.armedCharge && this.armedCharge.dead) this.armedCharge = null;
     for (const ex of this.explosions) { ex.t += dt; ex.r += (ex.maxR - ex.r) * Math.min(1, dt * 12); }
     this.explosions = this.explosions.filter((e) => e.t < 0.4);
-    for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit(); }
+    for (const k of this.krakens) { k.update(dt, this.t, this.diver); if (this.diver.invuln <= 0 && k.hits(this.diver)) this._hit('Kraken'); }
     if (this.chestGuardian) {
       this.chestGuardian.update(dt, this.t, this.diver, this.specialChest);
-      if (!this.chestGuardian.dead && this.chestGuardian.hp > 0 && this.diver.invuln <= 0 && this.chestGuardian.hits(this.diver)) this._hit();
+      if (!this.chestGuardian.dead && this.chestGuardian.hp > 0 && this.diver.invuln <= 0 && this.chestGuardian.hits(this.diver)) this._hit('Chest Guardian');
     }
     for (const pu of this.powerups) { pu.update(dt, this.t); if (!pu.taken && pu.reached(this.diver)) { pu.taken = true; this._applyPowerUp(pu.type); } }
     for (const cr of this.crates) { cr.update(dt, this.t); if (this.zone === 'reef' && cr.reached(this.diver)) { cr.taken = true; this._openCrate(); } }
@@ -1847,7 +1855,7 @@ export class Reef {
           this.audio.pearl();
         }
       } else if (s.bites(d) && d.invuln <= 0) {
-        this._hit();
+        this._hit(s.salvage ? 'Giant Clam' : 'Clam');
       }
     }
     // Big air bubbles from opening shells — collect to refill air.
@@ -1916,7 +1924,7 @@ export class Reef {
     }
     // Contact damage — but a snared (netted/stunned) creature is harmless to swim past.
     if (d.invuln <= 0) {
-      for (const cr of this.creatures) { if (cr.snareT <= 0 && cr.hits(d)) { this._hit(); break; } }
+      for (const cr of this.creatures) { if (cr.snareT <= 0 && cr.hits(d)) { this._hit(_killerName(cr)); break; } }
     }
   }
 
@@ -1964,7 +1972,12 @@ export class Reef {
     this._enqueueToast('🗝 THE CHEST OPENS!', PAL.gold || PAL.key, 2.4);
   }
 
-  _hit() {
+  // `killer` is a display name for whatever landed the blow ('Moray Eel',
+  // 'Kraken', …), remembered so that if this hit ends the run the death screen
+  // can say what got you. null means "unattributed" and the screen falls back
+  // to the generic wording.
+  _hit(killer = null) {
+    this._lastKiller = killer;
     // Pressure Plating negates the first hit each dive (no life lost, no loot
     // spill), then must recharge at the boat before it protects again.
     if (this._platingReady) {
@@ -2000,7 +2013,13 @@ export class Reef {
   _loseLife(cause = 'air') {
     this.tookDamage = true;   // any life lost disqualifies the Untouchable badge
     this.lives -= GAME.hitCost;
-    if (this.lives <= 0) { this.deathCause = cause; this._gameOver(); return; }
+    if (this.lives <= 0) {
+      this.deathCause = cause;
+      // Only a creature kill has an attributable killer; drowning and crushing
+      // do not. _lastKiller is set by _hit() on the blow that just landed.
+      if (cause === 'killed') this.killedBy = this._lastKiller || null;
+      this._gameOver(); return;
+    }
     this.air = Math.max(this.air, this._relicSecondWind ? 60 : 35);
     this.diver.invuln = GAME.invulnAfterHit;
     this.diver.y = Math.max(WORLD.SURFACE + 40, this.diver.y - 70);
