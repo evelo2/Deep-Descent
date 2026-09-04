@@ -30,6 +30,10 @@ const { OPEN_BAND, CELL } = WORLD;
 // Called by main.js whenever the viewport resizes/rotates. Updates both the
 // module-level W/H used throughout this file and WORLD.W/H used by input.js and
 // the render modules, keeping every consumer on one live viewport size.
+// 'A Shark' but 'An Anglerfish'. Roster names are plain English, so first-letter
+// vowel testing is sufficient — no name in FAUNA_INFO defeats it.
+function _article(name) { return /^[aeiou]/i.test(name) ? 'An' : 'A'; }
+
 export function setViewport(w, h) {
   W = w; H = h;
   WORLD.W = w; WORLD.H = h;
@@ -704,7 +708,11 @@ export class Game {
     const title = s.won ? 'HAUL SECURED!' : s.deathCause === 'killed' ? 'YOU DIED' : s.deathCause === 'crushed' ? 'CRUSHED' : 'OUT OF AIR';
     this._text(title, cx, 220, 48, s.won ? PAL.gold : PAL.danger, 'center', 'middle', true);
     if (!s.won) {
-      const sub = s.deathCause === 'killed' ? 'The wildlife got you' : s.deathCause === 'crushed' ? 'The pressure took you' : 'You ran out of air';
+      // Name the killer when we know it. finalStats().killedBy is set only on a
+      // creature kill (drowning and crushing have no attributable killer), so
+      // the generic wording still covers an unattributed death.
+      const killedSub = s.killedBy ? `${_article(s.killedBy)} ${s.killedBy} got you` : 'The wildlife got you';
+      const sub = s.deathCause === 'killed' ? killedSub : s.deathCause === 'crushed' ? 'The pressure took you' : 'You ran out of air';
       this._text(sub, cx, 256, 15, '#ff9a6b', 'center', 'middle');
     }
     this._text(`SCORE ${s.score || 0}`, cx, 290, 30, PAL.hudText, 'center', 'middle');

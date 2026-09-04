@@ -91,6 +91,18 @@ export function pickFauna(band, reef, rng = Math.random) {
 // Math.random for deterministic tests. Swarm-type entries (later tasks) may
 // return an array of Creatures instead of a single one.
 export function spawnCreature(entry, x, y, reef, opts = {}) {
+  const spawned = _build(entry, x, y, reef, opts);
+  // Tag every instance with the fauna kind it came from. Creatures carry no
+  // intrinsic type id — the class is the type — so anything that needs to NAME
+  // a creature after the fact (the "killed by a Moray Eel" death screen, and
+  // per-creature kill tracking) has nothing to go on without this. Shoals tag
+  // every member, so any one of them can be credited.
+  if (Array.isArray(spawned)) { for (const c of spawned) if (c) c.kind = entry.k; }
+  else if (spawned) spawned.kind = entry.k;
+  return spawned;
+}
+
+function _build(entry, x, y, reef, opts = {}) {
   const sizeUp = opts.sizeUp || 0, rng = opts.rng || Math.random;
   switch (entry.k) {
     case 'shark': {
