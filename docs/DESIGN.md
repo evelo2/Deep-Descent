@@ -1,9 +1,8 @@
-# Deep Descent — a modern homage to *Scuba Dive* (Durell Software, 1983)
+# Deep Descent — design notes
 
 ## Origin
-Built from the ZX Spectrum `.z80` snapshot of Durell's *Scuba Dive*. The
-snapshot confirms the game (sprite bitmaps + the `"S/D SCORE"` HUD string).
-We preserve the original gameplay loop and re-imagine the presentation.
+An original underwater dive-and-salvage game: descend through a 2D cave world,
+gather treasure, manage a dwindling air supply, and surface before it runs out.
 
 ## Platform decision — Browser (JavaScript + HTML5 Canvas)
 A 2D sprite arcade game. Canvas + Web Audio run it at 60fps trivially, while
@@ -55,7 +54,7 @@ Targeting upgrade. Piranha shoals share HP and die as a group. Platformer stages
 are forward-only (no back-out; complete or lose lives) with walkable ladder tops.
 Touch is multi-touch: one finger steers, a second fires.
 
-## Preserved gameplay (faithful to 1983)
+## Core gameplay
 - Dive from a surface **boat** down through the ocean.
 - Collect **pearls from giant clams** (open/close cycle — grab when open, get
   caught when it snaps shut) plus scattered **treasure**.
@@ -439,8 +438,7 @@ A roguelike-style gear loop, built in three phases.
 
 ## v3 expansion — 2D scrolling caves, flora, sized sharks
 
-The original *Scuba Dive* scrolled in 2D through a cave system, so the world grew
-from a vertical column into a full 2D scrolling world (`WORLD.WW`×`WORLD.WH`) with
+The world grew from a vertical column into a full 2D scrolling world (`WORLD.WW`×`WORLD.WH`) with
 a 2D camera. Every `draw()` now takes `camX, camY`.
 
 - **2D cave** (`systems/cave.js`) replaces the old single-axis corridor: a boolean

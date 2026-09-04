@@ -1,6 +1,7 @@
 # 🤿 Deep Descent
 
-**A modern, browser-based homage to Durell Software's *Scuba Dive* (1983).**
+**A browser-based underwater dive-and-salvage game.** Descend through a 2D cave
+world, gather treasure, and surface before your air runs out.
 
 ### ▶ <a href="https://evelo2.github.io/Deep-Descent/" target="_blank" rel="noopener noreferrer">Play it in your browser</a> — no install
 
@@ -15,13 +16,6 @@ and know when to surface. Bank your haul, then sail on to a fresh reef.
 Built with plain HTML5 Canvas and vanilla JavaScript — **no build step, no
 dependencies, no install.** It runs in any modern browser and works with
 keyboard or touch.
-
-> This project was reconstructed from the original ZX Spectrum `.z80` memory
-> snapshot of *Scuba Dive* (included in the repo as a historical artifact) and
-> re-imagined with modern graphics, physics, audio, and game feel. **All code
-> and artwork are new and original.**
-
----
 
 ## Table of contents
 
@@ -70,20 +64,21 @@ and harpoon it down.
 
 ---
 
-## About the original
+## About the game
 
-*Scuba Dive* was released in **1983 by Durell Software Ltd**, a British game
-studio founded by **Robert White** and based in Taunton, Somerset. It became one
-of the era's beloved underwater arcade games on the **ZX Spectrum** (and other
-8-bit home computers): you played a diver descending through the ocean to collect
-pearls and treasure while dodging octopuses, sharks, jellyfish and snapping
-giant clams, managing a dwindling air supply the whole way down.
+You are a diver working a reef that gets deeper, darker and less forgiving the
+further you go. Every dive is a negotiation with your air supply: descend for
+pearls, gems and sunken wrecks, decide how much to carry, and get back up before
+the gauge empties.
 
-**Deep Descent** keeps that gameplay loop intact and dresses it in a modern
-coat: smooth vector art, a scrolling 2D cave world, particle effects, procedural
-audio, and depth-driven atmosphere — a love letter to a classic, not a copy of
-its code. Enormous thanks to Durell Software and everyone who made the original;
-this exists because that game left a mark.
+Below 250 m the water starts taking your air faster. Deeper still is **crush
+depth** — cross it without the right pressure gear and an alarm gives you
+fourteen seconds to climb back above the line. Better gear buys deeper water,
+and the deep water is where the money is.
+
+The reef is procedurally carved each dive, so no two descents share a map:
+tunnels, drop-offs, chambers, dark rooms that need a flare, sunken wrecks,
+guarded chests, and the occasional trench, temple or whale.
 
 ---
 
@@ -332,7 +327,6 @@ docs/
   DESIGN.md                    design notes, platform decision, version log
   ROADMAP.md                   future feature ideas
   screenshots/                 README images
-Scuba_Dive_1983_Durell_Software.z80   the original snapshot (historical source)
 ```
 
 ## Deploying
@@ -350,26 +344,7 @@ just point it at the repo root.
 
 ---
 
-## Credits & acknowledgements
-
-- **Original game:** *Scuba Dive* © 1983 **Durell Software Ltd** — the
-  inspiration for everything here. Deep gratitude to Durell and its team for a
-  classic that's still fun to think about four decades on.
-- **This homage:** all new code and artwork, built as a personal, non-commercial
-  tribute.
-
-*If you worked on the original Scuba Dive and would like a correction or fuller
-credit here, please open an issue — I'd be glad to get it right.*
-
----
-
 ## License
 
-The original code and artwork in this repository are released under the
+All code and artwork in this repository are original and released under the
 **[MIT License](LICENSE)** — free to use, modify and share.
-
-This is a fan-made, **non-commercial tribute**, not affiliated with or endorsed
-by Durell Software. *Scuba Dive* and any related marks belong to their
-respective owners, and the included `Scuba_Dive_1983_Durell_Software.z80`
-snapshot is provided as a historical reference only — it is **not** covered by
-the MIT license above.
